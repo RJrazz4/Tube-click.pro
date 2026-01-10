@@ -1,12 +1,13 @@
 import { useState, useCallback } from "react";
-import { Eye, Upload, Loader2, FileText, Trash2, AlertCircle, Key } from "lucide-react";
+import { Eye, Upload, Loader2, FileText, Trash2, Download, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { incrementStat, saveContent } from "@/lib/stats";
+import { downloadAsText } from "@/lib/export";
 
 interface ImageFile {
   id: string;
@@ -15,16 +16,11 @@ interface ImageFile {
 }
 
 export default function VisionGuide() {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("gemini-api-key") || "");
   const [images, setImages] = useState<ImageFile[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [guide, setGuide] = useState("");
   const [isDragging, setIsDragging] = useState(false);
-
-  const handleApiKeySave = () => {
-    localStorage.setItem("gemini-api-key", apiKey);
-    toast.success("API Key saved!");
-  };
+  const [copied, setCopied] = useState(false);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -62,11 +58,6 @@ export default function VisionGuide() {
   };
 
   const generateGuide = async () => {
-    if (!apiKey) {
-      toast.error("Please enter your Gemini API key");
-      return;
-    }
-
     if (images.length === 0) {
       toast.error("Please add at least one screenshot");
       return;
@@ -88,119 +79,64 @@ export default function VisionGuide() {
         })
       );
 
-      // Prepare the request for Gemini API
-      const parts = [
-        {
-          text: "Analyze these screenshots and write a clear, step-by-step tutorial guide. Format it in Markdown with proper headings, numbered steps, and helpful tips. Be detailed and user-friendly."
-        },
-        ...imageData.map((data) => ({
-          inline_data: {
-            mime_type: "image/png",
-            data: data.split(",")[1],
-          },
-        })),
-      ];
+      // Call the edge function
+      const { data, error } = await supabase.functions.invoke('vision-guide', {
+        body: { images: imageData }
+      });
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: [{ parts }],
-          }),
-        }
-      );
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || "API request failed");
-      }
-
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "No guide generated";
+      setGuide(data.guide);
+      incrementStat('guidesCreated');
       
-      setGuide(text);
+      // Save to local storage
+      saveContent({
+        type: 'guide',
+        title: `Tutorial Guide - ${new Date().toLocaleDateString()}`,
+        content: data.guide
+      });
+
       toast.success("Guide generated successfully!");
     } catch (error: any) {
+      console.error("Vision guide error:", error);
       toast.error(error.message || "Failed to generate guide");
     } finally {
       setIsGenerating(false);
     }
   };
 
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(guide);
+    setCopied(true);
+    toast.success("Guide copied to clipboard!");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownload = () => {
+    downloadAsText(guide, `tutorial-guide-${Date.now()}.md`);
+    toast.success("Guide downloaded as Markdown!");
+  };
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 md:space-y-6 animate-fade-in">
       <div>
-        <h1 className="font-display text-2xl font-bold text-foreground flex items-center gap-2">
-          <Eye className="w-7 h-7 text-green-400" />
+        <h1 className="font-display text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
+          <Eye className="w-6 h-6 md:w-7 md:h-7 text-green-400" />
           SnapGuide Vision
         </h1>
-        <p className="text-muted-foreground mt-1">
-          Turn your screenshots into professional step-by-step tutorials with AI.
+        <p className="text-sm md:text-base text-muted-foreground mt-1">
+          Upload screenshots and let AI create step-by-step tutorials automatically.
         </p>
       </div>
 
-      {/* API Key Warning */}
-      {!apiKey && (
-        <Card className="border-yellow-500/50 bg-yellow-500/10">
-          <CardContent className="p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-foreground font-medium">API Key Required</p>
-              <p className="text-sm text-muted-foreground">
-                You need a Google Gemini API key to use this feature.{" "}
-                <a
-                  href="https://aistudio.google.com/apikey"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  Get your free key here
-                </a>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
         {/* Upload Section */}
         <div className="space-y-4">
-          {/* API Key Input */}
-          <Card className="cyber-card border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="font-display text-sm text-foreground flex items-center gap-2">
-                <Key className="w-4 h-4" />
-                Gemini API Key
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-2">
-                <Input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="AIza..."
-                  className="bg-secondary border-border focus:border-primary"
-                />
-                <Button
-                  variant="outline"
-                  onClick={handleApiKeySave}
-                  className="border-border hover:border-primary/50 shrink-0"
-                >
-                  Save
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Drop Zone */}
           <Card className="cyber-card border-border">
-            <CardHeader>
-              <CardTitle className="font-display text-lg text-foreground">Upload Screenshots</CardTitle>
+            <CardHeader className="pb-3 md:pb-4">
+              <CardTitle className="font-display text-base md:text-lg text-foreground">Upload Screenshots</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div
@@ -211,7 +147,7 @@ export default function VisionGuide() {
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDrop}
                 className={cn(
-                  "border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 cursor-pointer",
+                  "border-2 border-dashed rounded-xl p-6 md:p-8 text-center transition-all duration-300 cursor-pointer",
                   isDragging
                     ? "border-primary bg-primary/10"
                     : "border-border hover:border-primary/50"
@@ -227,14 +163,14 @@ export default function VisionGuide() {
                   onChange={handleFileSelect}
                 />
                 <Upload className={cn(
-                  "w-10 h-10 mx-auto mb-3",
+                  "w-8 h-8 md:w-10 md:h-10 mx-auto mb-3",
                   isDragging ? "text-primary" : "text-muted-foreground"
                 )} />
-                <p className="text-foreground font-medium">
+                <p className="text-foreground font-medium text-sm md:text-base">
                   {isDragging ? "Drop images here" : "Drag & drop screenshots"}
                 </p>
-                <p className="text-muted-foreground text-sm mt-1">
-                  or click to browse files
+                <p className="text-muted-foreground text-xs md:text-sm mt-1">
+                  or tap to browse files
                 </p>
               </div>
 
@@ -261,8 +197,8 @@ export default function VisionGuide() {
 
               <Button
                 onClick={generateGuide}
-                disabled={isGenerating || !apiKey || images.length === 0}
-                className="w-full cyber-button-secondary text-accent-foreground h-12"
+                disabled={isGenerating || images.length === 0}
+                className="w-full cyber-button-secondary text-accent-foreground h-11 md:h-12"
               >
                 {isGenerating ? (
                   <>
@@ -282,29 +218,53 @@ export default function VisionGuide() {
 
         {/* Output Section */}
         <Card className="cyber-card border-border h-fit">
-          <CardHeader>
-            <CardTitle className="font-display text-lg text-foreground flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Generated Guide
-            </CardTitle>
+          <CardHeader className="pb-3 md:pb-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="font-display text-base md:text-lg text-foreground flex items-center gap-2">
+                <FileText className="w-4 h-4 md:w-5 md:h-5" />
+                Generated Guide
+              </CardTitle>
+              {guide && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopy}
+                    className="gap-1.5 border-border hover:border-primary/50 h-8 md:h-9 text-xs md:text-sm"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span className="hidden sm:inline">Copy</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDownload}
+                    className="gap-1.5 border-border hover:border-accent/50 h-8 md:h-9 text-xs md:text-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Download MD</span>
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <ScrollArea className="h-[500px] scrollbar-cyber">
+            <ScrollArea className="h-[400px] md:h-[500px] scrollbar-cyber">
               {guide ? (
                 <div className="prose prose-invert prose-sm max-w-none">
-                  <pre className="whitespace-pre-wrap text-sm text-foreground bg-secondary/50 rounded-lg p-4 font-sans">
+                  <pre className="whitespace-pre-wrap text-xs md:text-sm text-foreground bg-secondary/50 rounded-lg p-3 md:p-4 font-sans leading-relaxed">
                     {guide}
                   </pre>
                 </div>
               ) : (
-                <div className="h-full min-h-[400px] flex items-center justify-center text-center p-8">
+                <div className="h-full min-h-[350px] md:min-h-[400px] flex items-center justify-center text-center p-6 md:p-8">
                   <div className="space-y-4">
-                    <div className="w-16 h-16 mx-auto rounded-2xl bg-secondary flex items-center justify-center">
-                      <FileText className="w-8 h-8 text-muted-foreground" />
+                    <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-2xl bg-secondary flex items-center justify-center">
+                      <FileText className="w-7 h-7 md:w-8 md:h-8 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="text-foreground font-medium">No guide yet</p>
-                      <p className="text-muted-foreground text-sm">
+                      <p className="text-foreground font-medium text-sm md:text-base">No guide yet</p>
+                      <p className="text-muted-foreground text-xs md:text-sm">
                         Upload screenshots and click generate to create your tutorial
                       </p>
                     </div>

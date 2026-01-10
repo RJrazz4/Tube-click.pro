@@ -1,96 +1,42 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Loader2, Copy, Check, Sparkles } from "lucide-react";
+import { Send, Bot, User, Loader2, Copy, Check, Sparkles, Download, ArrowRight, Hash, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { incrementStat, saveContent } from "@/lib/stats";
+import { downloadAsText } from "@/lib/export";
+import { useNavigate } from "react-router-dom";
+
+interface GeneratedContent {
+  titles: string[];
+  hooks: string[];
+  script: string;
+  hashtags: string[];
+  description: string;
+}
 
 interface Message {
   role: "user" | "assistant";
   content: string;
-  type?: "title" | "hook" | "script";
 }
-
-const generateContent = async (topic: string): Promise<{ title: string; hook: string; script: string }> => {
-  // Simulated AI generation with realistic delays
-  await new Promise((r) => setTimeout(r, 1500));
-  
-  const titles = [
-    `🔥 ${topic} - You Won't BELIEVE What Happened Next!`,
-    `I Tried ${topic} for 30 Days... Here's What Happened`,
-    `The TRUTH About ${topic} Nobody Tells You`,
-    `${topic}: The Ultimate Guide (2024 Edition)`,
-  ];
-
-  const hooks = [
-    `What if I told you that everything you knew about ${topic} was completely wrong? In the next 10 minutes, I'm going to show you something that will change your perspective forever...`,
-    `Hey everyone! So yesterday I discovered something insane about ${topic}, and I just HAD to share it with you guys. But before we dive in, let me tell you a quick story...`,
-    `Stop scrolling. Seriously. If you've ever been curious about ${topic}, this video is going to blow your mind. I spent weeks researching this, and what I found shocked me...`,
-  ];
-
-  const script = `# Video Script: ${topic}
-
-## INTRO (0:00 - 0:30)
-[HOOK - Start with high energy]
-"${hooks[Math.floor(Math.random() * hooks.length)]}"
-
-## SECTION 1: The Setup (0:30 - 3:00)
-- Introduce the main topic
-- Share a personal anecdote or case study
-- Build curiosity with a teaser of what's coming
-
-## SECTION 2: The Core Content (3:00 - 8:00)
-### Point 1: The Foundation
-- Explain the basics of ${topic}
-- Use simple analogies
-- Show visual examples (B-roll suggestion: relevant imagery)
-
-### Point 2: The Deep Dive
-- Get into the specifics
-- Share expert insights or research
-- Address common misconceptions
-
-### Point 3: The Application
-- How viewers can apply this knowledge
-- Step-by-step breakdown
-- Real-world examples
-
-## SECTION 3: The Twist/Reveal (8:00 - 10:00)
-- Share the unexpected insight about ${topic}
-- Connect back to the hook
-- Deliver on the promise made at the start
-
-## OUTRO (10:00 - 11:00)
-- Summarize key takeaways
-- Call-to-action: "If you found this valuable, smash that like button!"
-- Tease next video
-- Encourage comments and subscription
-
-## THUMBNAIL IDEAS:
-1. Your face with shocked expression + bold text
-2. Before/after split image
-3. Mysterious dark aesthetic with glowing text
-
-## TAGS SUGGESTION:
-${topic}, ${topic} tutorial, ${topic} explained, ${topic} tips, how to ${topic}, ${topic} 2024
-`;
-
-  return {
-    title: titles[Math.floor(Math.random() * titles.length)],
-    hook: hooks[Math.floor(Math.random() * hooks.length)],
-    script,
-  };
-};
 
 export default function ChatAgent() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
+  const [topic, setTopic] = useState("");
+  const [platform, setPlatform] = useState("YouTube");
+  const [style, setStyle] = useState("Engaging");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedScript, setGeneratedScript] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -100,239 +46,437 @@ export default function ChatAgent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isGenerating) return;
+    if (!topic.trim() || isGenerating) return;
 
-    const topic = input.trim();
-    setInput("");
     setIsGenerating(true);
+    setGeneratedContent(null);
 
     // Add user message
-    setMessages((prev) => [...prev, { role: "user", content: topic }]);
+    setMessages((prev) => [...prev, { role: "user", content: `Generate content for: ${topic} (${platform}, ${style} style)` }]);
 
     try {
-      // Simulate typing indicator
-      setMessages((prev) => [...prev, { role: "assistant", content: "🎯 Analyzing your topic..." }]);
-      await new Promise((r) => setTimeout(r, 800));
+      setMessages((prev) => [...prev, { role: "assistant", content: "🎯 Analyzing your topic and generating viral content..." }]);
 
-      // Generate title
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[updated.length - 1] = { role: "assistant", content: "📝 Generating viral title...", type: "title" };
-        return updated;
+      const { data, error } = await supabase.functions.invoke('generate-content', {
+        body: { topic: topic.trim(), platform, style }
       });
-      
-      const { title, hook, script } = await generateContent(topic);
 
-      // Update with title
+      if (error) throw error;
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setGeneratedContent(data);
+      incrementStat('scriptsGenerated');
+      
+      // Save to local storage
+      const fullContent = `
+TOPIC: ${topic}
+PLATFORM: ${platform}
+STYLE: ${style}
+
+--- TITLES ---
+${data.titles?.join('\n') || ''}
+
+--- HOOKS ---
+${data.hooks?.join('\n') || ''}
+
+--- SCRIPT ---
+${data.script || ''}
+
+--- HASHTAGS ---
+${data.hashtags?.join(' ') || ''}
+
+--- DESCRIPTION ---
+${data.description || ''}
+      `.trim();
+      
+      saveContent({
+        type: 'script',
+        title: topic,
+        content: fullContent
+      });
+
       setMessages((prev) => {
         const updated = [...prev];
         updated[updated.length - 1] = { 
           role: "assistant", 
-          content: `**🎬 Title Generated:**\n\n${title}`, 
-          type: "title" 
+          content: "✅ Content generated successfully! Check the tabs on the right to see your viral titles, hooks, script, hashtags, and description." 
         };
         return updated;
       });
 
-      await new Promise((r) => setTimeout(r, 1000));
-
-      // Add hook
-      setMessages((prev) => [...prev, { 
-        role: "assistant", 
-        content: `**🎣 Hook Generated:**\n\n"${hook}"`, 
-        type: "hook" 
-      }]);
-
-      await new Promise((r) => setTimeout(r, 1000));
-
-      // Add script notification
-      setMessages((prev) => [...prev, { 
-        role: "assistant", 
-        content: "**📜 Full Script Generated!**\n\nCheck the script panel on the right to view and copy your complete video script.", 
-        type: "script" 
-      }]);
-
-      setGeneratedScript(script);
       toast.success("Content generated successfully!");
+      setTopic("");
 
-    } catch (error) {
-      toast.error("Failed to generate content");
+    } catch (error: any) {
+      console.error("Generation error:", error);
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = { 
+          role: "assistant", 
+          content: `❌ Error: ${error.message || "Failed to generate content. Please try again."}` 
+        };
+        return updated;
+      });
+      toast.error(error.message || "Failed to generate content");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(generatedScript);
-    setCopied(true);
-    toast.success("Script copied to clipboard!");
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async (text: string, label: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(label);
+    toast.success(`${label} copied to clipboard!`);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const handleDownload = () => {
+    if (!generatedContent) return;
+    const content = `
+TOPIC: ${topic || "Generated Content"}
+PLATFORM: ${platform}
+STYLE: ${style}
+
+=== VIRAL TITLES ===
+${generatedContent.titles?.join('\n') || 'N/A'}
+
+=== HOOKS FOR SHORTS ===
+${generatedContent.hooks?.join('\n\n') || 'N/A'}
+
+=== FULL SCRIPT ===
+${generatedContent.script || 'N/A'}
+
+=== HASHTAGS ===
+${generatedContent.hashtags?.join(' ') || 'N/A'}
+
+=== VIDEO DESCRIPTION ===
+${generatedContent.description || 'N/A'}
+    `.trim();
+    downloadAsText(content, `tubegenius-script-${Date.now()}.txt`);
+    toast.success("Script downloaded!");
+  };
+
+  const handleSendToThumbnail = () => {
+    if (generatedContent?.titles?.[0]) {
+      navigate(`/thumbnails?title=${encodeURIComponent(generatedContent.titles[0])}`);
+    }
   };
 
   return (
     <div className="h-[calc(100vh-8rem)] animate-fade-in">
-      <div className="mb-6">
-        <h1 className="font-display text-2xl font-bold text-foreground flex items-center gap-2">
-          <Bot className="w-7 h-7 text-primary" />
+      <div className="mb-4 md:mb-6">
+        <h1 className="font-display text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
+          <Bot className="w-6 h-6 md:w-7 md:h-7 text-primary" />
           TubeBot AI Agent
         </h1>
-        <p className="text-muted-foreground mt-1">
-          Your AI-powered content strategist. Enter a topic to generate titles, hooks, and scripts.
+        <p className="text-sm md:text-base text-muted-foreground mt-1">
+          Generate viral titles, hooks, scripts, hashtags & descriptions with AI
         </p>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6 h-[calc(100%-5rem)]">
-        {/* Chat Panel */}
+      <div className="grid lg:grid-cols-2 gap-4 md:gap-6 h-[calc(100%-4rem)]">
+        {/* Input Panel */}
         <Card className="cyber-card border-border flex flex-col">
-          <CardHeader className="border-b border-border pb-4">
-            <CardTitle className="font-display text-lg text-foreground flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary" />
-              Chat Interface
+          <CardHeader className="border-b border-border pb-3 md:pb-4">
+            <CardTitle className="font-display text-base md:text-lg text-foreground flex items-center gap-2">
+              <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+              Content Generator
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
-            <ScrollArea className="flex-1 p-4 scrollbar-cyber" ref={scrollRef}>
+          <CardContent className="flex-1 flex flex-col p-3 md:p-4 overflow-hidden">
+            {/* Settings */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs md:text-sm text-foreground">Platform</Label>
+                <Select value={platform} onValueChange={setPlatform}>
+                  <SelectTrigger className="bg-secondary border-border h-10 md:h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="YouTube">YouTube</SelectItem>
+                    <SelectItem value="YouTube Shorts">YouTube Shorts</SelectItem>
+                    <SelectItem value="Instagram Reels">Instagram Reels</SelectItem>
+                    <SelectItem value="TikTok">TikTok</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs md:text-sm text-foreground">Style</Label>
+                <Select value={style} onValueChange={setStyle}>
+                  <SelectTrigger className="bg-secondary border-border h-10 md:h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Engaging">Engaging</SelectItem>
+                    <SelectItem value="Educational">Educational</SelectItem>
+                    <SelectItem value="Entertainment">Entertainment</SelectItem>
+                    <SelectItem value="Dramatic">Dramatic</SelectItem>
+                    <SelectItem value="Funny">Funny</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Chat Messages */}
+            <ScrollArea className="flex-1 mb-4 scrollbar-cyber" ref={scrollRef}>
               {messages.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-center p-8">
+                <div className="h-full flex items-center justify-center text-center p-4 md:p-8">
                   <div className="space-y-4">
-                    <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/20 flex items-center justify-center animate-float">
-                      <Bot className="w-8 h-8 text-primary" />
+                    <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-2xl bg-primary/20 flex items-center justify-center animate-float">
+                      <Bot className="w-7 h-7 md:w-8 md:h-8 text-primary" />
                     </div>
                     <div>
-                      <p className="text-foreground font-semibold">Ready to create viral content?</p>
-                      <p className="text-muted-foreground text-sm mt-1">
-                        Enter a video topic below and I'll generate a complete content package for you.
+                      <p className="text-foreground font-semibold text-sm md:text-base">Ready to create viral content?</p>
+                      <p className="text-muted-foreground text-xs md:text-sm mt-1">
+                        Enter a topic and I'll generate titles, hooks, script, hashtags & description.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2 justify-center">
-                      {["Horror Story Video", "Tech Review", "Day in My Life", "Tutorial Guide"].map((topic) => (
+                      {["Horror Story", "Tech Review", "Cooking Recipe", "Fitness Tips"].map((t) => (
                         <button
-                          key={topic}
-                          onClick={() => setInput(topic)}
-                          className="px-3 py-1.5 rounded-full bg-secondary text-sm text-foreground hover:bg-primary/20 hover:text-primary transition-colors"
+                          key={t}
+                          onClick={() => setTopic(t)}
+                          className="px-3 py-1.5 rounded-full bg-secondary text-xs md:text-sm text-foreground hover:bg-primary/20 hover:text-primary transition-colors"
                         >
-                          {topic}
+                          {t}
                         </button>
                       ))}
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {messages.map((message, index) => (
                     <div
                       key={index}
                       className={cn(
-                        "flex gap-3 animate-fade-in",
+                        "flex gap-2 md:gap-3 animate-fade-in",
                         message.role === "user" ? "justify-end" : "justify-start"
                       )}
                     >
                       {message.role === "assistant" && (
-                        <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
-                          <Bot className="w-4 h-4 text-primary" />
+                        <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
+                          <Bot className="w-3.5 h-3.5 md:w-4 md:h-4 text-primary" />
                         </div>
                       )}
                       <div
                         className={cn(
-                          "max-w-[80%] rounded-2xl px-4 py-3",
+                          "max-w-[85%] rounded-2xl px-3 py-2 md:px-4 md:py-3",
                           message.role === "user"
                             ? "bg-primary text-primary-foreground"
                             : "bg-secondary text-foreground"
                         )}
                       >
-                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                        <p className="text-xs md:text-sm whitespace-pre-wrap">{message.content}</p>
                       </div>
                       {message.role === "user" && (
-                        <div className="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center shrink-0">
-                          <User className="w-4 h-4 text-accent" />
+                        <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-accent/20 flex items-center justify-center shrink-0">
+                          <User className="w-3.5 h-3.5 md:w-4 md:h-4 text-accent" />
                         </div>
                       )}
                     </div>
                   ))}
-                  {isGenerating && (
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-                        <Loader2 className="w-4 h-4 text-primary animate-spin" />
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </ScrollArea>
 
-            <form onSubmit={handleSubmit} className="p-4 border-t border-border">
-              <div className="flex gap-2">
-                <Input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Enter your video topic..."
-                  className="flex-1 bg-secondary border-border focus:border-primary"
-                  disabled={isGenerating}
-                />
-                <Button 
-                  type="submit" 
-                  disabled={isGenerating || !input.trim()}
-                  className="cyber-button text-primary-foreground"
-                >
-                  {isGenerating ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                </Button>
-              </div>
+            {/* Input Form */}
+            <form onSubmit={handleSubmit} className="flex gap-2">
+              <Input
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="Enter your video topic..."
+                className="flex-1 bg-secondary border-border focus:border-primary h-11 md:h-12 text-sm md:text-base"
+                disabled={isGenerating}
+              />
+              <Button 
+                type="submit" 
+                disabled={isGenerating || !topic.trim()}
+                className="cyber-button text-primary-foreground h-11 md:h-12 px-4 md:px-6"
+              >
+                {isGenerating ? (
+                  <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4 md:w-5 md:h-5" />
+                )}
+              </Button>
             </form>
           </CardContent>
         </Card>
 
-        {/* Script Panel */}
-        <Card className="cyber-card border-border flex flex-col">
-          <CardHeader className="border-b border-border pb-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="font-display text-lg text-foreground">Generated Script</CardTitle>
-              {generatedScript && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopy}
-                  className="gap-2 border-border hover:border-primary/50"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-4 h-4 text-green-400" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4" />
-                      Copy Script
-                    </>
-                  )}
-                </Button>
+        {/* Output Panel */}
+        <Card className="cyber-card border-border flex flex-col overflow-hidden">
+          <CardHeader className="border-b border-border pb-3 md:pb-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="font-display text-base md:text-lg text-foreground">Generated Content</CardTitle>
+              {generatedContent && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDownload}
+                    className="gap-1.5 border-border hover:border-primary/50 h-8 md:h-9 text-xs md:text-sm"
+                  >
+                    <Download className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                    <span className="hidden sm:inline">Download</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSendToThumbnail}
+                    className="gap-1.5 border-border hover:border-accent/50 h-8 md:h-9 text-xs md:text-sm"
+                  >
+                    <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                    <span className="hidden sm:inline">Thumbnail</span>
+                  </Button>
+                </div>
               )}
             </div>
           </CardHeader>
           <CardContent className="flex-1 p-0 overflow-hidden">
-            <ScrollArea className="h-full p-4 scrollbar-cyber">
-              {generatedScript ? (
-                <pre className="text-sm text-foreground whitespace-pre-wrap font-mono bg-secondary/50 rounded-lg p-4">
-                  {generatedScript}
-                </pre>
-              ) : (
-                <div className="h-full flex items-center justify-center text-center p-8">
-                  <div className="space-y-4">
-                    <div className="w-16 h-16 mx-auto rounded-2xl bg-secondary flex items-center justify-center">
-                      <Copy className="w-8 h-8 text-muted-foreground" />
+            {generatedContent ? (
+              <Tabs defaultValue="titles" className="h-full flex flex-col">
+                <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent p-0 h-10 md:h-11 overflow-x-auto">
+                  <TabsTrigger value="titles" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary text-xs md:text-sm px-3 md:px-4">
+                    Titles
+                  </TabsTrigger>
+                  <TabsTrigger value="hooks" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary text-xs md:text-sm px-3 md:px-4">
+                    Hooks
+                  </TabsTrigger>
+                  <TabsTrigger value="script" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary text-xs md:text-sm px-3 md:px-4">
+                    Script
+                  </TabsTrigger>
+                  <TabsTrigger value="hashtags" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary text-xs md:text-sm px-3 md:px-4">
+                    Tags
+                  </TabsTrigger>
+                  <TabsTrigger value="description" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary text-xs md:text-sm px-3 md:px-4">
+                    Desc
+                  </TabsTrigger>
+                </TabsList>
+                
+                <div className="flex-1 overflow-hidden">
+                  <TabsContent value="titles" className="h-full m-0 p-3 md:p-4 overflow-auto">
+                    <div className="space-y-2">
+                      {generatedContent.titles?.map((title, index) => (
+                        <div key={index} className="flex items-start gap-2 p-2 md:p-3 bg-secondary rounded-lg group">
+                          <span className="text-primary font-bold text-xs md:text-sm">{index + 1}.</span>
+                          <p className="flex-1 text-foreground text-xs md:text-sm">{title}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleCopy(title, `Title ${index + 1}`)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 md:h-8 md:w-8"
+                          >
+                            {copied === `Title ${index + 1}` ? (
+                              <Check className="w-3.5 h-3.5 text-green-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </Button>
+                        </div>
+                      ))}
                     </div>
-                    <div>
-                      <p className="text-muted-foreground">
-                        Your generated script will appear here
-                      </p>
+                  </TabsContent>
+                  
+                  <TabsContent value="hooks" className="h-full m-0 p-3 md:p-4 overflow-auto">
+                    <div className="space-y-2">
+                      {generatedContent.hooks?.map((hook, index) => (
+                        <div key={index} className="flex items-start gap-2 p-2 md:p-3 bg-secondary rounded-lg group">
+                          <span className="text-accent font-bold text-xs md:text-sm">{index + 1}.</span>
+                          <p className="flex-1 text-foreground text-xs md:text-sm">{hook}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleCopy(hook, `Hook ${index + 1}`)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 md:h-8 md:w-8"
+                          >
+                            {copied === `Hook ${index + 1}` ? (
+                              <Check className="w-3.5 h-3.5 text-green-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </Button>
+                        </div>
+                      ))}
                     </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="script" className="h-full m-0 p-3 md:p-4 overflow-auto">
+                    <div className="relative">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCopy(generatedContent.script || '', 'Script')}
+                        className="absolute top-2 right-2 gap-1.5 border-border h-7 md:h-8 text-xs"
+                      >
+                        {copied === 'Script' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        Copy
+                      </Button>
+                      <pre className="text-xs md:text-sm text-foreground whitespace-pre-wrap font-mono bg-secondary/50 rounded-lg p-3 md:p-4 pr-20">
+                        {generatedContent.script}
+                      </pre>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="hashtags" className="h-full m-0 p-3 md:p-4 overflow-auto">
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {generatedContent.hashtags?.map((tag, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleCopy(tag, tag)}
+                          className="flex items-center gap-1 px-2 md:px-3 py-1 md:py-1.5 bg-primary/20 text-primary rounded-full text-xs md:text-sm hover:bg-primary/30 transition-colors"
+                        >
+                          <Hash className="w-3 h-3" />
+                          {tag.replace('#', '')}
+                        </button>
+                      ))}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCopy(generatedContent.hashtags?.join(' ') || '', 'All hashtags')}
+                      className="gap-1.5 border-border h-8 md:h-9 text-xs md:text-sm"
+                    >
+                      {copied === 'All hashtags' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      Copy All
+                    </Button>
+                  </TabsContent>
+                  
+                  <TabsContent value="description" className="h-full m-0 p-3 md:p-4 overflow-auto">
+                    <div className="relative">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCopy(generatedContent.description || '', 'Description')}
+                        className="absolute top-2 right-2 gap-1.5 border-border h-7 md:h-8 text-xs"
+                      >
+                        {copied === 'Description' ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        Copy
+                      </Button>
+                      <div className="text-xs md:text-sm text-foreground whitespace-pre-wrap bg-secondary/50 rounded-lg p-3 md:p-4 pr-20">
+                        {generatedContent.description}
+                      </div>
+                    </div>
+                  </TabsContent>
+                </div>
+              </Tabs>
+            ) : (
+              <div className="h-full flex items-center justify-center text-center p-4 md:p-8">
+                <div className="space-y-4">
+                  <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-2xl bg-secondary flex items-center justify-center">
+                    <FileText className="w-7 h-7 md:w-8 md:h-8 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-sm md:text-base">
+                      Your generated content will appear here
+                    </p>
                   </div>
                 </div>
-              )}
-            </ScrollArea>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
