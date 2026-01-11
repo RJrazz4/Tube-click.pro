@@ -9,7 +9,7 @@ export interface Stats {
 
 export interface SavedContent {
   id: string;
-  type: 'script' | 'thumbnail' | 'voiceover' | 'guide';
+  type: 'script' | 'thumbnail' | 'voiceover' | 'guide' | 'storyboard';
   title: string;
   content: string; // For scripts/guides it's text, for thumbnails it's base64 or URL
   createdAt: string;
