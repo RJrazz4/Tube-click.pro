@@ -5,7 +5,8 @@ import {
   Image, 
   Eye, 
   Mic,
-  Sparkles
+  Sparkles,
+  Film
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -13,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Bot, label: "TubeBot AI", path: "/chat-agent" },
+  { icon: Film, label: "Storyboard", path: "/storyboard" },
   { icon: Image, label: "Thumbnails", path: "/thumbnails" },
   { icon: Eye, label: "Vision Guide", path: "/vision-guide" },
   { icon: Mic, label: "Voiceover", path: "/voice" },

@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import Index from "./pages/Index";
 import ChatAgent from "./pages/ChatAgent";
+import Storyboard from "./pages/Storyboard";
 import Thumbnails from "./pages/Thumbnails";
 import VisionGuide from "./pages/VisionGuide";
 import VoiceStudio from "./pages/VoiceStudio";
@@ -33,6 +34,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/chat-agent" element={<ChatAgent />} />
+            <Route path="/storyboard" element={<Storyboard />} />
             <Route path="/thumbnails" element={<Thumbnails />} />
             <Route path="/vision-guide" element={<VisionGuide />} />
             <Route path="/voice" element={<VoiceStudio />} />
