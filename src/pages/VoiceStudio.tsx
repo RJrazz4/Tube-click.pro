@@ -1,41 +1,62 @@
 import { useState, useRef, useEffect } from "react";
-import { Mic, Play, Pause, Square, Volume2, Download, Loader2 } from "lucide-react";
+import { Mic, Play, Pause, Square, Volume2, Download, Loader2, Sparkles, Speaker } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 
-interface Voice {
-  name: string;
-  lang: string;
-}
+// ElevenLabs voice options with descriptions
+const ELEVENLABS_VOICES = [
+  { id: 'george', name: 'George', description: 'British male, warm & professional', gender: 'male' },
+  { id: 'brian', name: 'Brian', description: 'American male, deep & authoritative', gender: 'male' },
+  { id: 'daniel', name: 'Daniel', description: 'British male, calm & storytelling', gender: 'male' },
+  { id: 'liam', name: 'Liam', description: 'American male, young & energetic', gender: 'male' },
+  { id: 'chris', name: 'Chris', description: 'American male, conversational', gender: 'male' },
+  { id: 'charlie', name: 'Charlie', description: 'Australian male, friendly', gender: 'male' },
+  { id: 'eric', name: 'Eric', description: 'American male, mature & wise', gender: 'male' },
+  { id: 'will', name: 'Will', description: 'American male, casual & engaging', gender: 'male' },
+  { id: 'sarah', name: 'Sarah', description: 'American female, soft & soothing', gender: 'female' },
+  { id: 'alice', name: 'Alice', description: 'British female, clear & articulate', gender: 'female' },
+  { id: 'matilda', name: 'Matilda', description: 'American female, warm & friendly', gender: 'female' },
+  { id: 'jessica', name: 'Jessica', description: 'American female, professional', gender: 'female' },
+  { id: 'lily', name: 'Lily', description: 'British female, gentle & calming', gender: 'female' },
+  { id: 'laura', name: 'Laura', description: 'American female, upbeat & cheerful', gender: 'female' },
+];
 
 export default function VoiceStudio() {
   const [text, setText] = useState("");
+  const [useElevenLabs, setUseElevenLabs] = useState(true);
+  const [selectedElevenLabsVoice, setSelectedElevenLabsVoice] = useState("george");
+  const [stability, setStability] = useState([0.5]);
+  const [speed, setSpeed] = useState([1]);
+  
+  // Browser TTS state
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState<string>("");
   const [rate, setRate] = useState([1]);
   const [pitch, setPitch] = useState([1]);
+  
+  // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const destinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const [visualizerHeights, setVisualizerHeights] = useState<number[]>(Array(30).fill(20));
+  
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const animationRef = useRef<number | null>(null);
 
   useEffect(() => {
     const loadVoices = () => {
       const availableVoices = speechSynthesis.getVoices();
       setVoices(availableVoices);
       if (availableVoices.length > 0 && !selectedVoice) {
-        // Prefer English voices
         const englishVoice = availableVoices.find((v) => v.lang.startsWith("en"));
         setSelectedVoice(englishVoice?.name || availableVoices[0].name);
       }
@@ -47,10 +68,106 @@ export default function VoiceStudio() {
     return () => {
       speechSynthesis.cancel();
       if (audioUrl) URL.revokeObjectURL(audioUrl);
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, []);
 
-  const handlePlay = () => {
+  const animateVisualizer = () => {
+    const heights = Array(30).fill(0).map(() => 20 + Math.random() * 80);
+    setVisualizerHeights(heights);
+    animationRef.current = requestAnimationFrame(animateVisualizer);
+  };
+
+  const stopVisualizer = () => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+    setVisualizerHeights(Array(30).fill(20));
+  };
+
+  const generateElevenLabsAudio = async () => {
+    if (!text.trim()) {
+      toast.error("Please enter some text");
+      return;
+    }
+
+    setIsGenerating(true);
+    animateVisualizer();
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            text,
+            voiceId: selectedElevenLabsVoice,
+            stability: stability[0],
+            similarityBoost: 0.75,
+            speed: speed[0],
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate audio');
+      }
+
+      const audioBlob = await response.blob();
+      
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      
+      const url = URL.createObjectURL(audioBlob);
+      setAudioUrl(url);
+
+      // Auto-play
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      
+      audio.onplay = () => {
+        setIsPlaying(true);
+        animateVisualizer();
+      };
+      
+      audio.onended = () => {
+        setIsPlaying(false);
+        stopVisualizer();
+      };
+      
+      audio.onpause = () => {
+        setIsPlaying(false);
+        stopVisualizer();
+      };
+
+      await audio.play();
+
+      // Track stats
+      incrementStat('voiceoversGenerated');
+      saveContent({
+        type: 'voiceover',
+        title: `ElevenLabs - ${selectedElevenLabsVoice}`,
+        content: text
+      });
+
+      toast.success("Professional voiceover generated!");
+
+    } catch (error) {
+      console.error("ElevenLabs error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to generate voiceover");
+      stopVisualizer();
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleBrowserTTSPlay = () => {
     if (!text.trim()) {
       toast.error("Please enter some text");
       return;
@@ -60,6 +177,7 @@ export default function VoiceStudio() {
       speechSynthesis.resume();
       setIsPaused(false);
       setIsPlaying(true);
+      animateVisualizer();
       return;
     }
 
@@ -72,111 +190,93 @@ export default function VoiceStudio() {
     utterance.rate = rate[0];
     utterance.pitch = pitch[0];
 
+    utterance.onstart = () => {
+      setIsPlaying(true);
+      animateVisualizer();
+    };
+
     utterance.onend = () => {
       setIsPlaying(false);
       setIsPaused(false);
+      stopVisualizer();
     };
 
     utterance.onerror = () => {
       setIsPlaying(false);
       setIsPaused(false);
+      stopVisualizer();
       toast.error("Speech synthesis error");
     };
 
     speechSynthesis.speak(utterance);
-    setIsPlaying(true);
     
-    // Track voiceover
     incrementStat('voiceoversGenerated');
     saveContent({
       type: 'voiceover',
-      title: text.substring(0, 50) + '...',
+      title: `Browser TTS - ${selectedVoice}`,
       content: text
     });
   };
 
+  const handlePlay = () => {
+    if (useElevenLabs) {
+      if (audioUrl && audioRef.current) {
+        audioRef.current.play();
+      } else {
+        generateElevenLabsAudio();
+      }
+    } else {
+      handleBrowserTTSPlay();
+    }
+  };
+
   const handlePause = () => {
-    if (isPlaying) {
+    if (useElevenLabs && audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+      stopVisualizer();
+    } else if (isPlaying) {
       speechSynthesis.pause();
       setIsPaused(true);
       setIsPlaying(false);
+      stopVisualizer();
     }
   };
 
   const handleStop = () => {
-    speechSynthesis.cancel();
+    if (useElevenLabs && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    } else {
+      speechSynthesis.cancel();
+    }
     setIsPlaying(false);
     setIsPaused(false);
-  };
-
-  const startRecording = async () => {
-    if (!text.trim()) {
-      toast.error("Please enter some text first");
-      return;
-    }
-
-    try {
-      // Create audio context for recording system audio
-      audioContextRef.current = new AudioContext();
-      destinationRef.current = audioContextRef.current.createMediaStreamDestination();
-
-      const mediaRecorder = new MediaRecorder(destinationRef.current.stream, {
-        mimeType: 'audio/webm'
-      });
-      
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const url = URL.createObjectURL(audioBlob);
-        setAudioUrl(url);
-        setIsRecording(false);
-        toast.success("Recording saved! Click Download to save as audio file.");
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      
-      // Start speech
-      handlePlay();
-
-      // Auto-stop when speech ends
-      const checkSpeech = setInterval(() => {
-        if (!speechSynthesis.speaking) {
-          clearInterval(checkSpeech);
-          if (mediaRecorderRef.current?.state === 'recording') {
-            mediaRecorderRef.current.stop();
-          }
-        }
-      }, 100);
-
-    } catch (error) {
-      console.error("Recording error:", error);
-      toast.error("Recording not supported on this browser. Use a screen recorder instead.");
-    }
+    stopVisualizer();
   };
 
   const handleDownload = () => {
     if (audioUrl) {
       const a = document.createElement('a');
       a.href = audioUrl;
-      a.download = `voiceover-${Date.now()}.webm`;
+      a.download = `voiceover-${selectedElevenLabsVoice}-${Date.now()}.mp3`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      toast.success("Audio downloaded!");
+      toast.success("MP3 downloaded!");
+    } else if (useElevenLabs) {
+      toast.info("Generate a voiceover first by clicking the Play button");
     } else {
-      toast.info("Record your voiceover first by clicking the Record & Export button, or use a screen recorder to capture the audio.", {
-        duration: 5000
-      });
+      toast.info("MP3 download is only available with ElevenLabs voices");
     }
+  };
+
+  const handleRegenerate = () => {
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+      setAudioUrl(null);
+    }
+    generateElevenLabsAudio();
   };
 
   const sampleTexts = [
@@ -184,6 +284,8 @@ export default function VoiceStudio() {
     "What's up YouTube! In this video, I'm going to show you the secrets that nobody talks about. Make sure to stay until the end because the last tip is a game-changer.",
     "Namaste dosto! Aaj hum baat karenge ek bahut important topic ke baare mein. Agar aap video pasand aaye toh like aur subscribe zaroor karein!",
   ];
+
+  const selectedVoiceInfo = ELEVENLABS_VOICES.find(v => v.id === selectedElevenLabsVoice);
 
   return (
     <div className="space-y-4 md:space-y-6 animate-fade-in">
@@ -193,7 +295,7 @@ export default function VoiceStudio() {
           Voiceover Studio
         </h1>
         <p className="text-sm md:text-base text-muted-foreground mt-1">
-          Generate voiceovers using browser's text-to-speech. Adjust speed and pitch.
+          Generate professional AI voiceovers with ElevenLabs or browser TTS
         </p>
       </div>
 
@@ -201,59 +303,152 @@ export default function VoiceStudio() {
         {/* Controls */}
         <Card className="cyber-card border-border lg:col-span-1">
           <CardHeader className="pb-3 md:pb-4">
-            <CardTitle className="font-display text-base md:text-lg text-foreground">Voice Settings</CardTitle>
+            <CardTitle className="font-display text-base md:text-lg text-foreground flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              Voice Settings
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4 md:space-y-6">
-            {/* Voice Selector */}
-            <div className="space-y-1.5 md:space-y-2">
-              <Label className="text-sm text-foreground">Voice</Label>
-              <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                <SelectTrigger className="bg-secondary border-border h-10 md:h-11 text-sm">
-                  <SelectValue placeholder="Select a voice" />
-                </SelectTrigger>
-                <SelectContent className="bg-card border-border max-h-[300px]">
-                  {voices.map((voice) => (
-                    <SelectItem key={voice.name} value={voice.name}>
-                      <span className="text-xs md:text-sm">
-                        {voice.name} ({voice.lang})
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Speed Slider */}
-            <div className="space-y-2 md:space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm text-foreground">Speed</Label>
-                <span className="text-xs md:text-sm text-muted-foreground">{rate[0].toFixed(1)}x</span>
+          <CardContent className="space-y-4 md:space-y-5">
+            {/* ElevenLabs Toggle */}
+            <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
+              <div className="flex items-center gap-2">
+                <Speaker className="w-4 h-4 text-primary" />
+                <Label className="text-sm font-medium">ElevenLabs AI</Label>
               </div>
-              <Slider
-                value={rate}
-                onValueChange={setRate}
-                min={0.5}
-                max={2}
-                step={0.1}
-                className="cursor-pointer"
+              <Switch
+                checked={useElevenLabs}
+                onCheckedChange={(checked) => {
+                  setUseElevenLabs(checked);
+                  if (audioUrl) {
+                    URL.revokeObjectURL(audioUrl);
+                    setAudioUrl(null);
+                  }
+                }}
               />
             </div>
 
-            {/* Pitch Slider */}
-            <div className="space-y-2 md:space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm text-foreground">Pitch</Label>
-                <span className="text-xs md:text-sm text-muted-foreground">{pitch[0].toFixed(1)}</span>
-              </div>
-              <Slider
-                value={pitch}
-                onValueChange={setPitch}
-                min={0.5}
-                max={2}
-                step={0.1}
-                className="cursor-pointer"
-              />
-            </div>
+            {useElevenLabs ? (
+              <>
+                {/* ElevenLabs Voice Selector */}
+                <div className="space-y-1.5 md:space-y-2">
+                  <Label className="text-sm text-foreground">AI Voice</Label>
+                  <Select value={selectedElevenLabsVoice} onValueChange={setSelectedElevenLabsVoice}>
+                    <SelectTrigger className="bg-secondary border-border h-10 md:h-11 text-sm">
+                      <SelectValue placeholder="Select a voice" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border max-h-[300px]">
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium">Male Voices</div>
+                      {ELEVENLABS_VOICES.filter(v => v.gender === 'male').map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{voice.name}</span>
+                            <span className="text-xs text-muted-foreground">{voice.description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium mt-2">Female Voices</div>
+                      {ELEVENLABS_VOICES.filter(v => v.gender === 'female').map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{voice.name}</span>
+                            <span className="text-xs text-muted-foreground">{voice.description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedVoiceInfo && (
+                    <p className="text-xs text-muted-foreground">{selectedVoiceInfo.description}</p>
+                  )}
+                </div>
+
+                {/* Stability Slider */}
+                <div className="space-y-2 md:space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm text-foreground">Stability</Label>
+                    <span className="text-xs md:text-sm text-muted-foreground">{(stability[0] * 100).toFixed(0)}%</span>
+                  </div>
+                  <Slider
+                    value={stability}
+                    onValueChange={setStability}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    className="cursor-pointer"
+                  />
+                  <p className="text-xs text-muted-foreground">Lower = more expressive, Higher = more consistent</p>
+                </div>
+
+                {/* Speed Slider */}
+                <div className="space-y-2 md:space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm text-foreground">Speed</Label>
+                    <span className="text-xs md:text-sm text-muted-foreground">{speed[0].toFixed(1)}x</span>
+                  </div>
+                  <Slider
+                    value={speed}
+                    onValueChange={setSpeed}
+                    min={0.7}
+                    max={1.2}
+                    step={0.05}
+                    className="cursor-pointer"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Browser Voice Selector */}
+                <div className="space-y-1.5 md:space-y-2">
+                  <Label className="text-sm text-foreground">Browser Voice</Label>
+                  <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                    <SelectTrigger className="bg-secondary border-border h-10 md:h-11 text-sm">
+                      <SelectValue placeholder="Select a voice" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border max-h-[300px]">
+                      {voices.map((voice) => (
+                        <SelectItem key={voice.name} value={voice.name}>
+                          <span className="text-xs md:text-sm">
+                            {voice.name} ({voice.lang})
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Rate Slider */}
+                <div className="space-y-2 md:space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm text-foreground">Speed</Label>
+                    <span className="text-xs md:text-sm text-muted-foreground">{rate[0].toFixed(1)}x</span>
+                  </div>
+                  <Slider
+                    value={rate}
+                    onValueChange={setRate}
+                    min={0.5}
+                    max={2}
+                    step={0.1}
+                    className="cursor-pointer"
+                  />
+                </div>
+
+                {/* Pitch Slider */}
+                <div className="space-y-2 md:space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm text-foreground">Pitch</Label>
+                    <span className="text-xs md:text-sm text-muted-foreground">{pitch[0].toFixed(1)}</span>
+                  </div>
+                  <Slider
+                    value={pitch}
+                    onValueChange={setPitch}
+                    min={0.5}
+                    max={2}
+                    step={0.1}
+                    className="cursor-pointer"
+                  />
+                </div>
+              </>
+            )}
 
             {/* Quick Samples */}
             <div className="space-y-2">
@@ -262,7 +457,13 @@ export default function VoiceStudio() {
                 {sampleTexts.map((sample, index) => (
                   <button
                     key={index}
-                    onClick={() => setText(sample)}
+                    onClick={() => {
+                      setText(sample);
+                      if (audioUrl) {
+                        URL.revokeObjectURL(audioUrl);
+                        setAudioUrl(null);
+                      }
+                    }}
                     className="w-full text-left p-2 rounded-lg bg-secondary text-xs text-muted-foreground hover:text-foreground hover:bg-primary/20 transition-colors line-clamp-2"
                   >
                     {sample}
@@ -281,7 +482,13 @@ export default function VoiceStudio() {
           <CardContent className="space-y-4 md:space-y-6">
             <Textarea
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => {
+                setText(e.target.value);
+                if (audioUrl) {
+                  URL.revokeObjectURL(audioUrl);
+                  setAudioUrl(null);
+                }
+              }}
               placeholder="Enter your voiceover script here..."
               className="min-h-[200px] md:min-h-[250px] bg-secondary border-border focus:border-primary resize-none text-sm md:text-base"
             />
@@ -298,7 +505,7 @@ export default function VoiceStudio() {
                 variant="outline"
                 size="icon"
                 onClick={handleStop}
-                disabled={!isPlaying && !isPaused}
+                disabled={!isPlaying && !isPaused && !isGenerating}
                 className="w-10 h-10 md:w-12 md:h-12 rounded-full border-border hover:border-primary/50"
               >
                 <Square className="w-4 h-4 md:w-5 md:h-5" />
@@ -306,12 +513,15 @@ export default function VoiceStudio() {
 
               <Button
                 onClick={isPlaying ? handlePause : handlePlay}
+                disabled={isGenerating}
                 className={cn(
                   "w-14 h-14 md:w-16 md:h-16 rounded-full",
                   isPlaying ? "cyber-button-secondary" : "cyber-button"
                 )}
               >
-                {isPlaying ? (
+                {isGenerating ? (
+                  <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" />
+                ) : isPlaying ? (
                   <Pause className="w-5 h-5 md:w-6 md:h-6 text-accent-foreground" />
                 ) : (
                   <Play className="w-5 h-5 md:w-6 md:h-6 text-primary-foreground ml-1" />
@@ -322,29 +532,45 @@ export default function VoiceStudio() {
                 variant="outline"
                 size="icon"
                 onClick={handleDownload}
-                className="w-10 h-10 md:w-12 md:h-12 rounded-full border-border hover:border-primary/50"
+                disabled={!audioUrl || isGenerating}
+                className={cn(
+                  "w-10 h-10 md:w-12 md:h-12 rounded-full border-border",
+                  audioUrl ? "hover:border-green-500 hover:text-green-400" : ""
+                )}
               >
                 <Download className="w-4 h-4 md:w-5 md:h-5" />
               </Button>
             </div>
 
-            {/* Visualizer (Decorative) */}
+            {/* Regenerate Button (ElevenLabs only) */}
+            {useElevenLabs && audioUrl && (
+              <div className="flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={handleRegenerate}
+                  disabled={isGenerating}
+                  className="border-border hover:border-primary/50"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Regenerate with New Voice
+                </Button>
+              </div>
+            )}
+
+            {/* Visualizer */}
             <div className="flex items-center justify-center gap-1 h-12 md:h-16">
-              {Array.from({ length: 30 }).map((_, i) => (
+              {visualizerHeights.map((height, i) => (
                 <div
                   key={i}
                   className={cn(
                     "w-1 rounded-full transition-all duration-100",
-                    isPlaying
+                    isPlaying || isGenerating
                       ? "bg-gradient-to-t from-neon-purple to-neon-cyan"
                       : "bg-border"
                   )}
                   style={{
-                    height: isPlaying
-                      ? `${20 + Math.random() * 80}%`
-                      : "20%",
-                    animationDelay: `${i * 50}ms`,
-                    transition: isPlaying ? 'height 0.1s ease' : 'height 0.3s ease'
+                    height: `${height}%`,
+                    transition: isPlaying || isGenerating ? 'height 0.1s ease' : 'height 0.3s ease'
                   }}
                 />
               ))}
@@ -354,20 +580,28 @@ export default function VoiceStudio() {
             <div className="text-center">
               <span className={cn(
                 "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs md:text-sm",
-                isPlaying 
+                isGenerating
+                  ? "bg-primary/20 text-primary"
+                  : isPlaying 
                   ? "bg-green-500/20 text-green-400" 
                   : isPaused 
                   ? "bg-yellow-500/20 text-yellow-400"
+                  : audioUrl
+                  ? "bg-blue-500/20 text-blue-400"
                   : "bg-secondary text-muted-foreground"
               )}>
                 <Volume2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                {isPlaying ? "Playing..." : isPaused ? "Paused" : "Ready to play"}
+                {isGenerating ? "Generating..." : isPlaying ? "Playing..." : isPaused ? "Paused" : audioUrl ? "Ready to download MP3" : "Ready to generate"}
               </span>
             </div>
 
-            {/* Download tip */}
+            {/* Info */}
             <p className="text-center text-xs text-muted-foreground">
-              💡 Tip: Use a screen recorder to capture the audio as MP3
+              {useElevenLabs ? (
+                <>✨ Using ElevenLabs AI for professional quality voiceovers with MP3 export</>
+              ) : (
+                <>🔊 Using browser TTS - switch to ElevenLabs for MP3 downloads</>
+              )}
             </p>
           </CardContent>
         </Card>
