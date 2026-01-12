@@ -253,15 +253,16 @@ export default function Dashboard() {
               onClick={handleExportAll}
               disabled={isExporting || recentContent.length === 0}
               className="w-full cyber-button text-primary-foreground h-11 md:h-12"
+              aria-label="Export all content as ZIP file"
             >
               {isExporting ? (
                 <>
-                  <Package className="w-4 h-4 mr-2 animate-spin" />
+                  <Package className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
                   Exporting...
                 </>
               ) : (
                 <>
-                  <Download className="w-4 h-4 mr-2" />
+                  <Download className="w-4 h-4 mr-2" aria-hidden="true" />
                   Export All as ZIP
                 </>
               )}
@@ -272,8 +273,9 @@ export default function Dashboard() {
               onClick={handleClearAll}
               disabled={recentContent.length === 0}
               className="w-full border-destructive/50 text-destructive hover:bg-destructive/10 h-10 md:h-11"
+              aria-label="Clear all saved content"
             >
-              <Trash2 className="w-4 h-4 mr-2" />
+              <Trash2 className="w-4 h-4 mr-2" aria-hidden="true" />
               Clear All Content
             </Button>
 
