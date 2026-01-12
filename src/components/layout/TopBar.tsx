@@ -48,7 +48,7 @@ export function TopBar() {
       <div className="flex items-center gap-3">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2 border-border hover:border-primary/50 hover:bg-primary/10">
+            <Button variant="outline" size="sm" className="gap-2 border-border hover:border-primary/50 hover:bg-primary/10" aria-label="API Settings">
               <Key className="w-4 h-4" />
               <span className="hidden sm:inline">API Settings</span>
             </Button>
@@ -93,7 +93,7 @@ export function TopBar() {
           </DialogContent>
         </Dialog>
 
-        <Button variant="ghost" size="icon" className="hover:bg-secondary">
+        <Button variant="ghost" size="icon" className="hover:bg-secondary" aria-label="Settings">
           <Settings className="w-5 h-5 text-muted-foreground" />
         </Button>
       </div>
