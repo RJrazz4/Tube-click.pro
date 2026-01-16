@@ -74,7 +74,13 @@ export const exportAllAsZip = async (): Promise<void> => {
         guidesFolder?.file(`${date}_${safeName}.md`, item.content);
         break;
       case 'voiceover':
-        voiceoversFolder?.file(`${date}_${safeName}.txt`, item.content);
+        // NOTE: Browser limitation - only the text transcript is saved.
+        // Actual audio files must be downloaded directly from VoiceStudio.
+        voiceoversFolder?.file(`${date}_${safeName}_transcript.txt`, item.content);
+        break;
+      case 'storyboard':
+        // Storyboard descriptions are saved; images must be downloaded via Storyboard page
+        guidesFolder?.file(`${date}_${safeName}_storyboard.txt`, item.content);
         break;
     }
   }

@@ -38,7 +38,17 @@ export default function Thumbnails() {
 
   const handleGenerate = async () => {
     if (!title.trim()) {
-      toast.error("Please enter a title or description");
+      toast.error("Please enter a title or description for the thumbnail");
+      return;
+    }
+    
+    if (title.trim().length < 3) {
+      toast.error("Title too short. Please provide at least 3 characters.");
+      return;
+    }
+    
+    if (title.length > 200) {
+      toast.error("Title too long. Maximum 200 characters for best results.");
       return;
     }
 

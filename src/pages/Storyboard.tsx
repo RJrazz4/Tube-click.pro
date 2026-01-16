@@ -81,6 +81,12 @@ export default function Storyboard() {
       return;
     }
 
+    // Validate minimum script length
+    if (script.trim().length < 100) {
+      toast.error("Script too short. Please provide at least 100 characters for meaningful analysis.");
+      return;
+    }
+
     setIsAnalyzing(true);
     setScenes([]);
 
@@ -104,13 +110,16 @@ export default function Storyboard() {
       }
 
       const data = await response.json();
-      const analyzedScenes = data.scenes.map((scene: Scene) => ({
+      
+      // Enforce maximum 6 scenes client-side as well
+      const limitedScenes = (data.scenes || []).slice(0, 6);
+      const analyzedScenes = limitedScenes.map((scene: Scene) => ({
         ...scene,
         status: 'pending' as const
       }));
 
       setScenes(analyzedScenes);
-      toast.success(`Identified ${analyzedScenes.length} story-critical scenes!`);
+      toast.success(`Identified ${analyzedScenes.length} story-critical scenes (max 6)!`);
 
     } catch (error) {
       console.error("Analysis error:", error);

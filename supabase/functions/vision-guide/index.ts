@@ -15,11 +15,26 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+      console.error("LOVABLE_API_KEY is not configured");
+      return new Response(JSON.stringify({ error: "Server configuration error. Please contact support." }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    if (!images || images.length === 0) {
-      throw new Error("No images provided");
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return new Response(JSON.stringify({ error: "No images provided. Please upload at least one screenshot." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Limit number of images to prevent API overuse
+    if (images.length > 10) {
+      return new Response(JSON.stringify({ error: "Too many images. Maximum 10 screenshots allowed." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log("Processing", images.length, "images for vision guide");

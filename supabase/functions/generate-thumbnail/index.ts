@@ -15,11 +15,25 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+      console.error("LOVABLE_API_KEY is not configured");
+      return new Response(JSON.stringify({ error: "Server configuration error. Please contact support." }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    if (!title) {
-      throw new Error("Title is required");
+    if (!title || typeof title !== 'string' || title.trim().length < 3) {
+      return new Response(JSON.stringify({ error: "Title is required and must be at least 3 characters." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (title.length > 200) {
+      return new Response(JSON.stringify({ error: "Title too long. Maximum 200 characters for best results." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const dimensions = aspectRatio === "9:16" 

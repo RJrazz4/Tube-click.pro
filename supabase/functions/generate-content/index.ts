@@ -15,8 +15,29 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+      console.error("LOVABLE_API_KEY is not configured");
+      return new Response(JSON.stringify({ error: "Server configuration error. Please contact support." }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
+
+    // Input validation
+    if (!topic || typeof topic !== 'string' || topic.trim().length < 3) {
+      return new Response(JSON.stringify({ error: "Topic is required and must be at least 3 characters." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (topic.length > 500) {
+      return new Response(JSON.stringify({ error: "Topic too long. Maximum 500 characters allowed." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const sanitizedTopic = topic.trim().slice(0, 500);
 
     const systemPrompt = `You are a viral YouTube content strategist specializing in creating high-retention, curiosity-based content for Indian and global audiences.
 
@@ -36,7 +57,7 @@ You MUST respond in the following exact JSON format (no markdown, just raw JSON)
 }`;
 
     const userPrompt = `Generate viral YouTube content for the following:
-Topic: ${topic}
+Topic: ${sanitizedTopic}
 Platform: ${platform || "YouTube"}
 Style: ${style || "Engaging and energetic"}
 
@@ -49,7 +70,7 @@ Requirements:
 
 Make content highly engaging, use power words, create curiosity gaps, and optimize for maximum retention.`;
 
-    console.log("Generating content for topic:", topic);
+    console.log("Generating content for topic:", sanitizedTopic);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

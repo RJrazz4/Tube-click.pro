@@ -88,7 +88,13 @@ export default function VoiceStudio() {
 
   const generateElevenLabsAudio = async () => {
     if (!text.trim()) {
-      toast.error("Please enter some text");
+      toast.error("Please enter some text to convert to speech");
+      return;
+    }
+
+    // Validate text length to prevent API overuse
+    if (text.length > 5000) {
+      toast.error("Text too long. Maximum 5000 characters allowed.");
       return;
     }
 
@@ -169,8 +175,13 @@ export default function VoiceStudio() {
 
   const handleBrowserTTSPlay = () => {
     if (!text.trim()) {
-      toast.error("Please enter some text");
+      toast.error("Please enter some text to convert to speech");
       return;
+    }
+
+    // Browser TTS has no text length limit but warn for very long text
+    if (text.length > 10000) {
+      toast.warning("Very long text may cause browser TTS to be slow or unstable");
     }
 
     if (isPaused) {
@@ -267,7 +278,9 @@ export default function VoiceStudio() {
     } else if (useElevenLabs) {
       toast.info("Generate a voiceover first by clicking the Play button");
     } else {
-      toast.info("MP3 download is only available with ElevenLabs voices");
+      // BROWSER LIMITATION: Web Speech API cannot export audio blobs
+      // Only ElevenLabs provides downloadable MP3 files
+      toast.info("MP3 download requires ElevenLabs. Browser TTS cannot export audio files.");
     }
   };
 
