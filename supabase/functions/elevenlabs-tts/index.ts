@@ -47,9 +47,17 @@ serve(async (req) => {
       );
     }
 
-    if (!text || !text.trim()) {
+    if (!text || typeof text !== 'string' || !text.trim()) {
       return new Response(
-        JSON.stringify({ error: 'Text is required' }),
+        JSON.stringify({ error: 'Text is required. Please provide text to convert to speech.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate text length to prevent API overuse
+    if (text.length > 5000) {
+      return new Response(
+        JSON.stringify({ error: 'Text too long. Maximum 5000 characters allowed for voice generation.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

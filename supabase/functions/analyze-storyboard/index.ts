@@ -21,10 +21,21 @@ serve(async (req) => {
 
     if (!script || !script.trim()) {
       return new Response(
-        JSON.stringify({ error: 'Script is required' }),
+        JSON.stringify({ error: 'Script is required. Please paste your video script.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Validate script length (minimum 100 characters for meaningful analysis)
+    if (script.trim().length < 100) {
+      return new Response(
+        JSON.stringify({ error: 'Script too short. Please provide at least 100 characters for meaningful analysis.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Limit script length to prevent API overuse (max ~10,000 characters)
+    const trimmedScript = script.slice(0, 10000);
 
     console.log('Analyzing script for story beats...');
 
@@ -40,8 +51,12 @@ STORY BEAT FRAMEWORK:
 - Call to Action: The inspiring final visual
 
 RULES:
-1. Identify 6-10 scenes maximum based on script length
+1. Identify EXACTLY 6 scenes maximum - no exceptions
 2. Only pick the MOST visually powerful moments - scenes that would make stunning thumbnails
+3. Skip generic or dialogue-heavy moments that don't translate well visually
+4. Focus on action, emotion, and transformation
+5. Each scene must be different and progress the story
+6. Never exceed 6 scenes to conserve resources
 3. Skip generic or dialogue-heavy moments that don't translate well visually
 4. Focus on action, emotion, and transformation
 5. Each scene must be different and progress the story
@@ -73,10 +88,10 @@ Return ONLY valid JSON array with no markdown formatting.`;
           { role: 'system', content: systemPrompt },
           { 
             role: 'user', 
-            content: `Analyze this script and extract 6-10 story-critical scenes for cinematic visualization. Return as JSON array.
+            content: `Analyze this script and extract EXACTLY 6 story-critical scenes for cinematic visualization. No more than 6 scenes to save resources. Return as JSON array.
 
 SCRIPT:
-${script}
+${trimmedScript}
 
 Return format:
 [
@@ -90,7 +105,9 @@ Return format:
     "camera_angle": "close-up on face with screen reflection in eyes",
     "visual_prompt": "Ultra realistic cinematic photography, 8K, professional DSLR, cinematic lighting, modern home office at night, young professional woman staring at laptop with declining graphs, frustrated and overwhelmed expression, close-up with blue screen light reflecting in eyes, YouTube video quality, dramatic atmosphere, shallow depth of field, photorealistic, no blur, no text, no watermark"
   }
-]`
+]
+
+CRITICAL: Return ONLY 6 scenes maximum. Pick only the most visually powerful moments.`
           }
         ],
       }),

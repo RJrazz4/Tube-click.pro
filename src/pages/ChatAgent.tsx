@@ -46,7 +46,24 @@ export default function ChatAgent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!topic.trim() || isGenerating) return;
+    
+    // Input validation
+    if (!topic.trim()) {
+      toast.error("Please enter a video topic");
+      return;
+    }
+    
+    if (topic.trim().length < 3) {
+      toast.error("Topic too short. Please provide at least 3 characters.");
+      return;
+    }
+    
+    if (topic.length > 500) {
+      toast.error("Topic too long. Maximum 500 characters allowed.");
+      return;
+    }
+    
+    if (isGenerating) return;
 
     setIsGenerating(true);
     setGeneratedContent(null);

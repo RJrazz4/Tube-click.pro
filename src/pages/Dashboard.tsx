@@ -280,7 +280,10 @@ export default function Dashboard() {
             </Button>
 
             <p className="text-xs text-center text-muted-foreground">
-              ZIP includes: Scripts, Thumbnails, Guides, Voiceover texts
+              ZIP includes: Scripts, Thumbnails (base64), Guides, Voiceover transcripts
+            </p>
+            <p className="text-xs text-center text-muted-foreground/70 mt-1">
+              Note: Audio files must be downloaded directly from Voiceover Studio
             </p>
           </CardContent>
         </Card>
