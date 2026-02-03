@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Package } from "lucide-react";
+import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Package, Film, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -25,6 +25,14 @@ const tools = [
     glow: "neon-glow-cyan",
   },
   {
+    title: "Visual Storyboard",
+    description: "Cinematic frames from your script",
+    icon: Film,
+    path: "/storyboard",
+    gradient: "from-purple-400 to-violet-600",
+    glow: "",
+  },
+  {
     title: "SnapGuide Vision",
     description: "Screenshots to step-by-step tutorials",
     icon: Eye,
@@ -34,7 +42,7 @@ const tools = [
   },
   {
     title: "Voiceover Studio",
-    description: "Text-to-speech with speed & pitch control",
+    description: "Text-to-speech with ElevenLabs AI",
     icon: Mic,
     path: "/voice",
     gradient: "from-orange-400 to-red-500",
@@ -52,6 +60,7 @@ export default function Dashboard() {
   });
   const [recentContent, setRecentContent] = useState<SavedContent[]>([]);
   const [isExporting, setIsExporting] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   useEffect(() => {
     // Load stats from localStorage
@@ -80,23 +89,41 @@ export default function Dashboard() {
   }, []);
 
   const handleExportAll = async () => {
+    if (recentContent.length === 0) {
+      toast.error("No content to export. Create some content first!");
+      return;
+    }
+    
     setIsExporting(true);
     try {
       await exportAllAsZip();
       toast.success("All content exported as ZIP!");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to export content");
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to export content";
+      toast.error(errorMessage);
     } finally {
       setIsExporting(false);
     }
   };
 
   const handleClearAll = () => {
+    if (recentContent.length === 0) {
+      toast.info("No content to clear");
+      return;
+    }
+    
     if (confirm("Are you sure you want to delete all saved content? This cannot be undone.")) {
-      clearAllContent();
-      setStats(getStats());
-      setRecentContent([]);
-      toast.success("All content cleared!");
+      setIsClearing(true);
+      try {
+        clearAllContent();
+        setStats(getStats());
+        setRecentContent([]);
+        toast.success("All content cleared!");
+      } catch (error) {
+        toast.error("Failed to clear content");
+      } finally {
+        setIsClearing(false);
+      }
     }
   };
 
@@ -133,9 +160,12 @@ export default function Dashboard() {
       case 'thumbnail': return Image;
       case 'voiceover': return Mic;
       case 'guide': return Eye;
+      case 'storyboard': return Film;
       default: return FileText;
     }
   };
+
+  const totalContent = getSavedContent().length;
 
   return (
     <div className="space-y-6 md:space-y-8 animate-fade-in">
@@ -176,7 +206,7 @@ export default function Dashboard() {
       {/* Tools Grid */}
       <div>
         <h2 className="font-display text-lg md:text-xl font-semibold text-foreground mb-3 md:mb-4">Quick Actions</h2>
-        <div className="grid md:grid-cols-2 gap-3 md:gap-4">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
           {tools.map((tool, index) => (
             <Link 
               key={tool.path} 
@@ -211,7 +241,9 @@ export default function Dashboard() {
         <Card className="cyber-card border-border">
           <CardHeader className="pb-3 md:pb-4">
             <CardTitle className="font-display text-base md:text-lg text-foreground">Recent Content</CardTitle>
-            <CardDescription className="text-xs md:text-sm text-muted-foreground">Your latest creations</CardDescription>
+            <CardDescription className="text-xs md:text-sm text-muted-foreground">
+              Your latest creations ({totalContent} total)
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {recentContent.length > 0 ? (
@@ -225,8 +257,10 @@ export default function Dashboard() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs md:text-sm text-foreground truncate">{content.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(content.createdAt).toLocaleDateString()}
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <span className="capitalize">{content.type}</span>
+                          <span>•</span>
+                          <span>{new Date(content.createdAt).toLocaleDateString()}</span>
                         </p>
                       </div>
                     </div>
@@ -251,19 +285,19 @@ export default function Dashboard() {
           <CardContent className="space-y-3 md:space-y-4">
             <Button
               onClick={handleExportAll}
-              disabled={isExporting || recentContent.length === 0}
+              disabled={isExporting || isClearing || totalContent === 0}
               className="w-full cyber-button text-primary-foreground h-11 md:h-12"
               aria-label="Export all content as ZIP file"
             >
               {isExporting ? (
                 <>
-                  <Package className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
-                  Exporting...
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
+                  Creating ZIP...
                 </>
               ) : (
                 <>
                   <Download className="w-4 h-4 mr-2" aria-hidden="true" />
-                  Export All as ZIP
+                  Export All as ZIP ({totalContent})
                 </>
               )}
             </Button>
@@ -271,20 +305,38 @@ export default function Dashboard() {
             <Button
               variant="outline"
               onClick={handleClearAll}
-              disabled={recentContent.length === 0}
+              disabled={isExporting || isClearing || totalContent === 0}
               className="w-full border-destructive/50 text-destructive hover:bg-destructive/10 h-10 md:h-11"
               aria-label="Clear all saved content"
             >
-              <Trash2 className="w-4 h-4 mr-2" aria-hidden="true" />
-              Clear All Content
+              {isClearing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
+                  Clearing...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" aria-hidden="true" />
+                  Clear All Content
+                </>
+              )}
             </Button>
 
-            <p className="text-xs text-center text-muted-foreground">
-              ZIP includes: Scripts, Thumbnails (base64), Guides, Voiceover transcripts
-            </p>
-            <p className="text-xs text-center text-muted-foreground/70 mt-1">
-              Note: Audio files must be downloaded directly from Voiceover Studio
-            </p>
+            <div className="p-3 rounded-lg bg-secondary/50 border border-border">
+              <p className="text-xs text-muted-foreground">
+                <strong className="text-foreground">ZIP includes:</strong>
+              </p>
+              <ul className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                <li>✓ Scripts (full text)</li>
+                <li>✓ Thumbnails (base64 images)</li>
+                <li>✓ Guides (markdown)</li>
+                <li>✓ Voiceover transcripts</li>
+                <li>✓ Storyboard descriptions</li>
+              </ul>
+              <p className="text-xs text-muted-foreground/70 mt-2 border-t border-border/50 pt-2">
+                Note: Audio files must be downloaded from Voiceover Studio
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
