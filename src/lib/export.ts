@@ -113,6 +113,7 @@ export const exportAllAsZip = async (): Promise<void> => {
   const thumbnailsFolder = zip.folder('thumbnails');
   const guidesFolder = zip.folder('guides');
   const voiceoversFolder = zip.folder('voiceovers');
+  const storyboardsFolder = zip.folder('storyboards');
 
   let filesAdded = 0;
   const errors: string[] = [];
@@ -126,7 +127,21 @@ export const exportAllAsZip = async (): Promise<void> => {
     try {
       switch (item.type) {
         case 'script':
+          // Save full script with all content
           scriptsFolder?.file(`${date}_${safeName}.txt`, item.content);
+          
+          // Also extract and save clean voiceover text
+          const scriptMatch = item.content.match(/--- SCRIPT \(CLEAN.*?\) ---\n([\s\S]*?)(?=\n---|\n===|$)/);
+          if (scriptMatch && scriptMatch[1]?.trim()) {
+            voiceoversFolder?.file(`${date}_${safeName}_voiceover.txt`, 
+              `CLEAN VOICEOVER TEXT\n` +
+              `====================\n\n` +
+              `${scriptMatch[1].trim()}\n\n` +
+              `---\n` +
+              `Ready for text-to-speech. No timestamps or markers.`
+            );
+            filesAdded++;
+          }
           filesAdded++;
           break;
           
@@ -156,28 +171,27 @@ export const exportAllAsZip = async (): Promise<void> => {
           break;
           
         case 'voiceover':
-          // NOTE: Browser limitation - only the text transcript is saved.
-          // Actual audio files must be downloaded directly from VoiceStudio.
+          // Save the voiceover transcript
           voiceoversFolder?.file(`${date}_${safeName}_transcript.txt`, 
             `VOICEOVER TRANSCRIPT\n` +
-            `==================\n\n` +
+            `====================\n\n` +
             `${item.content}\n\n` +
             `---\n` +
-            `Note: Audio files cannot be included in ZIP exports due to browser limitations.\n` +
-            `To download the MP3 file, use the Download button in Voiceover Studio with ElevenLabs enabled.`
+            `Note: For MP3 audio, use Voiceover Studio with ElevenLabs API key.\n` +
+            `Browser TTS does not support audio file export.`
           );
           filesAdded++;
           break;
           
         case 'storyboard':
-          // Storyboard descriptions are saved; images must be downloaded via Storyboard page
-          guidesFolder?.file(`${date}_${safeName}_storyboard.txt`, 
-            `STORYBOARD DESCRIPTION\n` +
-            `=====================\n\n` +
+          // Storyboard descriptions with prompts
+          storyboardsFolder?.file(`${date}_${safeName}_prompts.txt`, 
+            `STORYBOARD PROMPTS\n` +
+            `==================\n\n` +
             `${item.content}\n\n` +
             `---\n` +
-            `Note: Storyboard images must be downloaded separately using the\n` +
-            `"Download Storyboard ZIP" button on the Storyboard page.`
+            `Use these prompts for image generation.\n` +
+            `Download actual images via Storyboard page ZIP button.`
           );
           filesAdded++;
           break;
@@ -191,28 +205,54 @@ export const exportAllAsZip = async (): Promise<void> => {
     throw new Error('Failed to add any files to the ZIP. Please try again.');
   }
 
-  // Add a manifest file
-  const manifest = `TubeGenius Pro Export
-=====================
+  // Add a comprehensive manifest file
+  const manifest = `
+╔══════════════════════════════════════════════════════════════╗
+║                    TUBEGENIUS PRO EXPORT                     ║
+╚══════════════════════════════════════════════════════════════╝
+
 Export Date: ${new Date().toISOString()}
-
-Contents:
-- Scripts: ${counts.scripts}
-- Thumbnails: ${counts.thumbnails}
-- Guides: ${counts.guides}
-- Voiceover Transcripts: ${counts.voiceovers}
-- Storyboard Descriptions: ${counts.storyboards}
-
 Total Files: ${filesAdded}
 
-${errors.length > 0 ? `\nWarnings:\n${errors.join('\n')}` : ''}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Notes:
-------
-- Audio files (MP3) must be downloaded directly from Voiceover Studio
-- Storyboard images must be downloaded using the Storyboard page's ZIP button
-- Some thumbnails may be saved as URL references if they couldn't be embedded
+CONTENTS SUMMARY
+────────────────
+📝 Scripts:              ${counts.scripts}
+🖼️  Thumbnails:           ${counts.thumbnails}
+📚 Guides:               ${counts.guides}
+🎤 Voiceover Transcripts: ${counts.voiceovers}
+🎬 Storyboard Prompts:   ${counts.storyboards}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FOLDER STRUCTURE
+────────────────
+/scripts/       → Full generated scripts with titles, hooks, hashtags
+/thumbnails/    → AI-generated thumbnail images
+/guides/        → Step-by-step tutorial guides (SnapGuide)
+/voiceovers/    → Clean voiceover text ready for TTS
+/storyboards/   → Scene prompts with motion directions
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IMPORTANT NOTES
+───────────────
+✓ Scripts include clean voiceover text (no timestamps/markers)
+✓ Voiceover transcripts are ready for text-to-speech
+✓ Storyboard prompts include camera motion directions
+
+⚠ MP3 Audio Files: Use Voiceover Studio with ElevenLabs API
+⚠ Storyboard Images: Download via Storyboard page ZIP button
+
+${errors.length > 0 ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nWARNINGS\n────────\n${errors.join('\n')}` : ''}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Made with TubeGenius Pro
+https://tubegenius.pro
 `;
+
   zip.file('_MANIFEST.txt', manifest);
 
   const blob = await zip.generateAsync({ type: 'blob' });

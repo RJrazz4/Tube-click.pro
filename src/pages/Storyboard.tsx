@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { 
   Film, 
   Sparkles, 
@@ -11,7 +11,9 @@ import {
   Eye,
   MapPin,
   Camera,
-  Heart
+  Heart,
+  Video,
+  Clock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,9 +34,11 @@ interface Scene {
   location: string;
   camera_angle: string;
   visual_prompt: string;
+  motion_prompt?: string;
   imageUrl?: string;
-  status?: 'pending' | 'generating' | 'complete' | 'error' | 'retrying';
+  status?: 'pending' | 'generating' | 'complete' | 'error' | 'retrying' | 'timeout';
   retryCount?: number;
+  startTime?: number;
 }
 
 const BEAT_COLORS: Record<string, string> = {
@@ -49,6 +53,7 @@ const BEAT_COLORS: Record<string, string> = {
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000;
+const SCENE_TIMEOUT = 45000; // 45 seconds timeout per scene
 
 export default function Storyboard() {
   const [script, setScript] = useState("");
@@ -58,6 +63,7 @@ export default function Storyboard() {
   const [currentGeneratingScene, setCurrentGeneratingScene] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
   const [retryingScene, setRetryingScene] = useState<number | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Load saved storyboard from localStorage
   useEffect(() => {
@@ -86,10 +92,13 @@ export default function Storyboard() {
   const createFallbackPrompt = (scene: Scene, attempt: number): string => {
     if (attempt === 1) {
       // First retry: simplify the prompt
-      return `Professional photo, ${scene.location}, ${scene.who}, ${scene.emotion} expression, ${scene.camera_angle}, high quality, no text`;
+      return `Professional cinematic photo, ${scene.location}, ${scene.who}, ${scene.emotion} expression, ${scene.camera_angle}, high quality, no text, no watermark`;
+    } else if (attempt === 2) {
+      // Second retry: even simpler
+      return `Portrait photo of ${scene.who.split(' ').slice(0, 4).join(' ')}, ${scene.emotion}, professional lighting, cinematic`;
     } else {
-      // Final retry: ultra-simple prompt
-      return `Portrait photo of ${scene.who.split(' ').slice(0, 3).join(' ')}, ${scene.emotion}, professional lighting`;
+      // Final retry: ultra-simple
+      return `Professional photo, person with ${scene.emotion} expression, cinematic lighting`;
     }
   };
 
@@ -128,7 +137,7 @@ export default function Storyboard() {
 
       const data = await response.json();
       
-      // Enforce maximum 6 scenes
+      // Enforce exactly 6 scenes
       const limitedScenes = (data.scenes || []).slice(0, 6);
       const analyzedScenes = limitedScenes.map((scene: Scene) => ({
         ...scene,
@@ -149,18 +158,23 @@ export default function Storyboard() {
   };
 
   /**
-   * Generate image for a single scene with retry logic
+   * Generate image for a single scene with retry logic and timeout
    */
   const generateImage = async (sceneIndex: number, isRetry: boolean = false): Promise<boolean> => {
     const scene = scenes[sceneIndex];
     const currentRetryCount = scene.retryCount || 0;
+    
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+    const startTime = Date.now();
     
     // Update status
     setScenes(prev => prev.map((s, i) => 
       i === sceneIndex ? { 
         ...s, 
         status: isRetry ? 'retrying' : 'generating',
-        retryCount: currentRetryCount
+        retryCount: currentRetryCount,
+        startTime
       } : s
     ));
     setCurrentGeneratingScene(scene.scene_number);
@@ -172,7 +186,13 @@ export default function Storyboard() {
       : createFallbackPrompt(scene, currentRetryCount);
 
     try {
-      const response = await fetch(
+      // Create timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Scene generation timed out')), SCENE_TIMEOUT);
+      });
+
+      // Create fetch promise
+      const fetchPromise = fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-storyboard-image`,
         {
           method: "POST",
@@ -185,8 +205,12 @@ export default function Storyboard() {
             prompt: promptToUse,
             sceneNumber: scene.scene_number
           }),
+          signal: abortControllerRef.current.signal
         }
       );
+
+      // Race between timeout and fetch
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (!response.ok) {
         const error = await response.json();
@@ -209,17 +233,24 @@ export default function Storyboard() {
     } catch (error) {
       console.error(`Error generating scene ${scene.scene_number} (attempt ${currentRetryCount + 1}):`, error);
       
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const isTimeout = errorMessage.includes('timed out');
+      
       // Check if we should retry
       if (currentRetryCount < MAX_RETRIES) {
-        console.log(`Retrying scene ${scene.scene_number} (attempt ${currentRetryCount + 2}/${MAX_RETRIES + 1})`);
+        console.log(`${isTimeout ? 'Timeout' : 'Error'} - Retrying scene ${scene.scene_number} (attempt ${currentRetryCount + 2}/${MAX_RETRIES + 1})`);
         
-        // Update retry count
+        // Update retry count and status
         setScenes(prev => prev.map((s, i) => 
-          i === sceneIndex ? { ...s, retryCount: currentRetryCount + 1, status: 'retrying' } : s
+          i === sceneIndex ? { 
+            ...s, 
+            retryCount: currentRetryCount + 1, 
+            status: isTimeout ? 'timeout' : 'retrying' 
+          } : s
         ));
         
-        // Wait before retry
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        // Wait before retry (longer wait for timeout)
+        await new Promise(resolve => setTimeout(resolve, isTimeout ? RETRY_DELAY * 2 : RETRY_DELAY));
         
         // Recursive retry with incremented count
         return generateImage(sceneIndex, true);
@@ -295,7 +326,7 @@ export default function Storyboard() {
     if (successCount === scenes.length) {
       toast.success(`All ${scenes.length} cinematic frames generated successfully!`);
     } else if (successCount > 0) {
-      toast.warning(`Generated ${successCount}/${scenes.length} scenes. Scenes ${failedScenes.join(', ')} failed after ${MAX_RETRIES + 1} attempts.`);
+      toast.warning(`Generated ${successCount}/${scenes.length} scenes. Scenes ${failedScenes.join(', ')} failed after ${MAX_RETRIES + 1} attempts. Click Retry to try again.`);
     } else {
       toast.error(`All scenes failed. Please check your connection and try again.`);
     }
@@ -360,14 +391,16 @@ export default function Storyboard() {
       // Add script file
       folder?.file('script.txt', script);
 
-      // Add scene descriptions
+      // Add scene descriptions with motion prompts
       const descriptions = scenes.map(s => 
         `Scene ${s.scene_number} - ${s.beat_type}\n` +
         `Who: ${s.who}\n` +
         `What: ${s.what}\n` +
         `Emotion: ${s.emotion}\n` +
         `Location: ${s.location}\n` +
-        `Camera: ${s.camera_angle}\n\n`
+        `Camera: ${s.camera_angle}\n` +
+        `Motion: ${s.motion_prompt || 'Standard cinematic movement'}\n` +
+        `Visual Prompt: ${s.visual_prompt}\n\n`
       ).join('---\n\n');
       folder?.file('scene_descriptions.txt', descriptions);
 
@@ -393,6 +426,9 @@ export default function Storyboard() {
   const pendingCount = scenes.filter(s => s.status === 'pending').length;
 
   const getStatusText = (scene: Scene): string => {
+    if (scene.status === 'timeout') {
+      return `Timeout - Retrying...`;
+    }
     if (scene.status === 'retrying') {
       return `Retry ${(scene.retryCount || 0) + 1}/${MAX_RETRIES + 1}...`;
     }
@@ -410,7 +446,7 @@ export default function Storyboard() {
           Visual Storyboard AI
         </h1>
         <p className="text-sm md:text-base text-muted-foreground mt-1">
-          Generate story-critical cinematic frames with automatic retry
+          Generate 6 cinematic frames with auto-retry & timeout recovery
         </p>
       </div>
 
@@ -429,16 +465,15 @@ export default function Storyboard() {
               onChange={(e) => setScript(e.target.value)}
               placeholder="Paste your video script here...
 
-The AI will analyze it and identify the most powerful visual moments:
+The AI will analyze it and identify 6 powerful visual moments:
 • Opening Hook
 • Problem
 • Discovery  
 • Method
 • Proof
 • Transformation
-• Call to Action
 
-Only 6 story-critical scenes will be generated."
+Each scene includes image + motion prompts."
               className="min-h-[300px] md:min-h-[400px] bg-secondary border-border focus:border-primary resize-none text-sm"
               disabled={isAnalyzing || isGenerating}
             />
@@ -462,7 +497,7 @@ Only 6 story-critical scenes will be generated."
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 mr-2" />
-                    Analyze Script
+                    Analyze Script (6 Scenes)
                   </>
                 )}
               </Button>
@@ -485,7 +520,7 @@ Only 6 story-critical scenes will be generated."
                     ) : (
                       <>
                         <Film className="w-4 h-4 mr-2" />
-                        Generate {scenes.length} Visuals
+                        Generate All {scenes.length} Visuals
                       </>
                     )}
                   </Button>
@@ -539,10 +574,14 @@ Only 6 story-critical scenes will be generated."
             )}
 
             {/* Info box */}
-            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+            <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 space-y-1">
               <p className="text-xs text-green-400 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
                 Auto-retry with {MAX_RETRIES + 1} attempts per scene
+              </p>
+              <p className="text-xs text-green-400/70 flex items-center gap-2">
+                <Clock className="w-4 h-4 flex-shrink-0" />
+                45s timeout detection with auto-recovery
               </p>
             </div>
           </CardContent>
@@ -568,7 +607,7 @@ Only 6 story-critical scenes will be generated."
               <div className="flex flex-col items-center justify-center h-[400px] text-center">
                 <Film className="w-16 h-16 text-muted-foreground/30 mb-4" />
                 <p className="text-muted-foreground text-sm">
-                  Paste your script and click "Analyze Script" to identify story-critical scenes
+                  Paste your script and click "Analyze Script" to identify 6 story-critical scenes
                 </p>
               </div>
             ) : (
@@ -580,7 +619,7 @@ Only 6 story-critical scenes will be generated."
                       "rounded-xl border overflow-hidden transition-all",
                       scene.status === 'complete' ? "border-green-500/30" : 
                       scene.status === 'error' ? "border-red-500/30" :
-                      scene.status === 'retrying' ? "border-yellow-500/30" : "border-border"
+                      scene.status === 'retrying' || scene.status === 'timeout' ? "border-yellow-500/30" : "border-border"
                     )}
                   >
                     {/* Scene Image */}
@@ -593,7 +632,7 @@ Only 6 story-critical scenes will be generated."
                         />
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center">
-                          {scene.status === 'generating' || scene.status === 'retrying' ? (
+                          {scene.status === 'generating' || scene.status === 'retrying' || scene.status === 'timeout' ? (
                             <div className="text-center">
                               <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-2" />
                               <p className="text-xs text-muted-foreground">{getStatusText(scene)}</p>
@@ -681,6 +720,13 @@ Only 6 story-critical scenes will be generated."
                         <Camera className="w-3 h-3 text-purple-400" />
                         {scene.camera_angle}
                       </div>
+
+                      {scene.motion_prompt && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground border-t border-border/50 pt-2 mt-2">
+                          <Video className="w-3 h-3 text-cyan-400" />
+                          <span className="line-clamp-1">{scene.motion_prompt}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
