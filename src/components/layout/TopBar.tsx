@@ -1,4 +1,4 @@
-import { Settings, Key } from "lucide-react";
+import { Settings, Key, Languages } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,25 +10,49 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 export function TopBar() {
   const [geminiKey, setGeminiKey] = useState("");
+  const [elevenLabsKey, setElevenLabsKey] = useState("");
   const [open, setOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const savedKey = localStorage.getItem("gemini-api-key");
-    if (savedKey) setGeminiKey(savedKey);
-  }, []);
+    const savedGeminiKey = localStorage.getItem("gemini-api-key");
+    const savedElevenLabsKey = localStorage.getItem("elevenlabs-api-key");
+    if (savedGeminiKey) setGeminiKey(savedGeminiKey);
+    if (savedElevenLabsKey) setElevenLabsKey(savedElevenLabsKey);
+  }, [open]);
 
-  const handleSaveKey = () => {
-    localStorage.setItem("gemini-api-key", geminiKey);
-    toast.success("API Key saved successfully!", {
-      description: "Your Gemini API key has been stored locally.",
+  const handleSaveKeys = () => {
+    setIsSaving(true);
+    
+    // Save both keys
+    if (geminiKey.trim()) {
+      localStorage.setItem("gemini-api-key", geminiKey.trim());
+    } else {
+      localStorage.removeItem("gemini-api-key");
+    }
+    
+    if (elevenLabsKey.trim()) {
+      localStorage.setItem("elevenlabs-api-key", elevenLabsKey.trim());
+    } else {
+      localStorage.removeItem("elevenlabs-api-key");
+    }
+    
+    toast.success("Settings saved successfully!", {
+      description: "Your API keys have been stored securely in your browser.",
     });
+    
+    setIsSaving(false);
     setOpen(false);
   };
+
+  const hasGeminiKey = !!localStorage.getItem("gemini-api-key");
+  const hasElevenLabsKey = !!localStorage.getItem("elevenlabs-api-key");
 
   return (
     <header className="fixed top-0 left-20 right-0 h-16 bg-background/80 backdrop-blur-xl border-b border-border z-40 flex items-center justify-between px-6">
@@ -46,23 +70,87 @@ export function TopBar() {
 
       {/* Actions */}
       <div className="flex items-center gap-3">
+        {/* Status indicators */}
+        <div className="hidden md:flex items-center gap-2 text-xs">
+          <span className={`flex items-center gap-1 px-2 py-1 rounded-full ${hasElevenLabsKey ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${hasElevenLabsKey ? 'bg-green-400' : 'bg-yellow-400'}`} />
+            ElevenLabs
+          </span>
+        </div>
+
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2 border-border hover:border-primary/50 hover:bg-primary/10" aria-label="API Settings">
-              <Key className="w-4 h-4" />
-              <span className="hidden sm:inline">API Settings</span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 border-border hover:border-primary/50 hover:bg-primary/10" 
+              aria-label="Settings"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="hidden sm:inline">Settings</span>
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-card border-border">
+          <DialogContent className="bg-card border-border max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-display text-foreground">API Configuration</DialogTitle>
+              <DialogTitle className="font-display text-foreground flex items-center gap-2">
+                <Key className="w-5 h-5 text-primary" />
+                API Configuration
+              </DialogTitle>
               <DialogDescription className="text-muted-foreground">
-                Enter your API keys for external services.
+                Configure your API keys for enhanced features. Keys are stored locally in your browser.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 pt-4">
+            
+            <div className="space-y-6 pt-4">
+              {/* ElevenLabs API Key */}
               <div className="space-y-2">
-                <Label htmlFor="gemini-key" className="text-foreground">Google Gemini API Key</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="elevenlabs-key" className="text-foreground font-medium">
+                    ElevenLabs API Key
+                  </Label>
+                  {hasElevenLabsKey && (
+                    <span className="text-xs text-green-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                      Configured
+                    </span>
+                  )}
+                </div>
+                <Input
+                  id="elevenlabs-key"
+                  type="password"
+                  placeholder="sk_..."
+                  value={elevenLabsKey}
+                  onChange={(e) => setElevenLabsKey(e.target.value)}
+                  className="bg-secondary border-border focus:border-primary"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Required for high-quality AI voiceovers. Get your key from{" "}
+                  <a 
+                    href="https://elevenlabs.io/app/settings/api-keys" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    ElevenLabs Dashboard
+                  </a>
+                </p>
+              </div>
+
+              <Separator className="bg-border" />
+
+              {/* Gemini API Key */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="gemini-key" className="text-foreground font-medium">
+                    Google Gemini API Key
+                  </Label>
+                  {hasGeminiKey && (
+                    <span className="text-xs text-green-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                      Configured
+                    </span>
+                  )}
+                </div>
                 <Input
                   id="gemini-key"
                   type="password"
@@ -83,19 +171,27 @@ export function TopBar() {
                   </a>
                 </p>
               </div>
+
+              <Separator className="bg-border" />
+
+              {/* Info Box */}
+              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <p className="text-xs text-primary">
+                  <strong>Note:</strong> Core features (TubeBot, Thumbnails, Storyboard) work without API keys. 
+                  API keys unlock premium features like ElevenLabs voices.
+                </p>
+              </div>
+
               <Button 
-                onClick={handleSaveKey} 
+                onClick={handleSaveKeys}
+                disabled={isSaving}
                 className="w-full cyber-button text-primary-foreground"
               >
-                Save Configuration
+                {isSaving ? "Saving..." : "Save Configuration"}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
-
-        <Button variant="ghost" size="icon" className="hover:bg-secondary" aria-label="Settings">
-          <Settings className="w-5 h-5 text-muted-foreground" />
-        </Button>
       </div>
     </header>
   );

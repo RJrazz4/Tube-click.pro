@@ -41,7 +41,7 @@ serve(async (req) => {
 
     const systemPrompt = `You are an expert video storyboard analyst and cinematographer. Your job is to analyze scripts and identify the most visually powerful, story-critical moments for cinematic visualization.
 
-STORY BEAT FRAMEWORK:
+STORY BEAT FRAMEWORK (Pick 6 from these):
 - Opening Hook: The attention-grabbing visual that pulls viewers in
 - Problem: The struggle, pain point, or challenge being addressed
 - Discovery: The "aha moment" or revelation
@@ -50,29 +50,34 @@ STORY BEAT FRAMEWORK:
 - Transformation: The before/after or success moment
 - Call to Action: The inspiring final visual
 
-RULES:
-1. Identify EXACTLY 6 scenes maximum - no exceptions
-2. Only pick the MOST visually powerful moments - scenes that would make stunning thumbnails
-3. Skip generic or dialogue-heavy moments that don't translate well visually
-4. Focus on action, emotion, and transformation
-5. Each scene must be different and progress the story
-6. Never exceed 6 scenes to conserve resources
-3. Skip generic or dialogue-heavy moments that don't translate well visually
-4. Focus on action, emotion, and transformation
-5. Each scene must be different and progress the story
+CRITICAL RULES:
+1. Identify EXACTLY 6 scenes - no more, no less
+2. Each scene MUST directly relate to a specific part of the script
+3. Pick only the MOST visually powerful moments
+4. Skip generic or dialogue-heavy moments that don't translate well visually
+5. Focus on action, emotion, and transformation
+6. Each scene must progress the story logically
 
 For EACH scene, provide:
 - beat_type: Which story beat this represents
-- scene_number: Sequential number
-- who: Character description (age, appearance, expression)
-- what: The specific action happening
+- scene_number: Sequential number (1-6)
+- who: Detailed character description (age, appearance, clothing, expression)
+- what: The specific action happening (based on script content)
 - emotion: The dominant feeling (e.g., "shock and disbelief", "triumphant joy")
-- location: Detailed setting description
-- camera_angle: Cinematographic direction (e.g., "close-up", "wide establishing shot", "dramatic low angle")
-- visual_prompt: A ready-to-use image generation prompt
+- location: Detailed setting description with lighting
+- camera_angle: Cinematographic direction (e.g., "close-up", "wide establishing shot")
+- visual_prompt: Ready-to-use image generation prompt
+- motion_prompt: Camera/subject motion for video (e.g., "slow zoom in on face", "camera pans left revealing the scene")
 
 VISUAL PROMPT FORMAT (use exactly):
 "Ultra realistic cinematic photography, 8K, professional DSLR, cinematic lighting, {location}, {character doing action}, {emotion on face}, {camera angle}, YouTube video quality, dramatic atmosphere, shallow depth of field, photorealistic, no blur, no text, no watermark"
+
+MOTION PROMPT FORMAT:
+"[Camera motion] while [subject action], [mood/atmosphere]"
+Examples:
+- "Slow push in on subject's face while they realize the truth, tension building"
+- "Wide crane shot descending as crowd gathers, anticipation rising"
+- "Handheld follow shot tracking subject walking, documentary feel"
 
 Return ONLY valid JSON array with no markdown formatting.`;
 
@@ -88,7 +93,7 @@ Return ONLY valid JSON array with no markdown formatting.`;
           { role: 'system', content: systemPrompt },
           { 
             role: 'user', 
-            content: `Analyze this script and extract EXACTLY 6 story-critical scenes for cinematic visualization. No more than 6 scenes to save resources. Return as JSON array.
+            content: `Analyze this script and extract EXACTLY 6 story-critical scenes for cinematic visualization. Return as JSON array.
 
 SCRIPT:
 ${trimmedScript}
@@ -98,16 +103,17 @@ Return format:
   {
     "beat_type": "Opening Hook",
     "scene_number": 1,
-    "who": "young professional woman in her 30s with determined expression",
+    "who": "young Indian man in his 20s with determined expression, wearing casual clothes",
     "what": "staring at laptop screen showing declining graphs",
     "emotion": "frustrated and overwhelmed",
     "location": "modern home office at night, blue light from screen illuminating face",
     "camera_angle": "close-up on face with screen reflection in eyes",
-    "visual_prompt": "Ultra realistic cinematic photography, 8K, professional DSLR, cinematic lighting, modern home office at night, young professional woman staring at laptop with declining graphs, frustrated and overwhelmed expression, close-up with blue screen light reflecting in eyes, YouTube video quality, dramatic atmosphere, shallow depth of field, photorealistic, no blur, no text, no watermark"
+    "visual_prompt": "Ultra realistic cinematic photography, 8K, professional DSLR, cinematic lighting, modern home office at night, young Indian man staring at laptop with declining graphs, frustrated and overwhelmed expression, close-up with blue screen light reflecting in eyes, YouTube video quality, dramatic atmosphere, shallow depth of field, photorealistic, no blur, no text, no watermark",
+    "motion_prompt": "Slow push in on subject's face while screen flickers, tension building"
   }
 ]
 
-CRITICAL: Return ONLY 6 scenes maximum. Pick only the most visually powerful moments.`
+CRITICAL: Return EXACTLY 6 scenes. Each scene MUST be visually powerful and story-critical.`
           }
         ],
       }),
@@ -119,22 +125,26 @@ CRITICAL: Return ONLY 6 scenes maximum. Pick only the most visually powerful mom
       
       if (response.status === 429) {
         return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
+          JSON.stringify({ error: 'Rate limit exceeded. Please wait 30 seconds and try again.' }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: 'Credits required. Please add funds to continue.' }),
+          JSON.stringify({ error: 'Credits exhausted. Please add funds to continue.' }),
           { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
-      throw new Error(`AI gateway error: ${response.status}`);
+      throw new Error(`AI service temporarily unavailable. Please try again.`);
     }
 
     const data = await response.json();
     let content = data.choices?.[0]?.message?.content || '';
+    
+    if (!content) {
+      throw new Error('Empty response from AI. Please try again.');
+    }
     
     // Clean up the response
     content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -142,12 +152,34 @@ CRITICAL: Return ONLY 6 scenes maximum. Pick only the most visually powerful mom
     let scenes;
     try {
       scenes = JSON.parse(content);
+      
+      // Validate scenes array
+      if (!Array.isArray(scenes) || scenes.length === 0) {
+        throw new Error('Invalid scenes format');
+      }
+      
+      // Ensure exactly 6 scenes
+      scenes = scenes.slice(0, 6);
+      
+      // Validate each scene has required fields
+      scenes = scenes.map((scene, idx) => ({
+        beat_type: scene.beat_type || `Scene ${idx + 1}`,
+        scene_number: idx + 1,
+        who: scene.who || 'Person',
+        what: scene.what || 'Action',
+        emotion: scene.emotion || 'Neutral',
+        location: scene.location || 'Indoor setting',
+        camera_angle: scene.camera_angle || 'Medium shot',
+        visual_prompt: scene.visual_prompt || `Cinematic photo, ${scene.who || 'person'}, ${scene.emotion || 'neutral'} expression`,
+        motion_prompt: scene.motion_prompt || 'Slow cinematic movement, atmospheric'
+      }));
+      
     } catch (parseError) {
       console.error('Failed to parse scenes:', content);
-      throw new Error('Failed to parse story analysis');
+      throw new Error('Failed to analyze script. Please try again with a clearer script.');
     }
 
-    console.log(`Identified ${scenes.length} story-critical scenes`);
+    console.log(`Successfully identified ${scenes.length} story-critical scenes`);
 
     return new Response(
       JSON.stringify({ scenes }),
@@ -156,7 +188,7 @@ CRITICAL: Return ONLY 6 scenes maximum. Pick only the most visually powerful mom
 
   } catch (error: unknown) {
     console.error('Error in analyze-storyboard:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
       JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Loader2, Copy, Check, Sparkles, Download, ArrowRight, Hash, FileText } from "lucide-react";
+import { Send, Bot, User, Loader2, Copy, Check, Sparkles, Download, ArrowRight, Hash, FileText, Languages } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +32,8 @@ export default function ChatAgent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [topic, setTopic] = useState("");
   const [platform, setPlatform] = useState("YouTube");
-  const [style, setStyle] = useState("Engaging");
+  const [style, setStyle] = useState("Dramatic");
+  const [language, setLanguage] = useState("hinglish");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -70,14 +71,16 @@ export default function ChatAgent() {
     setIsGenerating(true);
     setGeneratedContent(null);
 
+    const languageLabel = language === "hinglish" ? "Hinglish" : language === "hindi" ? "Hindi" : "English";
+
     // Add user message
-    setMessages((prev) => [...prev, { role: "user", content: `Generate content for: ${trimmedTopic} (${platform}, ${style} style)` }]);
+    setMessages((prev) => [...prev, { role: "user", content: `Generate ${languageLabel} content for: ${trimmedTopic} (${platform}, ${style} style)` }]);
 
     try {
-      setMessages((prev) => [...prev, { role: "assistant", content: "🎯 Analyzing your topic and generating viral content..." }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: `🎯 Analyzing your topic and generating ${languageLabel} content...` }]);
 
       const { data, error } = await supabase.functions.invoke('generate-content', {
-        body: { topic: trimmedTopic, platform, style }
+        body: { topic: trimmedTopic, platform, style, language }
       });
 
       if (error) {
@@ -112,6 +115,7 @@ export default function ChatAgent() {
 TOPIC: ${trimmedTopic}
 PLATFORM: ${platform}
 STYLE: ${style}
+LANGUAGE: ${languageLabel}
 
 --- TITLES ---
 ${processedContent.titles.join('\n')}
@@ -119,7 +123,7 @@ ${processedContent.titles.join('\n')}
 --- HOOKS ---
 ${processedContent.hooks.join('\n')}
 
---- SCRIPT (CLEAN) ---
+--- SCRIPT (CLEAN - READY FOR VOICEOVER) ---
 ${processedContent.script}
 
 --- HASHTAGS ---
@@ -139,12 +143,12 @@ ${processedContent.description}
         const updated = [...prev];
         updated[updated.length - 1] = { 
           role: "assistant", 
-          content: `✅ Content generated successfully!\n\n📊 Generated:\n• ${processedContent.titles.length} viral titles\n• ${processedContent.hooks.length} hooks\n• Clean script (${processedContent.script.length} chars)\n• ${processedContent.hashtags.length} hashtags\n\nCheck the tabs on the right!` 
+          content: `✅ ${languageLabel} content generated!\n\n📊 Generated:\n• ${processedContent.titles.length} viral titles\n• ${processedContent.hooks.length} hooks\n• Clean script (${processedContent.script.length} chars)\n• ${processedContent.hashtags.length} hashtags\n\nCheck the tabs on the right!` 
         };
         return updated;
       });
 
-      toast.success("Content generated successfully!");
+      toast.success(`${languageLabel} content generated successfully!`);
       setTopic("");
 
     } catch (error: unknown) {
@@ -182,10 +186,13 @@ ${processedContent.description}
       return;
     }
     
+    const languageLabel = language === "hinglish" ? "Hinglish" : language === "hindi" ? "Hindi" : "English";
+    
     const content = `
 TOPIC: ${topic || "Generated Content"}
 PLATFORM: ${platform}
 STYLE: ${style}
+LANGUAGE: ${languageLabel}
 
 === VIRAL TITLES ===
 ${generatedContent.titles?.join('\n') || 'N/A'}
@@ -237,33 +244,49 @@ ${generatedContent.description || 'N/A'}
           </CardHeader>
           <CardContent className="flex-1 flex flex-col p-3 md:p-4 overflow-hidden">
             {/* Settings */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="grid grid-cols-3 gap-2 md:gap-3 mb-4">
               <div className="space-y-1.5">
-                <Label className="text-xs md:text-sm text-foreground">Platform</Label>
+                <Label className="text-xs text-foreground">Platform</Label>
                 <Select value={platform} onValueChange={setPlatform} disabled={isGenerating}>
-                  <SelectTrigger className="bg-secondary border-border h-10 md:h-11">
+                  <SelectTrigger className="bg-secondary border-border h-9 md:h-10 text-xs md:text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="YouTube">YouTube</SelectItem>
-                    <SelectItem value="YouTube Shorts">YouTube Shorts</SelectItem>
-                    <SelectItem value="Instagram Reels">Instagram Reels</SelectItem>
+                    <SelectItem value="YouTube Shorts">Shorts</SelectItem>
+                    <SelectItem value="Instagram Reels">Reels</SelectItem>
                     <SelectItem value="TikTok">TikTok</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs md:text-sm text-foreground">Style</Label>
+                <Label className="text-xs text-foreground">Style</Label>
                 <Select value={style} onValueChange={setStyle} disabled={isGenerating}>
-                  <SelectTrigger className="bg-secondary border-border h-10 md:h-11">
+                  <SelectTrigger className="bg-secondary border-border h-9 md:h-10 text-xs md:text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="Dramatic">Dramatic</SelectItem>
                     <SelectItem value="Engaging">Engaging</SelectItem>
                     <SelectItem value="Educational">Educational</SelectItem>
                     <SelectItem value="Entertainment">Entertainment</SelectItem>
-                    <SelectItem value="Dramatic">Dramatic</SelectItem>
                     <SelectItem value="Funny">Funny</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-foreground flex items-center gap-1">
+                  <Languages className="w-3 h-3" />
+                  Language
+                </Label>
+                <Select value={language} onValueChange={setLanguage} disabled={isGenerating}>
+                  <SelectTrigger className="bg-secondary border-border h-9 md:h-10 text-xs md:text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hinglish">🇮🇳 Hinglish</SelectItem>
+                    <SelectItem value="hindi">🇮🇳 Hindi</SelectItem>
+                    <SelectItem value="english">🇬🇧 English</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -280,11 +303,11 @@ ${generatedContent.description || 'N/A'}
                     <div>
                       <p className="text-foreground font-semibold text-sm md:text-base">Ready to create viral content?</p>
                       <p className="text-muted-foreground text-xs md:text-sm mt-1">
-                        Enter a topic and I'll generate titles, hooks, script, hashtags & description.
+                        Enter a topic and I'll generate {language === "hinglish" ? "cinematic Hinglish" : language === "hindi" ? "Hindi" : "English"} content.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2 justify-center">
-                      {["Horror Story", "Tech Review", "Cooking Recipe", "Fitness Tips"].map((t) => (
+                      {["Horror Story", "Motivational", "Tech Review", "Life Lessons"].map((t) => (
                         <button
                           key={t}
                           onClick={() => setTopic(t)}
@@ -423,13 +446,13 @@ ${generatedContent.description || 'N/A'}
                       {generatedContent.titles?.length > 0 ? (
                         generatedContent.titles.map((title, index) => (
                           <div key={index} className="flex items-start gap-2 p-2 md:p-3 bg-secondary rounded-lg group">
-                            <span className="text-primary font-bold text-xs md:text-sm">{index + 1}.</span>
-                            <p className="flex-1 text-foreground text-xs md:text-sm">{title}</p>
+                            <span className="text-xs text-muted-foreground shrink-0 mt-1">{index + 1}.</span>
+                            <p className="flex-1 text-xs md:text-sm text-foreground">{title}</p>
                             <Button
                               variant="ghost"
                               size="icon"
                               onClick={() => handleCopy(title, `Title ${index + 1}`)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 md:h-8 md:w-8"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7"
                             >
                               {copied === `Title ${index + 1}` ? (
                                 <Check className="w-3.5 h-3.5 text-green-400" />
@@ -440,7 +463,7 @@ ${generatedContent.description || 'N/A'}
                           </div>
                         ))
                       ) : (
-                        <p className="text-muted-foreground text-sm">No titles generated</p>
+                        <p className="text-muted-foreground text-sm text-center py-4">No titles generated</p>
                       )}
                     </div>
                   </TabsContent>
@@ -450,13 +473,13 @@ ${generatedContent.description || 'N/A'}
                       {generatedContent.hooks?.length > 0 ? (
                         generatedContent.hooks.map((hook, index) => (
                           <div key={index} className="flex items-start gap-2 p-2 md:p-3 bg-secondary rounded-lg group">
-                            <span className="text-accent font-bold text-xs md:text-sm">{index + 1}.</span>
-                            <p className="flex-1 text-foreground text-xs md:text-sm">{hook}</p>
+                            <span className="text-xs text-muted-foreground shrink-0 mt-1">{index + 1}.</span>
+                            <p className="flex-1 text-xs md:text-sm text-foreground">{hook}</p>
                             <Button
                               variant="ghost"
                               size="icon"
                               onClick={() => handleCopy(hook, `Hook ${index + 1}`)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 md:h-8 md:w-8"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7"
                             >
                               {copied === `Hook ${index + 1}` ? (
                                 <Check className="w-3.5 h-3.5 text-green-400" />
@@ -467,119 +490,126 @@ ${generatedContent.description || 'N/A'}
                           </div>
                         ))
                       ) : (
-                        <p className="text-muted-foreground text-sm">No hooks generated</p>
+                        <p className="text-muted-foreground text-sm text-center py-4">No hooks generated</p>
                       )}
                     </div>
                   </TabsContent>
                   
                   <TabsContent value="script" className="h-full m-0 p-3 md:p-4 overflow-auto">
-                    <div className="relative group">
-                      {generatedContent.script ? (
-                        <>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <FileText className="w-3 h-3" />
-                              Clean script (voiceover-ready)
-                            </span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleCopy(generatedContent.script, "Script")}
-                              className="h-7 text-xs"
-                            >
-                              {copied === "Script" ? (
-                                <><Check className="w-3 h-3 mr-1 text-green-400" /> Copied</>
-                              ) : (
-                                <><Copy className="w-3 h-3 mr-1" /> Copy</>
-                              )}
-                            </Button>
-                          </div>
-                          <pre className="bg-secondary p-3 md:p-4 rounded-lg text-xs md:text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
-                            {generatedContent.script}
-                          </pre>
-                        </>
-                      ) : (
-                        <p className="text-muted-foreground text-sm">No script generated</p>
-                      )}
+                    <div className="relative">
+                      <div className="absolute top-2 right-2 z-10">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleCopy(generatedContent.script || '', 'Script')}
+                          className="gap-1.5"
+                        >
+                          {copied === 'Script' ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-green-400" />
+                              Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              Copy
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <div className="bg-secondary rounded-lg p-3 md:p-4 pr-20">
+                        <p className="text-xs md:text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                          {generatedContent.script || 'No script generated'}
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                        <FileText className="w-3 h-3" />
+                        {generatedContent.script?.length || 0} characters • Clean voiceover-ready text
+                      </p>
                     </div>
                   </TabsContent>
                   
                   <TabsContent value="hashtags" className="h-full m-0 p-3 md:p-4 overflow-auto">
-                    <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
                       {generatedContent.hashtags?.length > 0 ? (
-                        <>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Hash className="w-3 h-3" />
-                              {generatedContent.hashtags.length} hashtags
-                            </span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleCopy(generatedContent.hashtags.join(' '), "Hashtags")}
-                              className="h-7 text-xs"
-                            >
-                              {copied === "Hashtags" ? (
-                                <><Check className="w-3 h-3 mr-1 text-green-400" /> Copied</>
-                              ) : (
-                                <><Copy className="w-3 h-3 mr-1" /> Copy All</>
-                              )}
-                            </Button>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {generatedContent.hashtags.map((tag, index) => (
-                              <span
-                                key={index}
-                                className="px-2.5 py-1 rounded-full bg-primary/20 text-primary text-xs md:text-sm cursor-pointer hover:bg-primary/30 transition-colors"
-                                onClick={() => handleCopy(tag, `Tag ${index + 1}`)}
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        </>
+                        generatedContent.hashtags.map((tag, index) => (
+                          <button
+                            key={index}
+                            onClick={() => handleCopy(tag, tag)}
+                            className="px-3 py-1.5 bg-secondary rounded-full text-xs md:text-sm text-foreground hover:bg-primary/20 hover:text-primary transition-colors flex items-center gap-1"
+                          >
+                            <Hash className="w-3 h-3" />
+                            {tag.replace('#', '')}
+                            {copied === tag && <Check className="w-3 h-3 text-green-400 ml-1" />}
+                          </button>
+                        ))
                       ) : (
                         <p className="text-muted-foreground text-sm">No hashtags generated</p>
                       )}
                     </div>
+                    {generatedContent.hashtags?.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCopy(generatedContent.hashtags?.join(' ') || '', 'All hashtags')}
+                        className="mt-4 gap-1.5"
+                      >
+                        {copied === 'All hashtags' ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-green-400" />
+                            Copied All
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            Copy All
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </TabsContent>
                   
                   <TabsContent value="description" className="h-full m-0 p-3 md:p-4 overflow-auto">
-                    <div className="relative group">
-                      {generatedContent.description ? (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleCopy(generatedContent.description, "Description")}
-                            className="absolute top-0 right-0 h-7 text-xs"
-                          >
-                            {copied === "Description" ? (
-                              <><Check className="w-3 h-3 mr-1 text-green-400" /> Copied</>
-                            ) : (
-                              <><Copy className="w-3 h-3 mr-1" /> Copy</>
-                            )}
-                          </Button>
-                          <pre className="bg-secondary p-3 md:p-4 rounded-lg text-xs md:text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed">
-                            {generatedContent.description}
-                          </pre>
-                        </>
-                      ) : (
-                        <p className="text-muted-foreground text-sm">No description generated</p>
-                      )}
+                    <div className="relative">
+                      <div className="absolute top-2 right-2 z-10">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleCopy(generatedContent.description || '', 'Description')}
+                          className="gap-1.5"
+                        >
+                          {copied === 'Description' ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-green-400" />
+                              Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              Copy
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <div className="bg-secondary rounded-lg p-3 md:p-4 pr-20">
+                        <p className="text-xs md:text-sm text-foreground whitespace-pre-wrap">
+                          {generatedContent.description || 'No description generated'}
+                        </p>
+                      </div>
                     </div>
                   </TabsContent>
                 </div>
               </Tabs>
             ) : (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center space-y-4 p-6">
-                  <div className="w-14 h-14 mx-auto rounded-2xl bg-secondary flex items-center justify-center">
-                    <FileText className="w-7 h-7 text-muted-foreground" />
+              <div className="flex items-center justify-center h-full text-center p-4 md:p-8">
+                <div className="space-y-4">
+                  <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-2xl bg-secondary flex items-center justify-center">
+                    <FileText className="w-7 h-7 md:w-8 md:h-8 text-muted-foreground" />
                   </div>
                   <div>
-                    <p className="text-foreground font-medium">No content generated yet</p>
-                    <p className="text-muted-foreground text-sm">Enter a topic and generate content to see results</p>
+                    <p className="text-muted-foreground text-xs md:text-sm">
+                      Generated content will appear here
+                    </p>
                   </div>
                 </div>
               </div>
