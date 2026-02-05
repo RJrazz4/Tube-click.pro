@@ -211,4 +211,32 @@
     background-size: 200% 200%;
     animation: gradient-shift 3s ease infinite;
   }
+   
+   /* Glassmorphism utility classes */
+   .glass-card {
+     @apply relative rounded-2xl border backdrop-blur-md bg-card/80 shadow-lg border-border/50;
+   }
+   
+   .glass-card::before {
+     content: '';
+     @apply absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/5 to-accent/5 pointer-events-none;
+   }
+   
+   .glass-card-hover {
+     @apply transition-all duration-300 hover:shadow-xl hover:border-primary/40;
+   }
+   
+   /* Large touch targets for mobile */
+   .touch-target {
+     @apply min-h-[44px] min-w-[44px];
+   }
+   
+   /* Remove button styling */
+   .close-button {
+     @apply absolute -top-2 -right-2 z-20 w-8 h-8 md:w-7 md:h-7 rounded-full;
+     @apply bg-secondary/90 backdrop-blur-sm border border-border;
+     @apply flex items-center justify-center;
+     @apply text-muted-foreground hover:text-foreground hover:bg-destructive/20 hover:border-destructive/50;
+     @apply transition-all duration-200 active:scale-90 touch-manipulation;
+   }
 }

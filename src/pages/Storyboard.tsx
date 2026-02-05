@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { 
-  Film, 
+   Film,
+   X,
+   Trash2, 
   Sparkles, 
   Download, 
   RefreshCw, 
@@ -421,9 +423,25 @@ export default function Storyboard() {
     }
   };
 
-  const completedCount = scenes.filter(s => s.status === 'complete').length;
-  const errorCount = scenes.filter(s => s.status === 'error').length;
-  const pendingCount = scenes.filter(s => s.status === 'pending').length;
+ 
+   const handleClearWorkspace = () => {
+     if (isGenerating) return;
+     setScenes([]);
+     setScript("");
+     setProgress(0);
+     localStorage.removeItem('tubegenius_storyboard');
+     toast.success("Workspace cleared");
+   };
+ 
+   const handleRemoveScene = (index: number) => {
+     if (isGenerating) return;
+     setScenes((prev) => prev.filter((_, i) => i !== index));
+     toast.success("Scene removed");
+   };
+ 
+   const completedCount = scenes.filter(s => s.status === 'complete').length;
+   const errorCount = scenes.filter(s => s.status === 'error').length;
+   const pendingCount = scenes.filter(s => s.status === 'pending').length;
 
   const getStatusText = (scene: Scene): string => {
     if (scene.status === 'timeout') {
@@ -589,19 +607,33 @@ Each scene includes image + motion prompts."
 
         {/* Storyboard Grid */}
         <Card className="cyber-card border-border lg:col-span-3">
-          <CardHeader className="pb-3 md:pb-4">
-            <CardTitle className="font-display text-base md:text-lg text-foreground flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Film className="w-4 h-4 text-primary" />
-                Cinematic Frames
-              </span>
-              {scenes.length > 0 && (
-                <Badge variant="outline" className="border-primary/30 text-primary">
-                  {completedCount}/{scenes.length} Ready
-                </Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
+           <CardHeader className="pb-3 md:pb-4">
+             <CardTitle className="font-display text-base md:text-lg text-foreground flex items-center justify-between gap-2">
+               <span className="flex items-center gap-2">
+                 <Film className="w-4 h-4 text-primary" />
+                 Cinematic Frames
+               </span>
+               <div className="flex items-center gap-2">
+                 {scenes.length > 0 && (
+                   <>
+                     <Button
+                       variant="outline"
+                       size="sm"
+                       onClick={handleClearWorkspace}
+                       disabled={isGenerating}
+                       className="gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 h-9 px-3 text-xs touch-manipulation"
+                     >
+                       <Trash2 className="w-4 h-4" />
+                       <span className="hidden sm:inline">Clear</span>
+                     </Button>
+                     <Badge variant="outline" className="border-primary/30 text-primary">
+                       {completedCount}/{scenes.length} Ready
+                     </Badge>
+                   </>
+                 )}
+               </div>
+             </CardTitle>
+           </CardHeader>
           <CardContent>
             {scenes.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-[400px] text-center">
@@ -612,16 +644,27 @@ Each scene includes image + motion prompts."
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
-                {scenes.map((scene, index) => (
-                  <div 
-                    key={index}
-                    className={cn(
-                      "rounded-xl border overflow-hidden transition-all",
-                      scene.status === 'complete' ? "border-green-500/30" : 
-                      scene.status === 'error' ? "border-red-500/30" :
-                      scene.status === 'retrying' || scene.status === 'timeout' ? "border-yellow-500/30" : "border-border"
-                    )}
-                  >
+                 {scenes.map((scene, index) => (
+                   <div 
+                     key={index}
+                     className={cn(
+                       "group relative rounded-xl border overflow-hidden transition-all backdrop-blur-sm",
+                       "bg-card/80 shadow-lg hover:shadow-xl",
+                       scene.status === 'complete' ? "border-green-500/30" : 
+                       scene.status === 'error' ? "border-red-500/30" :
+                       scene.status === 'retrying' || scene.status === 'timeout' ? "border-yellow-500/30" : "border-border/50"
+                     )}
+                   >
+                     {/* X Close button for each scene */}
+                     {!isGenerating && (
+                       <button
+                         onClick={() => handleRemoveScene(index)}
+                         className="close-button opacity-0 group-hover:opacity-100 top-1 right-1 z-20"
+                         aria-label="Remove scene"
+                       >
+                         <X className="w-3.5 h-3.5" />
+                       </button>
+                     )}
                     {/* Scene Image */}
                     <div className="aspect-video bg-secondary/50 relative">
                       {scene.imageUrl ? (

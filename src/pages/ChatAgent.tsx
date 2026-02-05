@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Loader2, Copy, Check, Sparkles, Download, ArrowRight, Hash, FileText, Languages } from "lucide-react";
+ import { Send, Bot, User, Loader2, Copy, Check, Sparkles, Download, ArrowRight, Hash, FileText, Languages, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +29,17 @@ interface Message {
 }
 
 export default function ChatAgent() {
-  const [messages, setMessages] = useState<Message[]>([]);
+   const [messages, setMessages] = useState<Message[]>([]);
+ 
+   const handleClearContent = () => {
+     setGeneratedContent(null);
+     setMessages([]);
+     toast.success("Workspace cleared");
+   };
+ 
+   const handleRemoveMessage = (index: number) => {
+     setMessages((prev) => prev.filter((_, i) => i !== index));
+   };
   const [topic, setTopic] = useState("");
   const [platform, setPlatform] = useState("YouTube");
   const [style, setStyle] = useState("Dramatic");
@@ -322,36 +332,46 @@ ${generatedContent.description || 'N/A'}
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {messages.map((message, index) => (
-                    <div
-                      key={index}
-                      className={cn(
-                        "flex gap-2 md:gap-3 animate-fade-in",
-                        message.role === "user" ? "justify-end" : "justify-start"
-                      )}
-                    >
-                      {message.role === "assistant" && (
-                        <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
-                          <Bot className="w-3.5 h-3.5 md:w-4 md:h-4 text-primary" />
-                        </div>
-                      )}
-                      <div
-                        className={cn(
-                          "max-w-[85%] rounded-2xl px-3 py-2 md:px-4 md:py-3",
-                          message.role === "user"
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-secondary text-foreground"
-                        )}
-                      >
-                        <p className="text-xs md:text-sm whitespace-pre-wrap">{message.content}</p>
-                      </div>
-                      {message.role === "user" && (
-                        <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-accent/20 flex items-center justify-center shrink-0">
-                          <User className="w-3.5 h-3.5 md:w-4 md:h-4 text-accent" />
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                       {messages.map((message, index) => (
+                         <div
+                           key={index}
+                           className={cn(
+                             "group relative flex gap-2 md:gap-3 animate-fade-in",
+                             message.role === "user" ? "justify-end" : "justify-start"
+                           )}
+                         >
+                           {message.role === "assistant" && (
+                             <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
+                               <Bot className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+                             </div>
+                           )}
+                           {/* Glassmorphism message bubble with X button */}
+                           <div className="relative max-w-[85%]">
+                             <button
+                               onClick={() => handleRemoveMessage(index)}
+                               className="close-button opacity-0 group-hover:opacity-100 -top-1.5 -right-1.5"
+                               aria-label="Remove message"
+                             >
+                               <X className="w-3.5 h-3.5" />
+                             </button>
+                             <div
+                               className={cn(
+                                 "rounded-2xl px-4 py-3 backdrop-blur-sm",
+                                 message.role === "user"
+                                   ? "bg-primary text-primary-foreground"
+                                   : "bg-secondary/80 text-foreground border border-border/30"
+                               )}
+                             >
+                               <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                             </div>
+                           </div>
+                           {message.role === "user" && (
+                             <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-accent/20 flex items-center justify-center shrink-0">
+                               <User className="w-4 h-4 md:w-5 md:h-5 text-accent" />
+                             </div>
+                           )}
+                         </div>
+                       ))}
                 </div>
               )}
             </ScrollArea>
@@ -391,33 +411,43 @@ ${generatedContent.description || 'N/A'}
         {/* Output Panel */}
         <Card className="cyber-card border-border flex flex-col overflow-hidden">
           <CardHeader className="border-b border-border pb-3 md:pb-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <CardTitle className="font-display text-base md:text-lg text-foreground">Generated Content</CardTitle>
-              {generatedContent && (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDownload}
-                    disabled={isGenerating}
-                    className="gap-1.5 border-border hover:border-primary/50 h-8 md:h-9 text-xs md:text-sm"
-                  >
-                    <Download className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                    <span className="hidden sm:inline">Download</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSendToThumbnail}
-                    disabled={isGenerating || !generatedContent?.titles?.[0]}
-                    className="gap-1.5 border-border hover:border-accent/50 h-8 md:h-9 text-xs md:text-sm"
-                  >
-                    <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                    <span className="hidden sm:inline">Thumbnail</span>
-                  </Button>
-                </div>
-              )}
-            </div>
+               <div className="flex items-center justify-between flex-wrap gap-2">
+               <CardTitle className="font-display text-base md:text-lg text-foreground">Generated Content</CardTitle>
+               {generatedContent && (
+                 <div className="flex gap-2">
+                   <Button
+                     variant="outline"
+                     size="sm"
+                     onClick={handleClearContent}
+                     disabled={isGenerating}
+                     className="gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 h-9 md:h-10 px-3 text-xs md:text-sm touch-manipulation"
+                   >
+                     <Trash2 className="w-4 h-4" />
+                     <span className="hidden sm:inline">Clear</span>
+                   </Button>
+                   <Button
+                     variant="outline"
+                     size="sm"
+                     onClick={handleDownload}
+                     disabled={isGenerating}
+                     className="gap-1.5 border-border hover:border-primary/50 h-9 md:h-10 px-3 text-xs md:text-sm touch-manipulation"
+                   >
+                     <Download className="w-4 h-4" />
+                     <span className="hidden sm:inline">Download</span>
+                   </Button>
+                   <Button
+                     variant="outline"
+                     size="sm"
+                     onClick={handleSendToThumbnail}
+                     disabled={isGenerating || !generatedContent?.titles?.[0]}
+                     className="gap-1.5 border-border hover:border-accent/50 h-9 md:h-10 px-3 text-xs md:text-sm touch-manipulation"
+                   >
+                     <ArrowRight className="w-4 h-4" />
+                     <span className="hidden sm:inline">Thumbnail</span>
+                   </Button>
+                 </div>
+               )}
+             </div>
           </CardHeader>
           <CardContent className="flex-1 p-0 overflow-hidden">
             {generatedContent ? (
