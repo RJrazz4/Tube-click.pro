@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Package, Film, Loader2 } from "lucide-react";
+ import { useState, useEffect } from "react";
+ import { Link } from "react-router-dom";
+ import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Film, Loader2, X, Sparkles, RefreshCw } from "lucide-react";
+ import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { getStats, getSavedContent, clearAllContent, type Stats, type SavedContent } from "@/lib/stats";
+ import { getStats, getSavedContent, clearAllContent, deleteContent, type Stats, type SavedContent } from "@/lib/stats";
 import { exportAllAsZip } from "@/lib/export";
 
 const tools = [
@@ -165,24 +166,53 @@ export default function Dashboard() {
     }
   };
 
-  const totalContent = getSavedContent().length;
+ 
+   const handleDeleteItem = (id: string) => {
+     deleteContent(id);
+     setRecentContent(getSavedContent().slice(0, 5));
+     setStats(getStats());
+     toast.success("Item removed");
+   };
+ 
+   const totalContent = getSavedContent().length;
 
   return (
     <div className="space-y-6 md:space-y-8 animate-fade-in">
-      {/* Welcome Section */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/20 via-card to-accent/20 p-6 md:p-8 border border-border gradient-border">
-        <div className="relative z-10">
-          <h1 className="font-display text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-2">
-            Hello Creator! <span className="animate-pulse">👋</span>
-          </h1>
-          <p className="text-base md:text-lg text-muted-foreground max-w-xl">
-            Ready to make a <span className="text-primary text-glow-purple font-semibold">viral video</span>? 
-            Pick a tool below and start creating.
-          </p>
-        </div>
-        <div className="absolute -right-10 -top-10 w-40 h-40 bg-primary/30 rounded-full blur-3xl" />
-        <div className="absolute -right-20 -bottom-10 w-60 h-60 bg-accent/20 rounded-full blur-3xl" />
-      </div>
+ 
+       {/* Welcome Section - First-time user friendly */}
+       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/20 via-card to-accent/20 p-5 md:p-8 border border-border gradient-border">
+         <div className="relative z-10">
+           <h1 className="font-display text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-2 md:mb-3">
+             Hello Creator! <span className="animate-pulse">👋</span>
+           </h1>
+           <p className="text-base md:text-lg text-muted-foreground max-w-xl leading-relaxed">
+             Ready to make a <span className="text-primary text-glow-purple font-semibold">viral video</span>? 
+             Tap a button below to start.
+           </p>
+           
+           {/* Clear All - Top level action */}
+           {totalContent > 0 && (
+             <div className="mt-4 flex gap-3">
+               <Button
+                 variant="outline"
+                 size="sm"
+                 onClick={handleClearAll}
+                 disabled={isExporting || isClearing}
+                 className="border-destructive/40 text-destructive hover:bg-destructive/10 h-10 px-4 text-sm"
+               >
+                 {isClearing ? (
+                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                 ) : (
+                   <RefreshCw className="w-4 h-4 mr-2" />
+                 )}
+                 Clear All ({totalContent})
+               </Button>
+             </div>
+           )}
+         </div>
+         <div className="absolute -right-10 -top-10 w-40 h-40 bg-primary/30 rounded-full blur-3xl" />
+         <div className="absolute -right-20 -bottom-10 w-60 h-60 bg-accent/20 rounded-full blur-3xl" />
+       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -203,78 +233,109 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Tools Grid */}
-      <div>
-        <h2 className="font-display text-lg md:text-xl font-semibold text-foreground mb-3 md:mb-4">Quick Actions</h2>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-          {tools.map((tool, index) => (
-            <Link 
-              key={tool.path} 
-              to={tool.path}
-              className="group"
-              style={{ animationDelay: `${index * 100}ms` }}
-            >
-              <Card className={`cyber-card border-border hover:border-primary/50 transition-all duration-300 h-full ${tool.glow} hover:scale-[1.02] active:scale-[0.98]`}>
-                <CardContent className="p-4 md:p-6 flex items-start gap-3 md:gap-4">
-                  <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-br ${tool.gradient} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}>
-                    <tool.icon className="w-6 h-6 md:w-7 md:h-7 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-display font-semibold text-sm md:text-base text-foreground group-hover:text-primary transition-colors truncate">
-                        {tool.title}
-                      </h3>
-                      <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                    </div>
-                    <p className="text-xs md:text-sm text-muted-foreground mt-1">{tool.description}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      </div>
+ 
+       {/* Tools Grid - Large, tappable buttons for first-time users */}
+       <div>
+         <h2 className="font-display text-lg md:text-xl font-semibold text-foreground mb-4 md:mb-5 flex items-center gap-2">
+           <Sparkles className="w-5 h-5 text-primary" />
+           Start Creating
+         </h2>
+         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+           {tools.map((tool, index) => (
+             <Link 
+               key={tool.path} 
+               to={tool.path}
+               className="group touch-manipulation"
+               style={{ animationDelay: `${index * 100}ms` }}
+             >
+               {/* Glassmorphism card with large touch targets */}
+               <div className={cn(
+                 "relative rounded-2xl border backdrop-blur-md bg-card/80 shadow-lg",
+                 "border-border/50 transition-all duration-300",
+                 "hover:shadow-xl hover:border-primary/50 hover:scale-[1.02]",
+                 "active:scale-[0.98]",
+                 tool.glow
+               )}>
+                 {/* Subtle glow overlay */}
+                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/5 to-accent/5 pointer-events-none" />
+                 
+                 <div className="relative p-5 md:p-6 flex items-center gap-4">
+                   {/* Large icon - easy to tap */}
+                   <div className={`w-14 h-14 md:w-16 md:h-16 rounded-xl bg-gradient-to-br ${tool.gradient} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-lg`}>
+                     <tool.icon className="w-7 h-7 md:w-8 md:h-8 text-white" />
+                   </div>
+                   <div className="flex-1 min-w-0">
+                     <div className="flex items-center gap-2">
+                       <h3 className="font-display font-semibold text-base md:text-lg text-foreground group-hover:text-primary transition-colors">
+                         {tool.title}
+                       </h3>
+                       <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                     </div>
+                     <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{tool.description}</p>
+                   </div>
+                 </div>
+               </div>
+             </Link>
+           ))}
+         </div>
+       </div>
 
-      {/* Recent Content & Export */}
-      <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
-        {/* Recent Content */}
-        <Card className="cyber-card border-border">
-          <CardHeader className="pb-3 md:pb-4">
-            <CardTitle className="font-display text-base md:text-lg text-foreground">Recent Content</CardTitle>
-            <CardDescription className="text-xs md:text-sm text-muted-foreground">
-              Your latest creations ({totalContent} total)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recentContent.length > 0 ? (
-              <div className="space-y-2">
-                {recentContent.map((content) => {
-                  const Icon = getContentIcon(content.type);
-                  return (
-                    <div key={content.id} className="flex items-center gap-3 p-2 md:p-3 bg-secondary rounded-lg">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <Icon className="w-4 h-4 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs md:text-sm text-foreground truncate">{content.title}</p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <span className="capitalize">{content.type}</span>
-                          <span>•</span>
-                          <span>{new Date(content.createdAt).toLocaleDateString()}</span>
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-6 md:py-8">
-                <FileText className="w-10 h-10 md:w-12 md:h-12 mx-auto text-muted-foreground mb-2" />
-                <p className="text-xs md:text-sm text-muted-foreground">No content yet. Start creating!</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+ 
+       {/* Recent Content & Export - with delete buttons */}
+       <div className="grid lg:grid-cols-2 gap-5 md:gap-6">
+         {/* Recent Content */}
+         <Card className="cyber-card border-border">
+           <CardHeader className="pb-3 md:pb-4">
+             <CardTitle className="font-display text-base md:text-lg text-foreground">Your Creations</CardTitle>
+             <CardDescription className="text-sm text-muted-foreground">
+               {totalContent > 0 ? `${totalContent} items saved` : "Nothing yet - tap a button above!"}
+             </CardDescription>
+           </CardHeader>
+           <CardContent>
+             {recentContent.length > 0 ? (
+               <div className="space-y-3">
+                 {recentContent.map((content) => {
+                   const Icon = getContentIcon(content.type);
+                   return (
+                     <div 
+                       key={content.id} 
+                       className="group relative flex items-center gap-3 p-3 md:p-4 bg-secondary/50 backdrop-blur-sm rounded-xl border border-border/30 hover:border-primary/30 transition-all"
+                     >
+                       {/* X Close button */}
+                       <button
+                         onClick={() => handleDeleteItem(content.id)}
+                         className="absolute -top-2 -right-2 z-10 w-7 h-7 rounded-full bg-secondary/90 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-destructive/20 hover:border-destructive/50 transition-all opacity-0 group-hover:opacity-100 touch-manipulation active:scale-90"
+                         aria-label="Remove item"
+                       >
+                         <X className="w-3.5 h-3.5" />
+                       </button>
+                       
+                       <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                         <Icon className="w-5 h-5 text-primary" />
+                       </div>
+                       <div className="flex-1 min-w-0">
+                         <p className="text-sm md:text-base text-foreground truncate font-medium">{content.title}</p>
+                         <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                           <span className="capitalize">{content.type}</span>
+                           <span>•</span>
+                           <span>{new Date(content.createdAt).toLocaleDateString()}</span>
+                         </p>
+                       </div>
+                     </div>
+                   );
+                 })}
+               </div>
+             ) : (
+               <div className="text-center py-8 md:py-10">
+                 <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+                   <Sparkles className="w-8 h-8 text-primary animate-pulse" />
+                 </div>
+                 <p className="text-base text-foreground font-medium mb-1">Ready to create?</p>
+                 <p className="text-sm text-muted-foreground">Tap any button above to get started!</p>
+               </div>
+             )}
+           </CardContent>
+         </Card>
 
         {/* Export Section */}
         <Card className="cyber-card border-border">
