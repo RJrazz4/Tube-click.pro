@@ -19,6 +19,7 @@ const VoiceStudio = lazy(() => import("./pages/VoiceStudio"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const About = lazy(() => import("./pages/About"));
+const PromptToolkit = lazy(() => import("./pages/PromptToolkit"));
 
 const queryClient = new QueryClient();
 
@@ -60,6 +61,7 @@ const App = () => (
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/about" element={<About />} />
+              <Route path="/prompt-toolkit" element={<PromptToolkit />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

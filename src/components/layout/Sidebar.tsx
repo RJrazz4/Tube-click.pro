@@ -6,7 +6,8 @@ import {
   Eye, 
   Mic,
   Sparkles,
-  Film
+  Film,
+  Wrench
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -18,6 +19,7 @@ const navItems = [
   { icon: Image, label: "Thumbnails", path: "/thumbnails" },
   { icon: Eye, label: "Vision Guide", path: "/vision-guide" },
   { icon: Mic, label: "Voiceover", path: "/voice" },
+  { icon: Wrench, label: "Prompt Toolkit", path: "/prompt-toolkit" },
 ];
 
 export function Sidebar() {
