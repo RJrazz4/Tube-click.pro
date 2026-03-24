@@ -81,10 +81,18 @@ export default function Storyboard() {
     }
   }, []);
 
-  // Save to localStorage whenever scenes change
+  // Save to localStorage whenever scenes change (without base64 images to avoid quota)
   useEffect(() => {
     if (scenes.length > 0) {
-      localStorage.setItem('tubegenius_storyboard', JSON.stringify({ script, scenes }));
+      try {
+        const lightScenes = scenes.map(s => ({
+          ...s,
+          imageUrl: s.imageUrl?.startsWith('data:') ? undefined : s.imageUrl,
+        }));
+        localStorage.setItem('tubegenius_storyboard', JSON.stringify({ script, scenes: lightScenes }));
+      } catch (e) {
+        console.warn('Could not save storyboard to localStorage:', e);
+      }
     }
   }, [scenes, script]);
 
