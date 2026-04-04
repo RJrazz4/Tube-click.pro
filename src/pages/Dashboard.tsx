@@ -366,6 +366,65 @@ export default function Dashboard() {
             </Button>
 
             <Button
+              onClick={async () => {
+                setIsRendering(true);
+                try {
+                  // Gather storyboard images from localStorage
+                  const saved = localStorage.getItem('tubegenius_storyboard');
+                  if (!saved) {
+                    toast.error("No storyboard found. Generate storyboard scenes first.");
+                    return;
+                  }
+                  const { scenes } = JSON.parse(saved);
+                  const images = (scenes || [])
+                    .filter((s: { imageUrl?: string }) => s.imageUrl)
+                    .map((s: { imageUrl: string }) => s.imageUrl);
+                  
+                  if (images.length === 0) {
+                    toast.error("No storyboard images found. Generate visuals in Visual Storyboard first.");
+                    return;
+                  }
+
+                  const { data, error } = await supabase.functions.invoke('render-video', {
+                    body: { images, sceneDuration: 5, transition: "fade" }
+                  });
+
+                  if (error) throw new Error(error.message);
+                  if (data.error) throw new Error(data.error);
+
+                  if (data.videoUrl) {
+                    const a = document.createElement('a');
+                    a.href = data.videoUrl;
+                    a.download = `tubegenius-video-${Date.now()}.mp4`;
+                    a.target = '_blank';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    toast.success(`Video rendered! ${data.imageCount} scenes, ${data.duration}s total`);
+                  }
+                } catch (error: unknown) {
+                  const msg = error instanceof Error ? error.message : "Video rendering failed";
+                  toast.error(msg);
+                } finally {
+                  setIsRendering(false);
+                }
+              }}
+              disabled={isRendering || isExporting || totalContent === 0}
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white h-11 md:h-12"
+              aria-label="Render final video from storyboard"
+            >
+              {isRendering ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
+                  Rendering Video...
+                </>
+              ) : (
+                <>
+                  <Video className="w-4 h-4 mr-2" aria-hidden="true" />
+                  Render Final Video (MP4)
+                </>
+              )}
+            </Button>
               variant="outline"
               onClick={handleClearAll}
               disabled={isExporting || isClearing || totalContent === 0}
