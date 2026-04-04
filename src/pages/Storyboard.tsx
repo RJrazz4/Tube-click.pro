@@ -678,7 +678,7 @@ Each scene includes image + motion prompts."
                       {scene.imageUrl ? (
                         <img 
                           src={scene.imageUrl} 
-                          alt={`Scene ${scene.scene_number}`}
+                          alt={scene.visual_prompt || `Scene ${scene.scene_number}: ${scene.what}`}
                           className="w-full h-full object-cover"
                         />
                       ) : (
