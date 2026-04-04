@@ -425,6 +425,8 @@ export default function Dashboard() {
                 </>
               )}
             </Button>
+
+            <Button
               variant="outline"
               onClick={handleClearAll}
               disabled={isExporting || isClearing || totalContent === 0}
