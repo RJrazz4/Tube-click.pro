@@ -1,4 +1,3 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -6,55 +5,42 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-async function generateImage(apiKey: string, prompt: string): Promise<string | null> {
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+const HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/stabilityai/sdxl-turbo";
+
+async function generateImageWithHuggingFace(apiKey: string, prompt: string): Promise<string | null> {
+  const response = await fetch(HUGGINGFACE_API_URL, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: 'google/gemini-3.1-flash-image-preview',
-      messages: [
-        {
-          role: 'user',
-          content: `Generate an image: ${prompt}`
-        }
-      ],
-      modalities: ['image', 'text']
-    }),
+    body: JSON.stringify({ inputs: prompt }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('API error:', response.status, errorText);
-    if (response.status === 429 || response.status === 402) {
-      throw { status: response.status, message: errorText };
+    console.error('HuggingFace API error:', response.status, errorText);
+    if (response.status === 429) {
+      throw { status: 429, message: 'Rate limit exceeded' };
+    }
+    if (response.status === 503) {
+      // Model loading - throw retryable error
+      throw { status: 503, message: 'Model is loading, please retry' };
     }
     return null;
   }
 
-  const data = await response.json();
-  console.log('Response keys:', JSON.stringify(Object.keys(data)));
+  // HuggingFace returns raw image bytes
+  const arrayBuffer = await response.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
   
-  // Try multiple response formats
-  const choice = data.choices?.[0]?.message;
-  const imageUrl = choice?.images?.[0]?.image_url?.url
-    || choice?.image?.url
-    || (typeof choice?.content === 'string' && choice.content.startsWith('data:') ? choice.content : null);
-  
-  // Check for inline base64 in parts
-  if (!imageUrl && Array.isArray(choice?.content)) {
-    for (const part of choice.content) {
-      if (part.type === 'image_url') return part.image_url?.url;
-      if (part.inline_data?.data) return `data:${part.inline_data.mime_type || 'image/png'};base64,${part.inline_data.data}`;
-    }
+  // Convert to base64
+  let binary = '';
+  for (let i = 0; i < uint8Array.length; i++) {
+    binary += String.fromCharCode(uint8Array[i]);
   }
-
-  if (!imageUrl) {
-    console.error('No image found in response structure:', JSON.stringify(data).substring(0, 500));
-  }
-  return imageUrl;
+  const base64 = btoa(binary);
+  return `data:image/png;base64,${base64}`;
 }
 
 serve(async (req) => {
@@ -65,9 +51,9 @@ serve(async (req) => {
   try {
     const { prompt, sceneNumber } = await req.json();
     
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    const HF_API_KEY = Deno.env.get('HUGGINGFACE_API_KEY');
+    if (!HF_API_KEY) {
+      throw new Error('HUGGINGFACE_API_KEY not configured');
     }
 
     if (!prompt) {
@@ -89,7 +75,7 @@ serve(async (req) => {
     for (let attempt = 0; attempt < prompts.length; attempt++) {
       console.log(`Attempt ${attempt + 1} for scene ${sceneNumber}`);
       try {
-        const imageUrl = await generateImage(LOVABLE_API_KEY, prompts[attempt]);
+        const imageUrl = await generateImageWithHuggingFace(HF_API_KEY, prompts[attempt]);
         if (imageUrl) {
           console.log(`Success on attempt ${attempt + 1} for scene ${sceneNumber}`);
           return new Response(
@@ -104,21 +90,20 @@ serve(async (req) => {
             { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        if (e.status === 402) {
-          return new Response(
-            JSON.stringify({ error: 'Credits required. Please add funds to continue.' }),
-            { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+        if (e.status === 503) {
+          // Model loading - wait and retry
+          console.log('Model loading, waiting 3s before retry...');
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
         }
       }
-      // Small delay between retries
       if (attempt < prompts.length - 1) {
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
 
     return new Response(
-      JSON.stringify({ error: 'Image generation failed after 3 attempts. The AI model could not produce an image for this prompt. Try a simpler description.' }),
+      JSON.stringify({ error: 'Image generation failed after 3 attempts. Try a simpler description.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
