@@ -372,7 +372,7 @@ ${generatedContent.description || 'N/A'}
               <Input
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
-                placeholder="Enter your video topic..."
+                placeholder="Enter any video topic or niche..."
                 className="flex-1 bg-secondary border-border focus:border-primary h-11 md:h-12 text-sm md:text-base"
                 disabled={isGenerating}
                 maxLength={500}
