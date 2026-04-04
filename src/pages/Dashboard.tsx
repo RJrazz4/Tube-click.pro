@@ -1,12 +1,13 @@
  import { useState, useEffect } from "react";
  import { Link } from "react-router-dom";
- import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Film, Loader2, X, Sparkles, RefreshCw } from "lucide-react";
+ import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Film, Loader2, X, Sparkles, RefreshCw, Video } from "lucide-react";
  import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
  import { getStats, getSavedContent, clearAllContent, deleteContent, type Stats, type SavedContent } from "@/lib/stats";
 import { exportAllAsZip } from "@/lib/export";
+import { supabase } from "@/integrations/supabase/client";
 
 const tools = [
   {
@@ -62,6 +63,7 @@ export default function Dashboard() {
   const [recentContent, setRecentContent] = useState<SavedContent[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [isRendering, setIsRendering] = useState(false);
 
   useEffect(() => {
     // Load stats from localStorage
@@ -359,6 +361,67 @@ export default function Dashboard() {
                 <>
                   <Download className="w-4 h-4 mr-2" aria-hidden="true" />
                   Export All as ZIP ({totalContent})
+                </>
+              )}
+            </Button>
+
+            <Button
+              onClick={async () => {
+                setIsRendering(true);
+                try {
+                  // Gather storyboard images from localStorage
+                  const saved = localStorage.getItem('tubegenius_storyboard');
+                  if (!saved) {
+                    toast.error("No storyboard found. Generate storyboard scenes first.");
+                    return;
+                  }
+                  const { scenes } = JSON.parse(saved);
+                  const images = (scenes || [])
+                    .filter((s: { imageUrl?: string }) => s.imageUrl)
+                    .map((s: { imageUrl: string }) => s.imageUrl);
+                  
+                  if (images.length === 0) {
+                    toast.error("No storyboard images found. Generate visuals in Visual Storyboard first.");
+                    return;
+                  }
+
+                  const { data, error } = await supabase.functions.invoke('render-video', {
+                    body: { images, sceneDuration: 5, transition: "fade" }
+                  });
+
+                  if (error) throw new Error(error.message);
+                  if (data.error) throw new Error(data.error);
+
+                  if (data.videoUrl) {
+                    const a = document.createElement('a');
+                    a.href = data.videoUrl;
+                    a.download = `tubegenius-video-${Date.now()}.mp4`;
+                    a.target = '_blank';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    toast.success(`Video rendered! ${data.imageCount} scenes, ${data.duration}s total`);
+                  }
+                } catch (error: unknown) {
+                  const msg = error instanceof Error ? error.message : "Video rendering failed";
+                  toast.error(msg);
+                } finally {
+                  setIsRendering(false);
+                }
+              }}
+              disabled={isRendering || isExporting || totalContent === 0}
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white h-11 md:h-12"
+              aria-label="Render final video from storyboard"
+            >
+              {isRendering ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
+                  Rendering Video...
+                </>
+              ) : (
+                <>
+                  <Video className="w-4 h-4 mr-2" aria-hidden="true" />
+                  Render Final Video (MP4)
                 </>
               )}
             </Button>

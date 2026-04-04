@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.generate-storyboard-image]
 verify_jwt = false
+
+[functions.render-video]
+verify_jwt = false

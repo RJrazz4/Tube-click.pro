@@ -316,18 +316,9 @@ ${generatedContent.description || 'N/A'}
                         Enter a topic and I'll generate {language === "hinglish" ? "cinematic Hinglish" : language === "hindi" ? "Hindi" : "English"} content.
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2 justify-center">
-                      {["Horror Story", "Motivational", "Tech Review", "Life Lessons"].map((t) => (
-                        <button
-                          key={t}
-                          onClick={() => setTopic(t)}
-                          disabled={isGenerating}
-                          className="px-3 py-1.5 rounded-full bg-secondary text-xs md:text-sm text-foreground hover:bg-primary/20 hover:text-primary transition-colors disabled:opacity-50"
-                        >
-                          {t}
-                        </button>
-                      ))}
-                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Try: "Dark psychology secrets", "How AI is changing India", "Budget travel hacks"...
+                    </p>
                   </div>
                 </div>
               ) : (
@@ -381,7 +372,7 @@ ${generatedContent.description || 'N/A'}
               <Input
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
-                placeholder="Enter your video topic..."
+                placeholder="Enter any video topic or niche..."
                 className="flex-1 bg-secondary border-border focus:border-primary h-11 md:h-12 text-sm md:text-base"
                 disabled={isGenerating}
                 maxLength={500}
