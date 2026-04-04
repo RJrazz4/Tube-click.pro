@@ -63,6 +63,7 @@ export default function Dashboard() {
   const [recentContent, setRecentContent] = useState<SavedContent[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [isRendering, setIsRendering] = useState(false);
 
   useEffect(() => {
     // Load stats from localStorage
