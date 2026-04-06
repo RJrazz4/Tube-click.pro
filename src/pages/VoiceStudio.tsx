@@ -10,23 +10,24 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
+import { VoiceVerificationModal } from "@/components/VoiceVerificationModal";
 
-// ElevenLabs voice options with descriptions
+// White-labeled voice options
 const ELEVENLABS_VOICES = [
-  { id: 'george', name: 'George', description: 'British male, warm & professional', gender: 'male' },
-  { id: 'brian', name: 'Brian', description: 'American male, deep & authoritative', gender: 'male' },
-  { id: 'daniel', name: 'Daniel', description: 'British male, calm & storytelling', gender: 'male' },
-  { id: 'liam', name: 'Liam', description: 'American male, young & energetic', gender: 'male' },
-  { id: 'chris', name: 'Chris', description: 'American male, conversational', gender: 'male' },
-  { id: 'charlie', name: 'Charlie', description: 'Australian male, friendly', gender: 'male' },
-  { id: 'eric', name: 'Eric', description: 'American male, mature & wise', gender: 'male' },
-  { id: 'will', name: 'Will', description: 'American male, casual & engaging', gender: 'male' },
-  { id: 'sarah', name: 'Sarah', description: 'American female, soft & soothing', gender: 'female' },
-  { id: 'alice', name: 'Alice', description: 'British female, clear & articulate', gender: 'female' },
-  { id: 'matilda', name: 'Matilda', description: 'American female, warm & friendly', gender: 'female' },
-  { id: 'jessica', name: 'Jessica', description: 'American female, professional', gender: 'female' },
-  { id: 'lily', name: 'Lily', description: 'British female, gentle & calming', gender: 'female' },
-  { id: 'laura', name: 'Laura', description: 'American female, upbeat & cheerful', gender: 'female' },
+  { id: 'george', name: 'Atlas', description: 'Warm & professional tone', gender: 'male' },
+  { id: 'brian', name: 'Titan', description: 'Deep & authoritative tone', gender: 'male' },
+  { id: 'daniel', name: 'Nova', description: 'Calm & storytelling tone', gender: 'male' },
+  { id: 'liam', name: 'Blaze', description: 'Young & energetic tone', gender: 'male' },
+  { id: 'chris', name: 'Echo', description: 'Conversational tone', gender: 'male' },
+  { id: 'charlie', name: 'Reef', description: 'Friendly & warm tone', gender: 'male' },
+  { id: 'eric', name: 'Sage', description: 'Mature & wise tone', gender: 'male' },
+  { id: 'will', name: 'Drift', description: 'Casual & engaging tone', gender: 'male' },
+  { id: 'sarah', name: 'Luna', description: 'Soft & soothing tone', gender: 'female' },
+  { id: 'alice', name: 'Aria', description: 'Clear & articulate tone', gender: 'female' },
+  { id: 'matilda', name: 'Ember', description: 'Warm & friendly tone', gender: 'female' },
+  { id: 'jessica', name: 'Prism', description: 'Professional tone', gender: 'female' },
+  { id: 'lily', name: 'Veil', description: 'Gentle & calming tone', gender: 'female' },
+  { id: 'laura', name: 'Spark', description: 'Upbeat & cheerful tone', gender: 'female' },
 ];
 
 export default function VoiceStudio() {
@@ -35,6 +36,7 @@ export default function VoiceStudio() {
   const [selectedElevenLabsVoice, setSelectedElevenLabsVoice] = useState("george");
   const [stability, setStability] = useState([0.5]);
   const [speed, setSpeed] = useState([1]);
+  const [showVerification, setShowVerification] = useState(false);
   
   // Browser TTS state
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -92,7 +94,6 @@ export default function VoiceStudio() {
       return;
     }
 
-    // Validate text length to prevent API overuse
     if (text.length > 5000) {
       toast.error("Text too long. Maximum 5000 characters allowed.");
       return;
@@ -133,7 +134,6 @@ export default function VoiceStudio() {
       const url = URL.createObjectURL(audioBlob);
       setAudioUrl(url);
 
-      // Auto-play
       const audio = new Audio(url);
       audioRef.current = audio;
       
@@ -154,18 +154,17 @@ export default function VoiceStudio() {
 
       await audio.play();
 
-      // Track stats
       incrementStat('voiceoversGenerated');
       saveContent({
         type: 'voiceover',
-        title: `ElevenLabs - ${selectedElevenLabsVoice}`,
+        title: `Neural Voice - ${selectedElevenLabsVoice}`,
         content: text
       });
 
-      toast.success("Professional voiceover generated!");
+      toast.success("Cinematic voiceover generated!");
 
     } catch (error) {
-      console.error("ElevenLabs error:", error);
+      console.error("Voice engine error:", error);
       toast.error(error instanceof Error ? error.message : "Failed to generate voiceover");
       stopVisualizer();
     } finally {
@@ -179,7 +178,6 @@ export default function VoiceStudio() {
       return;
     }
 
-    // Browser TTS has no text length limit but warn for very long text
     if (text.length > 10000) {
       toast.warning("Very long text may cause browser TTS to be slow or unstable");
     }
@@ -233,12 +231,28 @@ export default function VoiceStudio() {
     if (useElevenLabs) {
       if (audioUrl && audioRef.current) {
         audioRef.current.play();
-      } else {
+        return;
+      }
+      
+      // Check if user has their own key — if yes, generate directly (no ads)
+      const userKey = localStorage.getItem("elevenlabs-api-key");
+      if (userKey && userKey.trim()) {
         generateElevenLabsAudio();
+      } else {
+        // No custom key: show ad-gate verification modal
+        if (!text.trim()) {
+          toast.error("Please enter some text to convert to speech");
+          return;
+        }
+        setShowVerification(true);
       }
     } else {
       handleBrowserTTSPlay();
     }
+  };
+
+  const handleVerifiedGenerate = () => {
+    generateElevenLabsAudio();
   };
 
   const handlePause = () => {
@@ -278,9 +292,7 @@ export default function VoiceStudio() {
     } else if (useElevenLabs) {
       toast.info("Generate a voiceover first by clicking the Play button");
     } else {
-      // BROWSER LIMITATION: Web Speech API cannot export audio blobs
-      // Only ElevenLabs provides downloadable MP3 files
-      toast.info("MP3 download requires ElevenLabs. Browser TTS cannot export audio files.");
+      toast.info("MP3 download requires the Neural Engine. Browser TTS cannot export audio files.");
     }
   };
 
@@ -308,7 +320,7 @@ export default function VoiceStudio() {
           Voiceover Studio
         </h1>
         <p className="text-sm md:text-base text-muted-foreground mt-1">
-          Generate professional AI voiceovers with ElevenLabs or browser TTS
+          Generate cinematic AI voiceovers with our Neural Engine or browser TTS
         </p>
       </div>
 
@@ -322,11 +334,11 @@ export default function VoiceStudio() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 md:space-y-5">
-            {/* ElevenLabs Toggle */}
+            {/* Engine Toggle */}
             <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
               <div className="flex items-center gap-2">
                 <Speaker className="w-4 h-4 text-primary" />
-                <Label className="text-sm font-medium">ElevenLabs AI</Label>
+                <Label className="text-sm font-medium">TubeGenius Neural Engine</Label>
               </div>
               <Switch
                 checked={useElevenLabs}
@@ -342,9 +354,9 @@ export default function VoiceStudio() {
 
             {useElevenLabs ? (
               <>
-                {/* ElevenLabs Voice Selector */}
+                {/* Voice Selector */}
                 <div className="space-y-1.5 md:space-y-2">
-                  <Label className="text-sm text-foreground">AI Voice</Label>
+                  <Label className="text-sm text-foreground">Cinematic Studio Voice</Label>
                   <Select value={selectedElevenLabsVoice} onValueChange={setSelectedElevenLabsVoice}>
                     <SelectTrigger className="bg-secondary border-border h-10 md:h-11 text-sm">
                       <SelectValue placeholder="Select a voice" />
@@ -555,7 +567,7 @@ export default function VoiceStudio() {
               </Button>
             </div>
 
-            {/* Regenerate Button (ElevenLabs only) */}
+            {/* Regenerate Button */}
             {useElevenLabs && audioUrl && (
               <div className="flex justify-center">
                 <Button
@@ -578,7 +590,7 @@ export default function VoiceStudio() {
                   className={cn(
                     "w-1 rounded-full transition-all duration-100",
                     isPlaying || isGenerating
-                      ? "bg-gradient-to-t from-neon-purple to-neon-cyan"
+                      ? "bg-gradient-to-t from-primary to-accent"
                       : "bg-border"
                   )}
                   style={{
@@ -611,14 +623,21 @@ export default function VoiceStudio() {
             {/* Info */}
             <p className="text-center text-xs text-muted-foreground">
               {useElevenLabs ? (
-                <>✨ Using ElevenLabs AI for professional quality voiceovers with MP3 export</>
+                <>✨ Using TubeGenius Neural Engine for cinematic voiceovers with MP3 export</>
               ) : (
-                <>🔊 Using browser TTS - switch to ElevenLabs for MP3 downloads</>
+                <>🔊 Using browser TTS — switch to Neural Engine for MP3 downloads</>
               )}
             </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Verification Modal */}
+      <VoiceVerificationModal
+        open={showVerification}
+        onOpenChange={setShowVerification}
+        onVerified={handleVerifiedGenerate}
+      />
     </div>
   );
 }
