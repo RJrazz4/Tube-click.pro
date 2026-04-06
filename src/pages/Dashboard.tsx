@@ -45,7 +45,7 @@ const tools = [
   },
   {
     title: "Voiceover Studio",
-    description: "Text-to-speech with ElevenLabs AI",
+    description: "Cinematic AI voiceovers with Neural Engine",
     icon: Mic,
     path: "/voice",
     gradient: "from-orange-400 to-red-500",
