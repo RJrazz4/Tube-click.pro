@@ -64,9 +64,7 @@ export default function Dashboard() {
   const [recentContent, setRecentContent] = useState<SavedContent[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
-  const [isRendering, setIsRendering] = useState(false);
   const [verificationOpen, setVerificationOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState<"export" | "render" | null>(null);
 
   useEffect(() => {
     const loadedStats = getStats();
