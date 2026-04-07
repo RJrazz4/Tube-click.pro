@@ -488,11 +488,7 @@ export default function Storyboard() {
             <Textarea
               value={script}
               onChange={(e) => setScript(e.target.value)}
-              placeholder="Paste your video script here...
-
-The AI will analyze it and identify 4-10 powerful visual moments based on script complexity."
-
-Each scene includes image + motion prompts."
+              placeholder={"Paste your video script here...\n\nThe AI will analyze it and identify 4-10 powerful visual moments based on script complexity.\n\nEach scene includes image + motion prompts."}
               className="min-h-[300px] md:min-h-[400px] bg-secondary border-border focus:border-primary resize-none text-sm"
               disabled={isAnalyzing || isGenerating}
             />
