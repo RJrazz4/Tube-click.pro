@@ -639,8 +639,8 @@ Each scene includes image + motion prompts."
             {scenes.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-[400px] text-center">
                 <Film className="w-16 h-16 text-muted-foreground/30 mb-4" />
-                <p className="text-muted-foreground text-sm">
-                  Paste your script and click "Analyze Script" to identify 6 story-critical scenes
+                 <p className="text-muted-foreground text-sm">
+                  Paste your script and click &quot;Analyze Script&quot; to identify story-critical scenes
                 </p>
               </div>
             ) : (
