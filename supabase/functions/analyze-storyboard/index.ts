@@ -51,7 +51,7 @@ STORY BEAT FRAMEWORK (Pick 6 from these):
 - Call to Action: The inspiring final visual
 
 CRITICAL RULES:
-1. Identify EXACTLY 6 scenes - no more, no less
+1. Identify between 4 and 10 scenes depending on script length and complexity. Short scripts (under 500 chars) should get 4-5 scenes. Medium scripts get 6-7. Long scripts (2000+ chars) can get up to 10.
 2. Each scene MUST directly relate to a specific part of the script
 3. Pick only the MOST visually powerful moments
 4. Skip generic or dialogue-heavy moments that don't translate well visually
