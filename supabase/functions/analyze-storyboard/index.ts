@@ -113,7 +113,7 @@ Return format:
   }
 ]
 
-CRITICAL: Return EXACTLY 6 scenes. Each scene MUST be visually powerful and story-critical.`
+CRITICAL: Return 4-10 scenes based on script complexity. Each scene MUST be visually powerful and story-critical.`
           }
         ],
       }),
