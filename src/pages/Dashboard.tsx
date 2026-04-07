@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { getStats, getSavedContent, clearAllContent, deleteContent, type Stats, type SavedContent } from "@/lib/stats";
 import { exportAllAsZip } from "@/lib/export";
 import { VerificationModal } from "@/components/VerificationModal";
-import { VerificationModal } from "@/components/VerificationModal";
+
 
 const tools = [
   {
