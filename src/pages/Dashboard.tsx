@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Film, Loader2, X, Sparkles, RefreshCw, Video } from "lucide-react";
+import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Film, Loader2, X, Sparkles, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
