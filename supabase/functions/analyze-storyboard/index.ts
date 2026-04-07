@@ -51,7 +51,7 @@ STORY BEAT FRAMEWORK (Pick 6 from these):
 - Call to Action: The inspiring final visual
 
 CRITICAL RULES:
-1. Identify EXACTLY 6 scenes - no more, no less
+1. Identify between 4 and 10 scenes depending on script length and complexity. Short scripts (under 500 chars) should get 4-5 scenes. Medium scripts get 6-7. Long scripts (2000+ chars) can get up to 10.
 2. Each scene MUST directly relate to a specific part of the script
 3. Pick only the MOST visually powerful moments
 4. Skip generic or dialogue-heavy moments that don't translate well visually
@@ -93,7 +93,7 @@ Return ONLY valid JSON array with no markdown formatting.`;
           { role: 'system', content: systemPrompt },
           { 
             role: 'user', 
-            content: `Analyze this script and extract EXACTLY 6 story-critical scenes for cinematic visualization. Return as JSON array.
+            content: `Analyze this script and extract 4 to 10 story-critical scenes for cinematic visualization (choose count based on script length/complexity). Return as JSON array.
 
 SCRIPT:
 ${trimmedScript}
@@ -113,7 +113,7 @@ Return format:
   }
 ]
 
-CRITICAL: Return EXACTLY 6 scenes. Each scene MUST be visually powerful and story-critical.`
+CRITICAL: Return 4-10 scenes based on script complexity. Each scene MUST be visually powerful and story-critical.`
           }
         ],
       }),
@@ -158,8 +158,11 @@ CRITICAL: Return EXACTLY 6 scenes. Each scene MUST be visually powerful and stor
         throw new Error('Invalid scenes format');
       }
       
-      // Ensure exactly 6 scenes
-      scenes = scenes.slice(0, 6);
+      // Ensure 4-10 scenes
+      scenes = scenes.slice(0, 10);
+      if (scenes.length < 4) {
+        throw new Error('Too few scenes generated');
+      }
       
       // Validate each scene has required fields
       scenes = scenes.map((scene, idx) => ({

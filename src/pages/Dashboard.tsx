@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Film, Loader2, X, Sparkles, RefreshCw, Video } from "lucide-react";
+import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Film, Loader2, X, Sparkles, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { getStats, getSavedContent, clearAllContent, deleteContent, type Stats, type SavedContent } from "@/lib/stats";
 import { exportAllAsZip } from "@/lib/export";
-import { supabase } from "@/integrations/supabase/client";
 import { VerificationModal } from "@/components/VerificationModal";
+
 
 const tools = [
   {
@@ -51,14 +51,6 @@ const tools = [
     gradient: "from-orange-400 to-red-500",
     glow: "",
   },
-  {
-    title: "Video Renderer",
-    description: "Compile storyboard into a final MP4",
-    icon: Video,
-    path: "#renderer",
-    gradient: "from-pink-500 to-rose-600",
-    glow: "",
-  },
 ];
 
 export default function Dashboard() {
@@ -72,9 +64,7 @@ export default function Dashboard() {
   const [recentContent, setRecentContent] = useState<SavedContent[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
-  const [isRendering, setIsRendering] = useState(false);
   const [verificationOpen, setVerificationOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState<"export" | "render" | null>(null);
 
   useEffect(() => {
     const loadedStats = getStats();
@@ -109,70 +99,16 @@ export default function Dashboard() {
     }
   };
 
-  const doRender = async () => {
-    setIsRendering(true);
-    try {
-      const saved = localStorage.getItem('tubegenius_storyboard');
-      if (!saved) {
-        toast.error("No storyboard found. Generate storyboard scenes first.");
-        return;
-      }
-      const { scenes } = JSON.parse(saved);
-      const images = (scenes || [])
-        .filter((s: { imageUrl?: string }) => s.imageUrl)
-        .map((s: { imageUrl: string }) => s.imageUrl);
-
-      if (images.length === 0) {
-        toast.error("No storyboard images found. Generate visuals in Visual Storyboard first.");
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke('render-video', {
-        body: { images, sceneDuration: 5, transition: "fade" }
-      });
-
-      if (error) throw new Error(error.message);
-      if (data.error) throw new Error(data.error);
-
-      if (data.videoUrl) {
-        const a = document.createElement('a');
-        a.href = data.videoUrl;
-        a.download = `tubegenius-video-${Date.now()}.mp4`;
-        a.target = '_blank';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        toast.success(`Video rendered! ${data.imageCount} scenes, ${data.duration}s total`);
-      }
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Video rendering failed";
-      toast.error(msg);
-    } finally {
-      setIsRendering(false);
-    }
-  };
-
   const handleExportAll = () => {
     if (recentContent.length === 0) {
       toast.error("No content to export. Create some content first!");
       return;
     }
-    setPendingAction("export");
-    setVerificationOpen(true);
-  };
-
-  const handleRenderVideo = () => {
-    setPendingAction("render");
     setVerificationOpen(true);
   };
 
   const handleVerified = () => {
-    if (pendingAction === "export") {
-      doExport();
-    } else if (pendingAction === "render") {
-      doRender();
-    }
-    setPendingAction(null);
+    doExport();
   };
 
   const handleClearAll = () => {
@@ -289,60 +225,38 @@ export default function Dashboard() {
           Start Creating
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-          {tools.map((tool, index) => {
-            const isRenderer = tool.path === "#renderer";
-
-            const cardContent = (
-              <div className={cn(
-                "relative rounded-2xl border backdrop-blur-md bg-card/80 shadow-lg",
-                "border-border/50 transition-all duration-300",
-                "hover:shadow-xl hover:border-primary/50 hover:scale-[1.02]",
-                "active:scale-[0.98]",
-                tool.glow
-              )}>
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/5 to-accent/5 pointer-events-none" />
-                <div className="relative p-5 md:p-6 flex items-center gap-4">
-                  <div className={`w-14 h-14 md:w-16 md:h-16 rounded-xl bg-gradient-to-br ${tool.gradient} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-lg`}>
-                    <tool.icon className="w-7 h-7 md:w-8 md:h-8 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-display font-semibold text-base md:text-lg text-foreground group-hover:text-primary transition-colors">
-                        {tool.title}
-                      </h3>
-                      <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{tool.description}</p>
-                  </div>
-                </div>
-              </div>
-            );
-
-            if (isRenderer) {
-              return (
-                <button
-                  key={tool.path}
-                  onClick={handleRenderVideo}
-                  disabled={isRendering}
-                  className="group touch-manipulation text-left w-full"
-                  style={{ animationDelay: `${index * 100}ms` }}
-                >
-                  {cardContent}
-                </button>
-              );
-            }
-
-            return (
+          {tools.map((tool, index) => (
               <Link
                 key={tool.path}
                 to={tool.path}
                 className="group touch-manipulation"
                 style={{ animationDelay: `${index * 100}ms` }}
               >
-                {cardContent}
+                <div className={cn(
+                  "relative rounded-2xl border backdrop-blur-md bg-card/80 shadow-lg",
+                  "border-border/50 transition-all duration-300",
+                  "hover:shadow-xl hover:border-primary/50 hover:scale-[1.02]",
+                  "active:scale-[0.98]",
+                  tool.glow
+                )}>
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/5 to-accent/5 pointer-events-none" />
+                  <div className="relative p-5 md:p-6 flex items-center gap-4">
+                    <div className={`w-14 h-14 md:w-16 md:h-16 rounded-xl bg-gradient-to-br ${tool.gradient} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-lg`}>
+                      <tool.icon className="w-7 h-7 md:w-8 md:h-8 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-display font-semibold text-base md:text-lg text-foreground group-hover:text-primary transition-colors">
+                          {tool.title}
+                        </h3>
+                        <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{tool.description}</p>
+                    </div>
+                  </div>
+                </div>
               </Link>
-            );
-          })}
+          ))}
         </div>
       </div>
 
@@ -426,24 +340,8 @@ export default function Dashboard() {
               )}
             </Button>
 
-            <Button
-              onClick={handleRenderVideo}
-              disabled={isRendering || isExporting || totalContent === 0}
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white h-11 md:h-12"
-              aria-label="Render final video from storyboard"
-            >
-              {isRendering ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
-                  Rendering Video...
-                </>
-              ) : (
-                <>
-                  <Video className="w-4 h-4 mr-2" aria-hidden="true" />
-                  Render Final Video (MP4)
-                </>
-              )}
-            </Button>
+
+
 
             <Button
               variant="outline"

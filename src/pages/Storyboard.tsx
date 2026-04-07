@@ -147,9 +147,8 @@ export default function Storyboard() {
 
       const data = await response.json();
       
-      // Enforce exactly 6 scenes
-      const limitedScenes = (data.scenes || []).slice(0, 6);
-      const analyzedScenes = limitedScenes.map((scene: Scene) => ({
+      // Dynamic scene count (4-10)
+      const analyzedScenes = (data.scenes || []).slice(0, 10).map((scene: Scene) => ({
         ...scene,
         status: 'pending' as const,
         retryCount: 0
@@ -378,20 +377,31 @@ export default function Storyboard() {
       for (const scene of completedScenes) {
         if (scene.imageUrl && folder) {
           try {
-            // Convert base64 to blob
-            const base64Data = scene.imageUrl.split(',')[1];
-            const byteCharacters = atob(base64Data);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            if (scene.imageUrl.startsWith('data:')) {
+              // Base64 image
+              const base64Data = scene.imageUrl.split(',')[1];
+              const byteCharacters = atob(base64Data);
+              const byteNumbers = new Array(byteCharacters.length);
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              }
+              const byteArray = new Uint8Array(byteNumbers);
+              folder.file(
+                `scene_${String(scene.scene_number).padStart(2, '0')}_${scene.beat_type.replace(/\s+/g, '_')}.png`,
+                byteArray,
+                { binary: true }
+              );
+            } else if (scene.imageUrl.startsWith('http')) {
+              // URL-based image (from Fal.ai)
+              const response = await fetch(scene.imageUrl);
+              const blob = await response.blob();
+              const arrayBuffer = await blob.arrayBuffer();
+              folder.file(
+                `scene_${String(scene.scene_number).padStart(2, '0')}_${scene.beat_type.replace(/\s+/g, '_')}.png`,
+                new Uint8Array(arrayBuffer),
+                { binary: true }
+              );
             }
-            const byteArray = new Uint8Array(byteNumbers);
-            
-            folder.file(
-              `scene_${String(scene.scene_number).padStart(2, '0')}_${scene.beat_type.replace(/\s+/g, '_')}.png`,
-              byteArray,
-              { binary: true }
-            );
           } catch (e) {
             console.error('Failed to add image to zip:', e);
           }
@@ -472,7 +482,7 @@ export default function Storyboard() {
           Visual Storyboard AI
         </h1>
         <p className="text-sm md:text-base text-muted-foreground mt-1">
-          Generate 6 cinematic frames with auto-retry & timeout recovery
+          Generate 4-10 cinematic frames with auto-retry &amp; timeout recovery
         </p>
       </div>
 
@@ -489,17 +499,7 @@ export default function Storyboard() {
             <Textarea
               value={script}
               onChange={(e) => setScript(e.target.value)}
-              placeholder="Paste your video script here...
-
-The AI will analyze it and identify 6 powerful visual moments:
-• Opening Hook
-• Problem
-• Discovery  
-• Method
-• Proof
-• Transformation
-
-Each scene includes image + motion prompts."
+              placeholder={"Paste your video script here...\n\nThe AI will analyze it and identify 4-10 powerful visual moments based on script complexity.\n\nEach scene includes image + motion prompts."}
               className="min-h-[300px] md:min-h-[400px] bg-secondary border-border focus:border-primary resize-none text-sm"
               disabled={isAnalyzing || isGenerating}
             />
@@ -523,7 +523,7 @@ Each scene includes image + motion prompts."
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 mr-2" />
-                    Analyze Script (6 Scenes)
+                    Analyze Script
                   </>
                 )}
               </Button>
@@ -646,8 +646,8 @@ Each scene includes image + motion prompts."
             {scenes.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-[400px] text-center">
                 <Film className="w-16 h-16 text-muted-foreground/30 mb-4" />
-                <p className="text-muted-foreground text-sm">
-                  Paste your script and click "Analyze Script" to identify 6 story-critical scenes
+                 <p className="text-muted-foreground text-sm">
+                  Paste your script and click &quot;Analyze Script&quot; to identify story-critical scenes
                 </p>
               </div>
             ) : (
