@@ -93,7 +93,7 @@ Return ONLY valid JSON array with no markdown formatting.`;
           { role: 'system', content: systemPrompt },
           { 
             role: 'user', 
-            content: `Analyze this script and extract EXACTLY 6 story-critical scenes for cinematic visualization. Return as JSON array.
+            content: `Analyze this script and extract 4 to 10 story-critical scenes for cinematic visualization (choose count based on script length/complexity). Return as JSON array.
 
 SCRIPT:
 ${trimmedScript}
