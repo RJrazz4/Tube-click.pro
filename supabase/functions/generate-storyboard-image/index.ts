@@ -5,44 +5,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/stabilityai/sdxl-turbo";
-
-async function generateImageWithHuggingFace(apiKey: string, prompt: string): Promise<string | null> {
-  const response = await fetch(HUGGINGFACE_API_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ inputs: prompt }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('HuggingFace API error:', response.status, errorText);
-    if (response.status === 429) {
-      throw { status: 429, message: 'Rate limit exceeded' };
-    }
-    if (response.status === 503) {
-      // Model loading - throw retryable error
-      throw { status: 503, message: 'Model is loading, please retry' };
-    }
-    return null;
-  }
-
-  // HuggingFace returns raw image bytes
-  const arrayBuffer = await response.arrayBuffer();
-  const uint8Array = new Uint8Array(arrayBuffer);
-  
-  // Convert to base64
-  let binary = '';
-  for (let i = 0; i < uint8Array.length; i++) {
-    binary += String.fromCharCode(uint8Array[i]);
-  }
-  const base64 = btoa(binary);
-  return `data:image/png;base64,${base64}`;
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -50,10 +12,10 @@ serve(async (req) => {
 
   try {
     const { prompt, sceneNumber } = await req.json();
-    
-    const HF_API_KEY = Deno.env.get('HUGGINGFACE_API_KEY');
-    if (!HF_API_KEY) {
-      throw new Error('HUGGINGFACE_API_KEY not configured');
+
+    const FAL_API_KEY = Deno.env.get('FAL_API_KEY');
+    if (!FAL_API_KEY) {
+      throw new Error('FAL_API_KEY not configured');
     }
 
     if (!prompt) {
@@ -65,46 +27,98 @@ serve(async (req) => {
 
     console.log(`Generating image for scene ${sceneNumber}: ${prompt.substring(0, 100)}...`);
 
-    // Try up to 3 times with progressively simpler prompts
-    const prompts = [
-      prompt,
-      `Cinematic photo, ${prompt.split(',').slice(0, 3).join(',')}`,
-      `A photorealistic scene: ${prompt.split(',')[0]}`,
-    ];
+    // Use fal.ai SDXL-Lightning for fast generation
+    const response = await fetch('https://queue.fal.run/fal-ai/fast-lightning-sdxl', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${FAL_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
+        image_size: 'landscape_16_9',
+        num_inference_steps: 4,
+        num_images: 1,
+        enable_safety_checker: false,
+      }),
+    });
 
-    for (let attempt = 0; attempt < prompts.length; attempt++) {
-      console.log(`Attempt ${attempt + 1} for scene ${sceneNumber}`);
-      try {
-        const imageUrl = await generateImageWithHuggingFace(HF_API_KEY, prompts[attempt]);
-        if (imageUrl) {
-          console.log(`Success on attempt ${attempt + 1} for scene ${sceneNumber}`);
-          return new Response(
-            JSON.stringify({ imageUrl, sceneNumber }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-      } catch (e: any) {
-        if (e.status === 429) {
-          return new Response(
-            JSON.stringify({ error: 'Rate limit exceeded. Please wait and try again.' }),
-            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        if (e.status === 503) {
-          // Model loading - wait and retry
-          console.log('Model loading, waiting 3s before retry...');
-          await new Promise(r => setTimeout(r, 3000));
-          continue;
-        }
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Fal.ai queue submit error:', response.status, errorText);
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: 'Rate limit exceeded. Please wait and try again.' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-      if (attempt < prompts.length - 1) {
-        await new Promise(r => setTimeout(r, 1000));
+      throw new Error(`Fal.ai error: ${response.status}`);
+    }
+
+    const queueData = await response.json();
+    const requestId = queueData.request_id;
+
+    if (!requestId) {
+      throw new Error('No request_id returned from Fal.ai');
+    }
+
+    console.log(`Fal.ai request queued: ${requestId}`);
+
+    // Poll for result (max 30 seconds)
+    const maxWait = 30000;
+    const pollInterval = 1000;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWait) {
+      await new Promise(r => setTimeout(r, pollInterval));
+
+      const statusRes = await fetch(
+        `https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/${requestId}/status`,
+        {
+          headers: { 'Authorization': `Key ${FAL_API_KEY}` },
+        }
+      );
+
+      if (!statusRes.ok) continue;
+
+      const statusData = await statusRes.json();
+
+      if (statusData.status === 'COMPLETED') {
+        // Fetch the result
+        const resultRes = await fetch(
+          `https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/${requestId}`,
+          {
+            headers: { 'Authorization': `Key ${FAL_API_KEY}` },
+          }
+        );
+
+        if (!resultRes.ok) {
+          throw new Error('Failed to fetch result from Fal.ai');
+        }
+
+        const resultData = await resultRes.json();
+        const imageUrl = resultData.images?.[0]?.url;
+
+        if (!imageUrl) {
+          throw new Error('No image URL in Fal.ai response');
+        }
+
+        console.log(`Scene ${sceneNumber} generated successfully via Fal.ai`);
+
+        return new Response(
+          JSON.stringify({ imageUrl, sceneNumber }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (statusData.status === 'FAILED') {
+        throw new Error('Image generation failed on Fal.ai');
       }
     }
 
     return new Response(
-      JSON.stringify({ error: 'Image generation failed after 3 attempts. Try a simpler description.' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: 'Image generation timed out. Please try again.' }),
+      { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: unknown) {

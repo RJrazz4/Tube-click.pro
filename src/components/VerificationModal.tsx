@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck } from "lucide-react";
+import { getLockerUrl } from "@/pages/AdminPanel";
 
 interface VerificationModalProps {
   open: boolean;
@@ -15,11 +16,22 @@ interface VerificationModalProps {
 }
 
 export function VerificationModal({ open, onOpenChange, onVerified }: VerificationModalProps) {
+  const lockerUrl = getLockerUrl();
+
   const handleVerify = () => {
-    window.open("https://optilinklock.com/1888553", "_blank", "noopener,noreferrer");
+    if (lockerUrl) {
+      window.open(lockerUrl, "_blank", "noopener,noreferrer");
+    }
     onVerified();
     onOpenChange(false);
   };
+
+  // If no locker URL configured, skip verification
+  if (!lockerUrl && open) {
+    onVerified();
+    onOpenChange(false);
+    return null;
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
