@@ -226,59 +226,37 @@ export default function Dashboard() {
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
           {tools.map((tool, index) => (
-            <Link
-
-            const cardContent = (
-              <div className={cn(
-                "relative rounded-2xl border backdrop-blur-md bg-card/80 shadow-lg",
-                "border-border/50 transition-all duration-300",
-                "hover:shadow-xl hover:border-primary/50 hover:scale-[1.02]",
-                "active:scale-[0.98]",
-                tool.glow
-              )}>
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/5 to-accent/5 pointer-events-none" />
-                <div className="relative p-5 md:p-6 flex items-center gap-4">
-                  <div className={`w-14 h-14 md:w-16 md:h-16 rounded-xl bg-gradient-to-br ${tool.gradient} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-lg`}>
-                    <tool.icon className="w-7 h-7 md:w-8 md:h-8 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-display font-semibold text-base md:text-lg text-foreground group-hover:text-primary transition-colors">
-                        {tool.title}
-                      </h3>
-                      <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{tool.description}</p>
-                  </div>
-                </div>
-              </div>
-            );
-
-            if (isRenderer) {
-              return (
-                <button
-                  key={tool.path}
-                  onClick={handleRenderVideo}
-                  disabled={isRendering}
-                  className="group touch-manipulation text-left w-full"
-                  style={{ animationDelay: `${index * 100}ms` }}
-                >
-                  {cardContent}
-                </button>
-              );
-            }
-
-            return (
               <Link
                 key={tool.path}
                 to={tool.path}
                 className="group touch-manipulation"
                 style={{ animationDelay: `${index * 100}ms` }}
               >
-                {cardContent}
+                <div className={cn(
+                  "relative rounded-2xl border backdrop-blur-md bg-card/80 shadow-lg",
+                  "border-border/50 transition-all duration-300",
+                  "hover:shadow-xl hover:border-primary/50 hover:scale-[1.02]",
+                  "active:scale-[0.98]",
+                  tool.glow
+                )}>
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/5 to-accent/5 pointer-events-none" />
+                  <div className="relative p-5 md:p-6 flex items-center gap-4">
+                    <div className={`w-14 h-14 md:w-16 md:h-16 rounded-xl bg-gradient-to-br ${tool.gradient} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-lg`}>
+                      <tool.icon className="w-7 h-7 md:w-8 md:h-8 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-display font-semibold text-base md:text-lg text-foreground group-hover:text-primary transition-colors">
+                          {tool.title}
+                        </h3>
+                        <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{tool.description}</p>
+                    </div>
+                  </div>
+                </div>
               </Link>
-            );
-          })}
+          ))}
         </div>
       </div>
 
