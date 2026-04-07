@@ -51,14 +51,6 @@ const tools = [
     gradient: "from-orange-400 to-red-500",
     glow: "",
   },
-  {
-    title: "Video Renderer",
-    description: "Compile storyboard into a final MP4",
-    icon: Video,
-    path: "#renderer",
-    gradient: "from-pink-500 to-rose-600",
-    glow: "",
-  },
 ];
 
 export default function Dashboard() {
