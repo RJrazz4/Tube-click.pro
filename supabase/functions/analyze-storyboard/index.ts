@@ -158,8 +158,11 @@ CRITICAL: Return 4-10 scenes based on script complexity. Each scene MUST be visu
         throw new Error('Invalid scenes format');
       }
       
-      // Ensure exactly 6 scenes
-      scenes = scenes.slice(0, 6);
+      // Ensure 4-10 scenes
+      scenes = scenes.slice(0, 10);
+      if (scenes.length < 4) {
+        throw new Error('Too few scenes generated');
+      }
       
       // Validate each scene has required fields
       scenes = scenes.map((scene, idx) => ({
