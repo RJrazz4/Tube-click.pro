@@ -99,70 +99,16 @@ export default function Dashboard() {
     }
   };
 
-  const doRender = async () => {
-    setIsRendering(true);
-    try {
-      const saved = localStorage.getItem('tubegenius_storyboard');
-      if (!saved) {
-        toast.error("No storyboard found. Generate storyboard scenes first.");
-        return;
-      }
-      const { scenes } = JSON.parse(saved);
-      const images = (scenes || [])
-        .filter((s: { imageUrl?: string }) => s.imageUrl)
-        .map((s: { imageUrl: string }) => s.imageUrl);
-
-      if (images.length === 0) {
-        toast.error("No storyboard images found. Generate visuals in Visual Storyboard first.");
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke('render-video', {
-        body: { images, sceneDuration: 5, transition: "fade" }
-      });
-
-      if (error) throw new Error(error.message);
-      if (data.error) throw new Error(data.error);
-
-      if (data.videoUrl) {
-        const a = document.createElement('a');
-        a.href = data.videoUrl;
-        a.download = `tubegenius-video-${Date.now()}.mp4`;
-        a.target = '_blank';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        toast.success(`Video rendered! ${data.imageCount} scenes, ${data.duration}s total`);
-      }
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Video rendering failed";
-      toast.error(msg);
-    } finally {
-      setIsRendering(false);
-    }
-  };
-
   const handleExportAll = () => {
     if (recentContent.length === 0) {
       toast.error("No content to export. Create some content first!");
       return;
     }
-    setPendingAction("export");
-    setVerificationOpen(true);
-  };
-
-  const handleRenderVideo = () => {
-    setPendingAction("render");
     setVerificationOpen(true);
   };
 
   const handleVerified = () => {
-    if (pendingAction === "export") {
-      doExport();
-    } else if (pendingAction === "render") {
-      doRender();
-    }
-    setPendingAction(null);
+    doExport();
   };
 
   const handleClearAll = () => {
