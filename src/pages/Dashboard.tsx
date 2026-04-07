@@ -225,7 +225,7 @@ export default function Dashboard() {
           Start Creating
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-          {tools.map((tool, index) => {
+          {tools.map((tool, index) => (
             const isRenderer = tool.path === "#renderer";
 
             const cardContent = (
