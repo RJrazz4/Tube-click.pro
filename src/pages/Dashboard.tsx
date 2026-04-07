@@ -340,24 +340,8 @@ export default function Dashboard() {
               )}
             </Button>
 
-            <Button
-              onClick={handleRenderVideo}
-              disabled={isRendering || isExporting || totalContent === 0}
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white h-11 md:h-12"
-              aria-label="Render final video from storyboard"
-            >
-              {isRendering ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
-                  Rendering Video...
-                </>
-              ) : (
-                <>
-                  <Video className="w-4 h-4 mr-2" aria-hidden="true" />
-                  Render Final Video (MP4)
-                </>
-              )}
-            </Button>
+
+
 
             <Button
               variant="outline"
