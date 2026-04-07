@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { getStats, getSavedContent, clearAllContent, deleteContent, type Stats, type SavedContent } from "@/lib/stats";
 import { exportAllAsZip } from "@/lib/export";
-import { supabase } from "@/integrations/supabase/client";
+import { VerificationModal } from "@/components/VerificationModal";
 import { VerificationModal } from "@/components/VerificationModal";
 
 const tools = [
