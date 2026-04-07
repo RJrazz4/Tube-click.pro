@@ -516,7 +516,7 @@ Each scene includes image + motion prompts."
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4 mr-2" />
-                    Analyze Script (6 Scenes)
+                    Analyze Script
                   </>
                 )}
               </Button>
