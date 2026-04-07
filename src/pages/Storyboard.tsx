@@ -377,20 +377,31 @@ export default function Storyboard() {
       for (const scene of completedScenes) {
         if (scene.imageUrl && folder) {
           try {
-            // Convert base64 to blob
-            const base64Data = scene.imageUrl.split(',')[1];
-            const byteCharacters = atob(base64Data);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            if (scene.imageUrl.startsWith('data:')) {
+              // Base64 image
+              const base64Data = scene.imageUrl.split(',')[1];
+              const byteCharacters = atob(base64Data);
+              const byteNumbers = new Array(byteCharacters.length);
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              }
+              const byteArray = new Uint8Array(byteNumbers);
+              folder.file(
+                `scene_${String(scene.scene_number).padStart(2, '0')}_${scene.beat_type.replace(/\s+/g, '_')}.png`,
+                byteArray,
+                { binary: true }
+              );
+            } else if (scene.imageUrl.startsWith('http')) {
+              // URL-based image (from Fal.ai)
+              const response = await fetch(scene.imageUrl);
+              const blob = await response.blob();
+              const arrayBuffer = await blob.arrayBuffer();
+              folder.file(
+                `scene_${String(scene.scene_number).padStart(2, '0')}_${scene.beat_type.replace(/\s+/g, '_')}.png`,
+                new Uint8Array(arrayBuffer),
+                { binary: true }
+              );
             }
-            const byteArray = new Uint8Array(byteNumbers);
-            
-            folder.file(
-              `scene_${String(scene.scene_number).padStart(2, '0')}_${scene.beat_type.replace(/\s+/g, '_')}.png`,
-              byteArray,
-              { binary: true }
-            );
           } catch (e) {
             console.error('Failed to add image to zip:', e);
           }
