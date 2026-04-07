@@ -147,9 +147,8 @@ export default function Storyboard() {
 
       const data = await response.json();
       
-      // Enforce exactly 6 scenes
-      const limitedScenes = (data.scenes || []).slice(0, 6);
-      const analyzedScenes = limitedScenes.map((scene: Scene) => ({
+      // Dynamic scene count (4-10)
+      const analyzedScenes = (data.scenes || []).slice(0, 10).map((scene: Scene) => ({
         ...scene,
         status: 'pending' as const,
         retryCount: 0
