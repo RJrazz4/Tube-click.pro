@@ -471,7 +471,7 @@ export default function Storyboard() {
           Visual Storyboard AI
         </h1>
         <p className="text-sm md:text-base text-muted-foreground mt-1">
-          Generate 6 cinematic frames with auto-retry & timeout recovery
+          Generate 4-10 cinematic frames with auto-retry &amp; timeout recovery
         </p>
       </div>
 
