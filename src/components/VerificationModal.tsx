@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck } from "lucide-react";
-import { getLockerUrl } from "@/pages/AdminPanel";
+import { getLockerUrl } from "@/components/GhostAdminModal";
 
 interface VerificationModalProps {
   open: boolean;
@@ -56,7 +56,7 @@ export function VerificationModal({ open, onOpenChange, onVerified }: Verificati
             Verify &amp; Download Now
           </Button>
           <p className="text-xs text-muted-foreground text-center mt-3">
-            This helps us keep TubeGenius Pro free for everyone.
+            This helps us keep TubeGenius Neural Engine free for everyone.
           </p>
         </div>
       </DialogContent>

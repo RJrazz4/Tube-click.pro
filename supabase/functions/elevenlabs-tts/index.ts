@@ -6,8 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Top ElevenLabs voices
-const VOICES = {
+const VOICES: Record<string, string> = {
   'roger': 'CwhRBWXzGAHq8TQ4Fs17',
   'sarah': 'EXAVITQu4vr4xnSDxMaL',
   'laura': 'FGY2WhTYpPnrIDTdsKH5',
@@ -29,44 +28,39 @@ const VOICES = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { text, voiceId, stability, similarityBoost, speed } = await req.json();
-    
-    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
-    
+    const { text, voiceId, stability, similarityBoost, speed, customApiKey } = await req.json();
+
+    // BYOK: prefer client-provided key, fallback to server secret
+    const ELEVENLABS_API_KEY = customApiKey || Deno.env.get('ELEVENLABS_API_KEY');
+
     if (!ELEVENLABS_API_KEY) {
-      console.error('ELEVENLABS_API_KEY not configured');
       return new Response(
-        JSON.stringify({ error: 'ElevenLabs API key not configured' }),
+        JSON.stringify({ error: 'ElevenLabs API key not configured. Please add your key in Settings.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (!text || typeof text !== 'string' || !text.trim()) {
       return new Response(
-        JSON.stringify({ error: 'Text is required. Please provide text to convert to speech.' }),
+        JSON.stringify({ error: 'Text is required.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Validate text length to prevent API overuse
     if (text.length > 5000) {
       return new Response(
-        JSON.stringify({ error: 'Text too long. Maximum 5000 characters allowed for voice generation.' }),
+        JSON.stringify({ error: 'Text too long. Maximum 5000 characters.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Get voice ID from mapping or use directly
-    const voiceKey = voiceId?.toLowerCase() as keyof typeof VOICES;
+    const voiceKey = voiceId?.toLowerCase();
     const resolvedVoiceId = VOICES[voiceKey] || voiceId || VOICES['george'];
-
-    console.log(`Generating TTS for: "${text.substring(0, 50)}..." with voice: ${resolvedVoiceId}`);
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${resolvedVoiceId}?output_format=mp3_44100_128`,
@@ -92,16 +86,13 @@ serve(async (req) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('ElevenLabs API error:', response.status, errorText);
       return new Response(
-        JSON.stringify({ error: `ElevenLabs API error: ${response.status}` }),
+        JSON.stringify({ error: `Voice API error: ${response.status}. ${customApiKey ? 'Check your API key in Settings.' : ''}` }),
         { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const audioBuffer = await response.arrayBuffer();
-
-    console.log(`Audio generated successfully, size: ${audioBuffer.byteLength} bytes`);
 
     return new Response(audioBuffer, {
       headers: {
@@ -110,7 +101,6 @@ serve(async (req) => {
       },
     });
   } catch (error: unknown) {
-    console.error('Error in elevenlabs-tts function:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
       JSON.stringify({ error: errorMessage }),

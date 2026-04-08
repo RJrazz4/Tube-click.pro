@@ -118,6 +118,7 @@ export default function VoiceStudio() {
             stability: stability[0],
             similarityBoost: 0.75,
             speed: speed[0],
+            customApiKey: localStorage.getItem("elevenlabs-api-key") || undefined,
           }),
         }
       );

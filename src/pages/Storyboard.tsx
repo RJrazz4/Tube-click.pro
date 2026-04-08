@@ -212,7 +212,8 @@ export default function Storyboard() {
           },
           body: JSON.stringify({ 
             prompt: promptToUse,
-            sceneNumber: scene.scene_number
+            sceneNumber: scene.scene_number,
+            customApiKey: localStorage.getItem("tubegenius_admin_config") ? (JSON.parse(localStorage.getItem("tubegenius_admin_config") || "{}").image_api_key || undefined) : undefined,
           }),
           signal: abortControllerRef.current.signal
         }
