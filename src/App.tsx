@@ -19,7 +19,7 @@ const VoiceStudio = lazy(() => import("./pages/VoiceStudio"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const About = lazy(() => import("./pages/About"));
-const AdminPanel = lazy(() => import("./pages/AdminPanel"));
+// Admin panel is now inline via ghost trigger modal - no route needed
 
 const queryClient = new QueryClient();
 
