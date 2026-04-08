@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
+import { getLockerUrl } from "@/components/GhostAdminModal";
 
 interface VoiceVerificationModalProps {
   open: boolean;
@@ -15,8 +16,11 @@ interface VoiceVerificationModalProps {
 }
 
 export function VoiceVerificationModal({ open, onOpenChange, onVerified }: VoiceVerificationModalProps) {
+  const lockerUrl = getLockerUrl();
+
   const handleVerify = () => {
-    window.open("https://optilinklock.com/1888553", "_blank", "noopener,noreferrer");
+    const url = lockerUrl || "https://optilinklock.com/1888553";
+    window.open(url, "_blank", "noopener,noreferrer");
     onVerified();
     onOpenChange(false);
   };

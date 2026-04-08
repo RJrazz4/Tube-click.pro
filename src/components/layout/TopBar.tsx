@@ -13,12 +13,17 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { GhostAdminModal } from "@/components/GhostAdminModal";
+import { useGhostTrigger } from "@/hooks/useGhostTrigger";
 
 export function TopBar() {
   const [geminiKey, setGeminiKey] = useState("");
   const [elevenLabsKey, setElevenLabsKey] = useState("");
   const [open, setOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [ghostOpen, setGhostOpen] = useState(false);
+
+  const handleGhostTrigger = useGhostTrigger(() => setGhostOpen(true));
 
   useEffect(() => {
     const savedGeminiKey = localStorage.getItem("gemini-api-key");
@@ -55,17 +60,23 @@ export function TopBar() {
 
   return (
     <header className="fixed top-0 left-20 right-0 h-16 bg-background/80 backdrop-blur-xl border-b border-border z-40 flex items-center justify-between px-6">
-      {/* Logo */}
+      {/* Logo - triple click triggers ghost admin */}
       <div className="flex items-center gap-3">
-        <h1 className="font-display text-xl font-bold">
+        <h1
+          className="font-display text-xl font-bold cursor-pointer select-none"
+          onClick={handleGhostTrigger}
+        >
           <span className="text-glow-purple text-primary">Tube</span>
           <span className="text-glow-cyan text-accent">Genius</span>
-          <span className="text-foreground ml-1">Pro</span>
+          <span className="text-foreground ml-1">Neural Engine</span>
         </h1>
         <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-display uppercase tracking-wider">
           Beta
         </span>
       </div>
+
+      {/* Ghost Admin Modal */}
+      <GhostAdminModal open={ghostOpen} onOpenChange={setGhostOpen} />
 
       {/* Actions */}
       <div className="flex items-center gap-3">
@@ -87,7 +98,6 @@ export function TopBar() {
             >
               <Settings className="w-4 h-4" />
               <span className="hidden sm:inline">Settings</span>
-              {/* Glowing animated badge */}
               <span className="absolute -top-2.5 -right-2 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 animate-pulse shadow-lg shadow-pink-500/40 whitespace-nowrap">
                 🔥 Free!
               </span>
