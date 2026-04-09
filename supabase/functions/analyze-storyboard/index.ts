@@ -63,8 +63,6 @@ serve(async (req) => {
 
     const trimmedScript = script.slice(0, 10000);
 
-    console.log('Analyzing script for story beats...');
-
     const systemPrompt = `You are an expert video storyboard analyst and cinematographer. Your job is to analyze scripts and identify the most visually powerful, story-critical moments for cinematic visualization.
 
 STORY BEAT FRAMEWORK (Pick 6 from these):
