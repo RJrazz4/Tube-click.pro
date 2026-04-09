@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
+import { getStoredApiKey } from "@/lib/byok";
+import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/lib/edgeFunctionClient";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsText } from "@/lib/export";
 
@@ -123,19 +124,11 @@ export default function VisionGuide() {
         throw new Error('Failed to process any images');
       }
 
-      // Call the edge function
-      const { data, error } = await supabase.functions.invoke('vision-guide', {
-        body: { images: imageData }
+      const data = await fetchEdgeFunctionJson<{ guide: string }>("vision-guide", {
+        images: imageData,
+        customApiKey: getStoredApiKey("text"),
       });
 
-      if (error) {
-        throw new Error(error.message || 'Failed to connect to vision API');
-      }
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
-      
       if (!data.guide || !data.guide.trim()) {
         throw new Error('No guide content was generated');
       }
@@ -152,9 +145,16 @@ export default function VisionGuide() {
 
       toast.success("Guide generated successfully!");
     } catch (error: unknown) {
-      console.error("Vision guide error:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to generate guide";
-      toast.error(errorMessage);
+      const errorStatus = error instanceof EdgeFunctionError ? error.status : 0;
+
+      if (errorStatus === 401 || errorStatus === 403) {
+        toast.error("Your Gemini API key is invalid or unauthorized. Update it in Settings.");
+      } else if (errorStatus === 429) {
+        toast.error("Gemini rate limit reached. Please wait a moment and try again.");
+      } else {
+        toast.error(errorMessage);
+      }
     } finally {
       setIsGenerating(false);
     }

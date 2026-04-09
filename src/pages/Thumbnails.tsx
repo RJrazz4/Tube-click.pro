@@ -7,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
+import { getStoredApiKey } from "@/lib/byok";
+import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/lib/edgeFunctionClient";
 import { cn } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsImage } from "@/lib/export";
 
@@ -75,24 +76,14 @@ export default function Thumbnails() {
 
     try {
       if (useAI) {
-        // Use AI image generation via edge function
-        const { data, error } = await supabase.functions.invoke('generate-thumbnail', {
-          body: { 
-            title: trimmedTitle, 
-            emotion, 
-            style, 
-            aspectRatio,
-            count: 4
-          }
+        const data = await fetchEdgeFunctionJson<{ thumbnails: Array<string | null> }>("generate-thumbnail", {
+          title: trimmedTitle,
+          emotion,
+          style,
+          aspectRatio,
+          count: 4,
+          customApiKey: getStoredApiKey("image"),
         });
-
-        if (error) {
-          throw new Error(error.message || 'Failed to connect to thumbnail generator');
-        }
-        
-        if (data.error) {
-          throw new Error(data.error);
-        }
 
         if (data.thumbnails && Array.isArray(data.thumbnails) && data.thumbnails.length > 0) {
           const newStates: ThumbnailState[] = data.thumbnails.map((url: string | null) => ({
@@ -197,9 +188,16 @@ export default function Thumbnails() {
         }
       }
     } catch (error: unknown) {
-      console.error("Thumbnail generation error:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to generate thumbnails";
-      toast.error(errorMessage);
+      const errorStatus = error instanceof EdgeFunctionError ? error.status : 0;
+
+      if (errorStatus === 401 || errorStatus === 403) {
+        toast.error("Your Fal.ai API key is invalid or unauthorized. Update it in Settings.");
+      } else if (errorStatus === 429) {
+        toast.error("Fal.ai rate limit reached. Please wait a moment and try again.");
+      } else {
+        toast.error(errorMessage);
+      }
       
       // Mark all as error
       setThumbnailStates(prev => prev.map(s => 

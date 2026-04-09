@@ -5,36 +5,69 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const GEMINI_MODEL = "gemini-2.0-flash";
+
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function extractGeminiText(data: any) {
+  return data?.candidates?.[0]?.content?.parts
+    ?.map((part: { text?: string }) => part.text || "")
+    .join("\n")
+    .trim();
+}
+
+function cleanupJson(value: string) {
+  return value.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+}
+
+function normalizeStringArray(values: unknown, fallback: string[]) {
+  if (!Array.isArray(values)) return fallback;
+
+  const normalized = values
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+async function readGeminiError(response: Response) {
+  try {
+    const data = await response.json();
+    return data?.error?.message || "Gemini request failed.";
+  } catch {
+    return await response.text() || "Gemini request failed.";
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { topic, platform, style, language = "hinglish" } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY is not configured");
-      return new Response(JSON.stringify({ error: "Server configuration error. Please contact support." }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const { topic, platform, style, language = "hinglish", customApiKey } = await req.json();
+    const geminiApiKey =
+      (typeof customApiKey === "string" ? customApiKey.trim() : "") ||
+      Deno.env.get("GEMINI_API_KEY") ||
+      Deno.env.get("GOOGLE_AI_API_KEY") ||
+      "";
+
+    if (!geminiApiKey) {
+      return jsonResponse({ error: "Gemini API key not configured. Add your key in Settings to generate content." }, 400);
     }
 
-    // Input validation
     if (!topic || typeof topic !== 'string' || topic.trim().length < 3) {
-      return new Response(JSON.stringify({ error: "Topic is required and must be at least 3 characters." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Topic is required and must be at least 3 characters." }, 400);
     }
 
     if (topic.length > 500) {
-      return new Response(JSON.stringify({ error: "Topic too long. Maximum 500 characters allowed." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Topic too long. Maximum 500 characters allowed." }, 400);
     }
 
     const sanitizedTopic = topic.trim().slice(0, 500);
@@ -118,69 +151,56 @@ Requirements:
 IMPORTANT: The script must be ready-to-read voiceover text. No editing needed.
 Make content highly engaging with power words and emotional triggers.`;
 
-    console.log(`Generating ${language} content for topic:`, sanitizedTopic);
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(geminiApiKey)}`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
+        systemInstruction: {
+          parts: [{ text: systemPrompt }],
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: userPrompt }],
+          },
         ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.9,
+        },
       }),
     });
 
     if (!response.ok) {
+      const errorMessage = await readGeminiError(response);
+
+      if (response.status === 400 || response.status === 401 || response.status === 403) {
+        return jsonResponse({ error: "Invalid Gemini API key or access denied. Update your key in Settings." }, 401);
+      }
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please wait 30 seconds and try again." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonResponse({ error: "Gemini rate limit exceeded. Please wait and try again." }, 429);
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Credits exhausted. Please add funds to your workspace." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error(`AI service temporarily unavailable. Please try again.`);
+
+      return jsonResponse({ error: errorMessage || "Gemini content generation failed." }, 500);
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    const content = extractGeminiText(data);
     
     if (!content) {
-      throw new Error("Empty response from AI. Please try again.");
+      return jsonResponse({ error: "Empty response from Gemini. Please try again." }, 502);
     }
-    
-    console.log("AI response received:", content?.substring(0, 200));
 
-    // Parse the JSON response
-    let parsedContent;
+    let parsedContent: any;
     try {
-      // Try to extract JSON from the response (handle markdown code blocks)
-      let jsonStr = content;
-      if (content.includes("```json")) {
-        jsonStr = content.split("```json")[1].split("```")[0];
-      } else if (content.includes("```")) {
-        jsonStr = content.split("```")[1].split("```")[0];
-      }
-      parsedContent = JSON.parse(jsonStr.trim());
-      
-      // Validate required fields
+      parsedContent = JSON.parse(cleanupJson(content));
+
       if (!parsedContent.titles || !Array.isArray(parsedContent.titles) || parsedContent.titles.length === 0) {
         throw new Error("Invalid titles format");
       }
-    } catch (e) {
-      console.error("Failed to parse AI response as JSON:", e);
-      // Return a structured fallback with the raw content
+    } catch {
       parsedContent = {
         titles: [`🔥 ${topic} - Ye Dekho! You Won't Believe This!`],
         hooks: ["Kya tumne kabhi socha hai ki ye kaise hota hai? Aaj main tumhe bataunga..."],
@@ -190,15 +210,18 @@ Make content highly engaging with power words and emotional triggers.`;
       };
     }
 
-    return new Response(JSON.stringify(parsedContent), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return jsonResponse({
+      titles: normalizeStringArray(parsedContent.titles, [`🔥 ${sanitizedTopic}`]).slice(0, 5),
+      hooks: normalizeStringArray(parsedContent.hooks, ["Start with a shocking truth, then reveal the full story."]).slice(0, 10),
+      script: typeof parsedContent.script === "string" && parsedContent.script.trim() ? parsedContent.script.trim() : content,
+      hashtags: normalizeStringArray(parsedContent.hashtags, [`#${sanitizedTopic.replace(/\s+/g, "")}`, "#viral", "#youtube"]).slice(0, 10),
+      description:
+        typeof parsedContent.description === "string" && parsedContent.description.trim()
+          ? parsedContent.description.trim()
+          : `${sanitizedTopic} explained with a high-retention script and SEO-ready description.`,
     });
   } catch (error: unknown) {
-    console.error("Error in generate-content function:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: errorMessage }, 500);
   }
 });

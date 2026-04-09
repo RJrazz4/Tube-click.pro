@@ -23,6 +23,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
+import { getStoredApiKey } from "@/lib/byok";
+import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/lib/edgeFunctionClient";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 import JSZip from "jszip";
@@ -127,25 +129,10 @@ export default function Storyboard() {
     setScenes([]);
 
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-storyboard`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ script }),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to analyze script');
-      }
-
-      const data = await response.json();
+      const data = await fetchEdgeFunctionJson<{ scenes: Scene[] }>("analyze-storyboard", {
+        script,
+        customApiKey: getStoredApiKey("text"),
+      });
       
       // Dynamic scene count (4-10)
       const analyzedScenes = (data.scenes || []).slice(0, 10).map((scene: Scene) => ({
@@ -158,9 +145,16 @@ export default function Storyboard() {
       toast.success(`Identified ${analyzedScenes.length} story-critical scenes!`);
 
     } catch (error) {
-      console.error("Analysis error:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to analyze script";
-      toast.error(errorMessage);
+      const errorStatus = error instanceof EdgeFunctionError ? error.status : 0;
+
+      if (errorStatus === 401 || errorStatus === 403) {
+        toast.error("Your Gemini API key is invalid or unauthorized. Update it in Settings.");
+      } else if (errorStatus === 429) {
+        toast.error("Gemini rate limit reached. Please wait a moment and try again.");
+      } else {
+        toast.error(errorMessage);
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -195,39 +189,21 @@ export default function Storyboard() {
       : createFallbackPrompt(scene, currentRetryCount);
 
     try {
-      // Create timeout promise
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Scene generation timed out')), SCENE_TIMEOUT);
-      });
+      const timeoutId = window.setTimeout(() => {
+        abortControllerRef.current?.abort();
+      }, SCENE_TIMEOUT);
 
-      // Create fetch promise
-      const fetchPromise = fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-storyboard-image`,
+      const data = await fetchEdgeFunctionJson<{ imageUrl: string }>(
+        "generate-storyboard-image",
         {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ 
-            prompt: promptToUse,
-            sceneNumber: scene.scene_number,
-            customApiKey: localStorage.getItem("tubegenius_admin_config") ? (JSON.parse(localStorage.getItem("tubegenius_admin_config") || "{}").image_api_key || undefined) : undefined,
-          }),
-          signal: abortControllerRef.current.signal
-        }
+          prompt: promptToUse,
+          sceneNumber: scene.scene_number,
+          customApiKey: getStoredApiKey("image"),
+        },
+        abortControllerRef.current.signal,
       );
 
-      // Race between timeout and fetch
-      const response = await Promise.race([fetchPromise, timeoutPromise]);
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to generate image');
-      }
-
-      const data = await response.json();
+      clearTimeout(timeoutId);
       
       if (!data.imageUrl) {
         throw new Error('No image returned from API');
@@ -241,15 +217,16 @@ export default function Storyboard() {
       return true;
 
     } catch (error) {
-      console.error(`Error generating scene ${scene.scene_number} (attempt ${currentRetryCount + 1}):`, error);
-      
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const isAbortError = error instanceof DOMException && error.name === "AbortError";
+      const errorMessage = isAbortError
+        ? 'Scene generation timed out'
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
       const isTimeout = errorMessage.includes('timed out');
       
       // Check if we should retry
       if (currentRetryCount < MAX_RETRIES) {
-        console.log(`${isTimeout ? 'Timeout' : 'Error'} - Retrying scene ${scene.scene_number} (attempt ${currentRetryCount + 2}/${MAX_RETRIES + 1})`);
-        
         // Update retry count and status
         setScenes(prev => prev.map((s, i) => 
           i === sceneIndex ? { 

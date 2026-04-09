@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { getStoredApiKey } from "@/lib/byok";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { VoiceVerificationModal } from "@/components/VoiceVerificationModal";
@@ -103,6 +104,7 @@ export default function VoiceStudio() {
     animateVisualizer();
 
     try {
+      const customApiKey = getStoredApiKey("voice");
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
         {
@@ -118,14 +120,26 @@ export default function VoiceStudio() {
             stability: stability[0],
             similarityBoost: 0.75,
             speed: speed[0],
-            customApiKey: localStorage.getItem("elevenlabs-api-key") || undefined,
+            customApiKey,
           }),
         }
       );
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to generate audio');
+        let errorMessage = 'Failed to generate audio';
+
+        try {
+          const error = await response.json();
+          errorMessage = error.error || errorMessage;
+        } catch {
+          errorMessage = await response.text() || errorMessage;
+        }
+
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Your voice API key is invalid or unauthorized. Update it in Settings.");
+        }
+
+        throw new Error(errorMessage);
       }
 
       const audioBlob = await response.blob();
@@ -165,7 +179,6 @@ export default function VoiceStudio() {
       toast.success("Cinematic voiceover generated!");
 
     } catch (error) {
-      console.error("Voice engine error:", error);
       toast.error(error instanceof Error ? error.message : "Failed to generate voiceover");
       stopVisualizer();
     } finally {
@@ -236,7 +249,7 @@ export default function VoiceStudio() {
       }
       
       // Check if user has their own key — if yes, generate directly (no ads)
-      const userKey = localStorage.getItem("elevenlabs-api-key");
+      const userKey = getStoredApiKey("voice");
       if (userKey && userKey.trim()) {
         generateElevenLabsAudio();
       } else {
