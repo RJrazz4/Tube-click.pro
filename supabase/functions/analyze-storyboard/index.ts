@@ -6,35 +6,61 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const GEMINI_MODEL = "gemini-2.0-flash";
+
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function extractGeminiText(data: any) {
+  return data?.candidates?.[0]?.content?.parts
+    ?.map((part: { text?: string }) => part.text || '')
+    .join('\n')
+    .trim();
+}
+
+function cleanupJson(value: string) {
+  return value.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+}
+
+async function readGeminiError(response: Response) {
+  try {
+    const data = await response.json();
+    return data?.error?.message || 'Gemini request failed.';
+  } catch {
+    return await response.text() || 'Gemini request failed.';
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { script } = await req.json();
-    
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    const { script, customApiKey } = await req.json();
+
+    const geminiApiKey =
+      (typeof customApiKey === 'string' ? customApiKey.trim() : '') ||
+      Deno.env.get('GEMINI_API_KEY') ||
+      Deno.env.get('GOOGLE_AI_API_KEY') ||
+      '';
+
+    if (!geminiApiKey) {
+      return jsonResponse({ error: 'Gemini API key not configured. Add your key in Settings to analyze storyboards.' }, 400);
     }
 
     if (!script || !script.trim()) {
-      return new Response(
-        JSON.stringify({ error: 'Script is required. Please paste your video script.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ error: 'Script is required. Please paste your video script.' }, 400);
     }
 
-    // Validate script length (minimum 100 characters for meaningful analysis)
     if (script.trim().length < 100) {
-      return new Response(
-        JSON.stringify({ error: 'Script too short. Please provide at least 100 characters for meaningful analysis.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse({ error: 'Script too short. Please provide at least 100 characters for meaningful analysis.' }, 400);
     }
 
-    // Limit script length to prevent API overuse (max ~10,000 characters)
     const trimmedScript = script.slice(0, 10000);
 
     console.log('Analyzing script for story beats...');
@@ -81,19 +107,19 @@ Examples:
 
 Return ONLY valid JSON array with no markdown formatting.`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(geminiApiKey)}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { 
-            role: 'user', 
-            content: `Analyze this script and extract 4 to 10 story-critical scenes for cinematic visualization (choose count based on script length/complexity). Return as JSON array.
+        systemInstruction: {
+          parts: [{ text: systemPrompt }],
+        },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: `Analyze this script and extract 4 to 10 story-critical scenes for cinematic visualization (choose count based on script length/complexity). Return as JSON array.
 
 SCRIPT:
 ${trimmedScript}
@@ -114,57 +140,52 @@ Return format:
 ]
 
 CRITICAL: Return 4-10 scenes based on script complexity. Each scene MUST be visually powerful and story-critical.`
-          }
+            }],
+          },
         ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.7,
+        },
       }),
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI gateway error:', response.status, errorText);
-      
+      const errorMessage = await readGeminiError(response);
+
+      if (response.status === 400 || response.status === 401 || response.status === 403) {
+        return jsonResponse({ error: 'Invalid Gemini API key or access denied. Update your key in Settings.' }, 401);
+      }
       if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please wait 30 seconds and try again.' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return jsonResponse({ error: 'Gemini rate limit exceeded. Please wait and try again.' }, 429);
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'Credits exhausted. Please add funds to continue.' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      throw new Error(`AI service temporarily unavailable. Please try again.`);
+
+      return jsonResponse({ error: errorMessage || 'Storyboard analysis failed.' }, 500);
     }
 
     const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '';
+    let content = extractGeminiText(data) || '';
     
     if (!content) {
-      throw new Error('Empty response from AI. Please try again.');
+      return jsonResponse({ error: 'Empty response from Gemini. Please try again.' }, 502);
     }
     
-    // Clean up the response
-    content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    content = cleanupJson(content);
     
     let scenes;
     try {
       scenes = JSON.parse(content);
+      scenes = Array.isArray(scenes) ? scenes : scenes?.scenes;
       
-      // Validate scenes array
       if (!Array.isArray(scenes) || scenes.length === 0) {
         throw new Error('Invalid scenes format');
       }
       
-      // Ensure 4-10 scenes
       scenes = scenes.slice(0, 10);
       if (scenes.length < 4) {
         throw new Error('Too few scenes generated');
       }
       
-      // Validate each scene has required fields
       scenes = scenes.map((scene, idx) => ({
         beat_type: scene.beat_type || `Scene ${idx + 1}`,
         scene_number: idx + 1,
@@ -177,24 +198,14 @@ CRITICAL: Return 4-10 scenes based on script complexity. Each scene MUST be visu
         motion_prompt: scene.motion_prompt || 'Slow cinematic movement, atmospheric'
       }));
       
-    } catch (parseError) {
-      console.error('Failed to parse scenes:', content);
-      throw new Error('Failed to analyze script. Please try again with a clearer script.');
+    } catch {
+      return jsonResponse({ error: 'Failed to analyze script. Please try again with a clearer script.' }, 502);
     }
 
-    console.log(`Successfully identified ${scenes.length} story-critical scenes`);
-
-    return new Response(
-      JSON.stringify({ scenes }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ scenes });
 
   } catch (error: unknown) {
-    console.error('Error in analyze-storyboard:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse({ error: errorMessage }, 500);
   }
 });

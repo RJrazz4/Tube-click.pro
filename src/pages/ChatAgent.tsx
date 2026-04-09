@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
+import { getStoredApiKey } from "@/lib/byok";
+import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/lib/edgeFunctionClient";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsText } from "@/lib/export";
 import { cleanScript } from "@/lib/scriptCleaner";
@@ -89,38 +90,13 @@ export default function ChatAgent() {
     try {
       setMessages((prev) => [...prev, { role: "assistant", content: `🎯 Analyzing your topic and generating ${languageLabel} content...` }]);
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-content`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ topic: trimmedTopic, platform, style, language }),
+      const data = await fetchEdgeFunctionJson<GeneratedContent>("generate-content", {
+        topic: trimmedTopic,
+        platform,
+        style,
+        language,
+        customApiKey: getStoredApiKey("text"),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        const errorMsg = data?.error || 'Content generation failed';
-        if (response.status === 402 || errorMsg.toLowerCase().includes('credits exhausted')) {
-          toast.error("AI credits exhausted. Please add funds to your workspace in Settings → Cloud & AI balance.");
-          setMessages((prev) => prev.slice(0, -1));
-          setIsGenerating(false);
-          return;
-        }
-        if (response.status === 429 || errorMsg.toLowerCase().includes('rate limit')) {
-          toast.error("Rate limit exceeded. Please wait 30 seconds and try again.");
-          setMessages((prev) => prev.slice(0, -1));
-          setIsGenerating(false);
-          return;
-        }
-        throw new Error(errorMsg);
-      }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
 
       // Validate response structure
       if (!data.titles || !Array.isArray(data.titles)) {
@@ -183,8 +159,16 @@ ${processedContent.description}
       setTopic("");
 
     } catch (error: unknown) {
-      console.error("Generation error:", error);
+      const errorStatus = error instanceof EdgeFunctionError ? error.status : 0;
       const errorMessage = error instanceof Error ? error.message : "Failed to generate content";
+
+      if (errorStatus === 401 || errorStatus === 403) {
+        toast.error("Your Gemini API key is invalid or unauthorized. Update it in Settings.");
+      } else if (errorStatus === 429) {
+        toast.error("Gemini rate limit reached. Please wait a moment and try again.");
+      } else {
+        toast.error(errorMessage);
+      }
       
       setMessages((prev) => {
         const updated = [...prev];
@@ -194,7 +178,6 @@ ${processedContent.description}
         };
         return updated;
       });
-      toast.error(errorMessage);
     } finally {
       setIsGenerating(false);
     }
