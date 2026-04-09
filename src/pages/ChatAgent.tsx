@@ -94,10 +94,24 @@ export default function ChatAgent() {
       });
 
       if (error) {
-        throw new Error(error.message || 'Failed to connect to content generator');
+        // For non-2xx responses, the data may contain the error details
+        const errorMsg = data?.error || error.message || 'Failed to connect to content generator';
+        if (errorMsg.toLowerCase().includes('credits exhausted') || errorMsg.toLowerCase().includes('payment required')) {
+          toast.error("AI credits exhausted. Please add funds to your workspace in Settings → Cloud & AI balance.");
+          setMessages((prev) => prev.slice(0, -1));
+          setIsGenerating(false);
+          return;
+        }
+        if (errorMsg.toLowerCase().includes('rate limit')) {
+          toast.error("Rate limit exceeded. Please wait a moment and try again.");
+          setMessages((prev) => prev.slice(0, -1));
+          setIsGenerating(false);
+          return;
+        }
+        throw new Error(errorMsg);
       }
 
-      if (data.error) {
+      if (data?.error) {
         throw new Error(data.error);
       }
 
