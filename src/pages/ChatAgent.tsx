@@ -89,21 +89,28 @@ export default function ChatAgent() {
     try {
       setMessages((prev) => [...prev, { role: "assistant", content: `🎯 Analyzing your topic and generating ${languageLabel} content...` }]);
 
-      const { data, error } = await supabase.functions.invoke('generate-content', {
-        body: { topic: trimmedTopic, platform, style, language }
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-content`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ topic: trimmedTopic, platform, style, language }),
       });
 
-      if (error) {
-        // For non-2xx responses, the data may contain the error details
-        const errorMsg = data?.error || error.message || 'Failed to connect to content generator';
-        if (errorMsg.toLowerCase().includes('credits exhausted') || errorMsg.toLowerCase().includes('payment required')) {
+      const data = await response.json();
+
+      if (!response.ok) {
+        const errorMsg = data?.error || 'Content generation failed';
+        if (response.status === 402 || errorMsg.toLowerCase().includes('credits exhausted')) {
           toast.error("AI credits exhausted. Please add funds to your workspace in Settings → Cloud & AI balance.");
           setMessages((prev) => prev.slice(0, -1));
           setIsGenerating(false);
           return;
         }
-        if (errorMsg.toLowerCase().includes('rate limit')) {
-          toast.error("Rate limit exceeded. Please wait a moment and try again.");
+        if (response.status === 429 || errorMsg.toLowerCase().includes('rate limit')) {
+          toast.error("Rate limit exceeded. Please wait 30 seconds and try again.");
           setMessages((prev) => prev.slice(0, -1));
           setIsGenerating(false);
           return;
