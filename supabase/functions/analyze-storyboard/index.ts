@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const GEMINI_MODEL = "gemini-2.0-flash";
+const RETRY_DELAYS = [2000, 5000, 10000];
 
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -24,6 +25,32 @@ function extractGeminiText(data: any) {
 
 function cleanupJson(value: string) {
   return value.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+}
+
+async function fetchGeminiWithRetry(url: string, body: unknown): Promise<Response> {
+  let lastResponse: Response | null = null;
+
+  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+    if (attempt > 0) {
+      const delay = RETRY_DELAYS[attempt - 1];
+      const jitter = delay * 0.2 * (Math.random() * 2 - 1);
+      await new Promise(r => setTimeout(r, Math.round(delay + jitter)));
+    }
+
+    lastResponse = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (lastResponse.ok || (lastResponse.status < 500 && lastResponse.status !== 429)) {
+      return lastResponse;
+    }
+
+    if (attempt === RETRY_DELAYS.length) return lastResponse;
+  }
+
+  return lastResponse!;
 }
 
 async function readGeminiError(response: Response) {
@@ -50,122 +77,61 @@ serve(async (req) => {
       '';
 
     if (!geminiApiKey) {
-      return jsonResponse({ error: 'Gemini API key not configured. Add your key in Settings to analyze storyboards.' }, 400);
+      return jsonResponse({ success: false, error: 'Gemini API key not configured. Add your key in Settings.', action: 'Open Ghost Admin and enter your Gemini API key.' }, 400);
     }
 
     if (!script || !script.trim()) {
-      return jsonResponse({ error: 'Script is required. Please paste your video script.' }, 400);
+      return jsonResponse({ success: false, error: 'Script is required.', action: 'Paste your video script.' }, 400);
     }
 
     if (script.trim().length < 100) {
-      return jsonResponse({ error: 'Script too short. Please provide at least 100 characters for meaningful analysis.' }, 400);
+      return jsonResponse({ success: false, error: 'Script too short. Minimum 100 characters.', action: 'Add more content to your script.' }, 400);
     }
 
     const trimmedScript = script.slice(0, 10000);
 
-    const systemPrompt = `You are an expert video storyboard analyst and cinematographer. Your job is to analyze scripts and identify the most visually powerful, story-critical moments for cinematic visualization.
+    const systemPrompt = `You are an expert video storyboard analyst and cinematographer. Analyze scripts and identify visually powerful, story-critical moments.
 
-STORY BEAT FRAMEWORK (Pick 6 from these):
-- Opening Hook: The attention-grabbing visual that pulls viewers in
-- Problem: The struggle, pain point, or challenge being addressed
-- Discovery: The "aha moment" or revelation
-- Method: The process, tutorial, or solution in action
-- Proof: Evidence, results, or testimonials
-- Transformation: The before/after or success moment
-- Call to Action: The inspiring final visual
+STORY BEAT FRAMEWORK (Pick 4-10 based on script complexity):
+- Opening Hook, Problem, Discovery, Method, Proof, Transformation, Call to Action
 
-CRITICAL RULES:
-1. Identify between 4 and 10 scenes depending on script length and complexity. Short scripts (under 500 chars) should get 4-5 scenes. Medium scripts get 6-7. Long scripts (2000+ chars) can get up to 10.
-2. Each scene MUST directly relate to a specific part of the script
-3. Pick only the MOST visually powerful moments
-4. Skip generic or dialogue-heavy moments that don't translate well visually
-5. Focus on action, emotion, and transformation
-6. Each scene must progress the story logically
+For EACH scene provide: beat_type, scene_number, who, what, emotion, location, camera_angle, visual_prompt, motion_prompt.
 
-For EACH scene, provide:
-- beat_type: Which story beat this represents
-- scene_number: Sequential number (1-6)
-- who: Detailed character description (age, appearance, clothing, expression)
-- what: The specific action happening (based on script content)
-- emotion: The dominant feeling (e.g., "shock and disbelief", "triumphant joy")
-- location: Detailed setting description with lighting
-- camera_angle: Cinematographic direction (e.g., "close-up", "wide establishing shot")
-- visual_prompt: Ready-to-use image generation prompt
-- motion_prompt: Camera/subject motion for video (e.g., "slow zoom in on face", "camera pans left revealing the scene")
+Return ONLY valid JSON array.`;
 
-VISUAL PROMPT FORMAT (use exactly):
-"Ultra realistic cinematic photography, 8K, professional DSLR, cinematic lighting, {location}, {character doing action}, {emotion on face}, {camera angle}, YouTube video quality, dramatic atmosphere, shallow depth of field, photorealistic, no blur, no text, no watermark"
-
-MOTION PROMPT FORMAT:
-"[Camera motion] while [subject action], [mood/atmosphere]"
-Examples:
-- "Slow push in on subject's face while they realize the truth, tension building"
-- "Wide crane shot descending as crowd gathers, anticipation rising"
-- "Handheld follow shot tracking subject walking, documentary feel"
-
-Return ONLY valid JSON array with no markdown formatting.`;
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(geminiApiKey)}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemPrompt }],
-        },
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: `Analyze this script and extract 4 to 10 story-critical scenes for cinematic visualization (choose count based on script length/complexity). Return as JSON array.
+    const userPrompt = `Analyze this script and extract 4-10 story-critical scenes. Return as JSON array.
 
 SCRIPT:
 ${trimmedScript}
 
-Return format:
-[
-  {
-    "beat_type": "Opening Hook",
-    "scene_number": 1,
-    "who": "young Indian man in his 20s with determined expression, wearing casual clothes",
-    "what": "staring at laptop screen showing declining graphs",
-    "emotion": "frustrated and overwhelmed",
-    "location": "modern home office at night, blue light from screen illuminating face",
-    "camera_angle": "close-up on face with screen reflection in eyes",
-    "visual_prompt": "Ultra realistic cinematic photography, 8K, professional DSLR, cinematic lighting, modern home office at night, young Indian man staring at laptop with declining graphs, frustrated and overwhelmed expression, close-up with blue screen light reflecting in eyes, YouTube video quality, dramatic atmosphere, shallow depth of field, photorealistic, no blur, no text, no watermark",
-    "motion_prompt": "Slow push in on subject's face while screen flickers, tension building"
-  }
-]
+Return format: [{ "beat_type": "...", "scene_number": 1, "who": "...", "what": "...", "emotion": "...", "location": "...", "camera_angle": "...", "visual_prompt": "Ultra realistic cinematic photography, 8K, ...", "motion_prompt": "..." }]`;
 
-CRITICAL: Return 4-10 scenes based on script complexity. Each scene MUST be visually powerful and story-critical.`
-            }],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.7,
-        },
-      }),
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
+
+    const response = await fetchGeminiWithRetry(geminiUrl, {
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
     });
 
     if (!response.ok) {
       const errorMessage = await readGeminiError(response);
 
       if (response.status === 400 || response.status === 401 || response.status === 403) {
-        return jsonResponse({ error: 'Invalid Gemini API key or access denied. Update your key in Settings.' }, 401);
+        return jsonResponse({ success: false, error: 'Invalid Gemini API key or access denied.', action: 'Update your key in Settings.' }, 401);
       }
       if (response.status === 429) {
-        return jsonResponse({ error: 'Gemini rate limit exceeded. Please wait and try again.' }, 429);
+        return jsonResponse({ success: false, error: 'Gemini rate limit exceeded after retries.', action: 'Wait 30 seconds and try again.' }, 429);
       }
 
-      return jsonResponse({ error: errorMessage || 'Storyboard analysis failed.' }, 500);
+      return jsonResponse({ success: false, error: errorMessage, action: 'Try again in a moment.' }, 500);
     }
 
     const data = await response.json();
     let content = extractGeminiText(data) || '';
     
     if (!content) {
-      return jsonResponse({ error: 'Empty response from Gemini. Please try again.' }, 502);
+      return jsonResponse({ success: false, error: 'Empty response from Gemini.', action: 'Try again.' }, 502);
     }
     
     content = cleanupJson(content);
@@ -180,11 +146,9 @@ CRITICAL: Return 4-10 scenes based on script complexity. Each scene MUST be visu
       }
       
       scenes = scenes.slice(0, 10);
-      if (scenes.length < 4) {
-        throw new Error('Too few scenes generated');
-      }
+      if (scenes.length < 4) throw new Error('Too few scenes');
       
-      scenes = scenes.map((scene, idx) => ({
+      scenes = scenes.map((scene: any, idx: number) => ({
         beat_type: scene.beat_type || `Scene ${idx + 1}`,
         scene_number: idx + 1,
         who: scene.who || 'Person',
@@ -192,18 +156,18 @@ CRITICAL: Return 4-10 scenes based on script complexity. Each scene MUST be visu
         emotion: scene.emotion || 'Neutral',
         location: scene.location || 'Indoor setting',
         camera_angle: scene.camera_angle || 'Medium shot',
-        visual_prompt: scene.visual_prompt || `Cinematic photo, ${scene.who || 'person'}, ${scene.emotion || 'neutral'} expression`,
-        motion_prompt: scene.motion_prompt || 'Slow cinematic movement, atmospheric'
+        visual_prompt: scene.visual_prompt || `Cinematic photo, ${scene.who || 'person'}, ${scene.emotion || 'neutral'}`,
+        motion_prompt: scene.motion_prompt || 'Slow cinematic movement'
       }));
       
     } catch {
-      return jsonResponse({ error: 'Failed to analyze script. Please try again with a clearer script.' }, 502);
+      return jsonResponse({ success: false, error: 'Failed to analyze script.', action: 'Try again with a clearer script.' }, 502);
     }
 
     return jsonResponse({ scenes });
 
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    return jsonResponse({ error: errorMessage }, 500);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return jsonResponse({ success: false, error: errorMessage, action: 'Try again or check your API key.' }, 500);
   }
 });

@@ -27,6 +27,8 @@ const VOICES: Record<string, string> = {
   'bill': 'pqHfZKP75CvOlQylNhV4',
 };
 
+const RETRY_DELAYS = [2000, 5000];
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -35,26 +37,25 @@ serve(async (req) => {
   try {
     const { text, voiceId, stability, similarityBoost, speed, customApiKey } = await req.json();
 
-    // BYOK: prefer client-provided key, fallback to server secret
-    const ELEVENLABS_API_KEY = customApiKey || Deno.env.get('ELEVENLABS_API_KEY');
+    const ELEVENLABS_API_KEY = (typeof customApiKey === "string" ? customApiKey.trim() : "") || Deno.env.get('ELEVENLABS_API_KEY') || "";
 
     if (!ELEVENLABS_API_KEY) {
       return new Response(
-        JSON.stringify({ error: 'ElevenLabs API key not configured. Please add your key in Settings.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: 'ElevenLabs API key not configured.', action: 'Add your ElevenLabs key in Settings.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (!text || typeof text !== 'string' || !text.trim()) {
       return new Response(
-        JSON.stringify({ error: 'Text is required.' }),
+        JSON.stringify({ success: false, error: 'Text is required.', action: 'Enter text to convert to speech.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (text.length > 5000) {
       return new Response(
-        JSON.stringify({ error: 'Text too long. Maximum 5000 characters.' }),
+        JSON.stringify({ success: false, error: 'Text too long (max 5000 chars).', action: 'Shorten your text.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -62,48 +63,77 @@ serve(async (req) => {
     const voiceKey = voiceId?.toLowerCase();
     const resolvedVoiceId = VOICES[voiceKey] || voiceId || VOICES['george'];
 
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${resolvedVoiceId}?output_format=mp3_44100_128`,
-      {
-        method: 'POST',
-        headers: {
-          'xi-api-key': ELEVENLABS_API_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text,
-          model_id: 'eleven_multilingual_v2',
-          voice_settings: {
-            stability: stability ?? 0.5,
-            similarity_boost: similarityBoost ?? 0.75,
-            style: 0.5,
-            use_speaker_boost: true,
-            speed: speed ?? 1.0,
-          },
-        }),
-      }
-    );
+    // Retry loop for ElevenLabs
+    let lastError = 'Voice generation failed.';
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return new Response(
-        JSON.stringify({ error: `Voice API error: ${response.status}. ${customApiKey ? 'Check your API key in Settings.' : ''}` }),
-        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+      if (attempt > 0) {
+        await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt - 1]));
+      }
+
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${resolvedVoiceId}?output_format=mp3_44100_128`,
+        {
+          method: 'POST',
+          headers: {
+            'xi-api-key': ELEVENLABS_API_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text,
+            model_id: 'eleven_multilingual_v2',
+            voice_settings: {
+              stability: stability ?? 0.5,
+              similarity_boost: similarityBoost ?? 0.75,
+              style: 0.5,
+              use_speaker_boost: true,
+              speed: speed ?? 1.0,
+            },
+          }),
+        }
       );
+
+      if (response.ok) {
+        const audioBuffer = await response.arrayBuffer();
+        return new Response(audioBuffer, {
+          headers: { ...corsHeaders, 'Content-Type': 'audio/mpeg' },
+        });
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Invalid ElevenLabs API key.', action: 'Update your ElevenLabs key in Settings.' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (response.status === 429 && attempt < RETRY_DELAYS.length) {
+        continue;
+      }
+
+      try {
+        const errorData = await response.json();
+        lastError = errorData?.detail?.message || errorData?.error || `Voice API error: ${response.status}`;
+      } catch {
+        lastError = `Voice API error: ${response.status}`;
+      }
+
+      if (attempt === RETRY_DELAYS.length) {
+        return new Response(
+          JSON.stringify({ success: false, error: lastError, action: 'Try again or check your API key.' }),
+          { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
-    const audioBuffer = await response.arrayBuffer();
-
-    return new Response(audioBuffer, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'audio/mpeg',
-      },
-    });
+    return new Response(
+      JSON.stringify({ success: false, error: lastError, action: 'Try again.' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ success: false, error: errorMessage, action: 'Try again.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

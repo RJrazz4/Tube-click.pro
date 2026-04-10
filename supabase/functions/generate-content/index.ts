@@ -6,6 +6,7 @@ const corsHeaders = {
 };
 
 const GEMINI_MODEL = "gemini-2.0-flash";
+const RETRY_DELAYS = [2000, 5000, 10000];
 
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -27,13 +28,40 @@ function cleanupJson(value: string) {
 
 function normalizeStringArray(values: unknown, fallback: string[]) {
   if (!Array.isArray(values)) return fallback;
-
   const normalized = values
     .filter((value): value is string => typeof value === "string")
     .map((value) => value.trim())
     .filter(Boolean);
-
   return normalized.length > 0 ? normalized : fallback;
+}
+
+async function fetchGeminiWithRetry(url: string, body: unknown): Promise<Response> {
+  let lastResponse: Response | null = null;
+
+  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+    if (attempt > 0) {
+      const delay = RETRY_DELAYS[attempt - 1];
+      const jitter = delay * 0.2 * (Math.random() * 2 - 1);
+      await new Promise(r => setTimeout(r, Math.round(delay + jitter)));
+    }
+
+    lastResponse = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    // Only retry on 429 or 5xx
+    if (lastResponse.ok || (lastResponse.status < 500 && lastResponse.status !== 429)) {
+      return lastResponse;
+    }
+
+    if (attempt === RETRY_DELAYS.length) {
+      return lastResponse;
+    }
+  }
+
+  return lastResponse!;
 }
 
 async function readGeminiError(response: Response) {
@@ -59,69 +87,42 @@ serve(async (req) => {
       "";
 
     if (!geminiApiKey) {
-      return jsonResponse({ error: "Gemini API key not configured. Add your key in Settings to generate content." }, 400);
+      return jsonResponse({ success: false, error: "Gemini API key not configured. Add your key in Settings.", action: "Open the Ghost Admin panel and enter your Gemini API key." }, 400);
     }
 
     if (!topic || typeof topic !== 'string' || topic.trim().length < 3) {
-      return jsonResponse({ error: "Topic is required and must be at least 3 characters." }, 400);
+      return jsonResponse({ success: false, error: "Topic is required and must be at least 3 characters.", action: "Enter a longer topic." }, 400);
     }
 
     if (topic.length > 500) {
-      return jsonResponse({ error: "Topic too long. Maximum 500 characters allowed." }, 400);
+      return jsonResponse({ success: false, error: "Topic too long. Maximum 500 characters allowed.", action: "Shorten your topic." }, 400);
     }
 
     const sanitizedTopic = topic.trim().slice(0, 500);
     
-    // Language instruction based on selection
     let languageInstruction = "";
     switch (language.toLowerCase()) {
       case "hindi":
-        languageInstruction = `
-CRITICAL LANGUAGE REQUIREMENT: Write EVERYTHING in pure Hindi (Devanagari script).
-- All titles, hooks, script, and description must be in Hindi
-- Use Hindi idioms and expressions
-- Appeal to Indian audience emotions`;
+        languageInstruction = `CRITICAL LANGUAGE REQUIREMENT: Write EVERYTHING in pure Hindi (Devanagari script). Use Hindi idioms. Appeal to Indian audience.`;
         break;
       case "english":
-        languageInstruction = `
-LANGUAGE: Write everything in fluent English.
-- Use powerful English vocabulary
-- Appeal to global audience`;
+        languageInstruction = `LANGUAGE: Write everything in fluent English. Use powerful vocabulary. Appeal to global audience.`;
         break;
       case "hinglish":
       default:
-        languageInstruction = `
-CRITICAL LANGUAGE REQUIREMENT: Write EVERYTHING in Cinematic Hinglish.
-Hinglish = Natural blend of Hindi + English (Romanized Hindi script, not Devanagari)
-
-HINGLISH STYLE RULES:
-- Mix Hindi and English naturally: "Yaar, ye story tumhari zindagi change kar degi"
-- Use emotional Hindi words: "dard", "pyaar", "sapna", "takleef", "himmat"
-- Include dramatic pauses: "Aur phir... kuch aisa hua jo maine kabhi socha nahi tha"
-- Use relatable Indian expressions: "Bhai", "Yaar", "Arre", "Dekho"
-- Write like you're telling a story to a friend
-- Make it sound like popular Indian YouTubers (Dhruv Rathee, Sandeep Maheshwari style)
-
-TONE: Deep, emotional, slow narration - like a cinematic documentary
-- Build suspense slowly
-- Use dramatic pauses with "..."
-- Create emotional connection with viewers
-- Sound philosophical and thoughtful`;
+        languageInstruction = `CRITICAL LANGUAGE REQUIREMENT: Write EVERYTHING in Cinematic Hinglish (Romanized Hindi + English blend).
+STYLE: Mix Hindi and English naturally. Use emotional Hindi words. Include dramatic pauses. Sound like popular Indian YouTubers.
+TONE: Deep, emotional, slow narration - cinematic documentary style.`;
         break;
     }
 
-    const systemPrompt = `You are a viral YouTube content strategist specializing in creating high-retention, emotionally powerful content for Indian audiences.
+    const systemPrompt = `You are a viral YouTube content strategist for Indian audiences.
 
 ${languageInstruction}
 
-Your task is to generate content that:
-- Creates instant curiosity and hooks viewers in the first 3 seconds
-- Uses psychological triggers like mystery, controversy, transformation
-- Is optimized for YouTube algorithm (CTR, watch time, engagement)
-- Appeals deeply to emotions and creates FOMO
-- Sounds natural and conversational, not robotic
+Generate content that creates instant curiosity, uses psychological triggers, and is optimized for YouTube algorithm.
 
-You MUST respond in the following exact JSON format (no markdown, just raw JSON):
+Respond in exact JSON format (no markdown):
 {
   "titles": ["title1", "title2", "title3", "title4", "title5"],
   "hooks": ["hook1", "hook2", "hook3", "hook4", "hook5", "hook6", "hook7", "hook8", "hook9", "hook10"],
@@ -130,98 +131,76 @@ You MUST respond in the following exact JSON format (no markdown, just raw JSON)
   "description": "Full video description with SEO keywords"
 }`;
 
-    const userPrompt = `Generate viral YouTube content for the following:
+    const userPrompt = `Generate viral YouTube content for:
 Topic: ${sanitizedTopic}
 Platform: ${platform || "YouTube"}
 Style: ${style || "Dramatic"}
 Language: ${language || "Hinglish"}
 
 Requirements:
-1. Generate 5 viral, clickbait (but honest) YouTube titles with emojis - ${language === "hinglish" ? "in Hinglish" : language === "hindi" ? "in Hindi" : "in English"}
-2. Generate 10 short hooks (2-3 sentences each) for Shorts that create instant curiosity
-3. Write a CLEAN 60-second script - ONLY pure voiceover narration text:
-   - NO timestamps like [00:00] or [0:15]
-   - NO production markers like [B-ROLL], [CUT TO], [TRANSITION]
-   - NO camera directions
-   - ONLY the words that will be spoken
-   - Deep, emotional, slow-paced narration style
-4. Generate 10 trending hashtags relevant to the topic
-5. Write an SEO-optimized video description
+1. 5 viral titles with emojis
+2. 10 short hooks (2-3 sentences)
+3. CLEAN 60-second script - ONLY pure voiceover text (no timestamps, no markers)
+4. 10 trending hashtags
+5. SEO-optimized description
 
-IMPORTANT: The script must be ready-to-read voiceover text. No editing needed.
-Make content highly engaging with power words and emotional triggers.`;
+Script must be ready-to-read voiceover text.`;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(geminiApiKey)}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemPrompt }],
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: userPrompt }],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.9,
-        },
-      }),
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
+
+    const response = await fetchGeminiWithRetry(geminiUrl, {
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: { responseMimeType: "application/json", temperature: 0.9 },
     });
 
     if (!response.ok) {
       const errorMessage = await readGeminiError(response);
 
       if (response.status === 400 || response.status === 401 || response.status === 403) {
-        return jsonResponse({ error: "Invalid Gemini API key or access denied. Update your key in Settings." }, 401);
+        return jsonResponse({ success: false, error: "Invalid Gemini API key or access denied.", action: "Update your Gemini API key in Settings." }, 401);
       }
       if (response.status === 429) {
-        return jsonResponse({ error: "Gemini rate limit exceeded. Please wait and try again." }, 429);
+        return jsonResponse({ success: false, error: "Gemini rate limit exceeded after retries.", action: "Wait 30 seconds and try again, or check your Gemini API quota." }, 429);
       }
 
-      return jsonResponse({ error: errorMessage || "Gemini content generation failed." }, 500);
+      return jsonResponse({ success: false, error: errorMessage || "Gemini content generation failed.", action: "Try again in a moment." }, 500);
     }
 
     const data = await response.json();
     const content = extractGeminiText(data);
     
     if (!content) {
-      return jsonResponse({ error: "Empty response from Gemini. Please try again." }, 502);
+      return jsonResponse({ success: false, error: "Empty response from Gemini.", action: "Try again with a different topic." }, 502);
     }
 
     let parsedContent: any;
     try {
       parsedContent = JSON.parse(cleanupJson(content));
-
       if (!parsedContent.titles || !Array.isArray(parsedContent.titles) || parsedContent.titles.length === 0) {
         throw new Error("Invalid titles format");
       }
     } catch {
       parsedContent = {
-        titles: [`🔥 ${topic} - Ye Dekho! You Won't Believe This!`],
-        hooks: ["Kya tumne kabhi socha hai ki ye kaise hota hai? Aaj main tumhe bataunga..."],
+        titles: [`🔥 ${topic} - You Won't Believe This!`],
+        hooks: ["Kya tumne kabhi socha hai ki ye kaise hota hai?"],
         script: content || "Script generation in progress...",
-        hashtags: [`#${topic.replace(/\s+/g, "")}`, "#viral", "#trending", "#india", "#youtube"],
+        hashtags: [`#${topic.replace(/\s+/g, "")}`, "#viral", "#trending", "#youtube"],
         description: `${topic} ke baare mein jaano is amazing video mein!`
       };
     }
 
     return jsonResponse({
       titles: normalizeStringArray(parsedContent.titles, [`🔥 ${sanitizedTopic}`]).slice(0, 5),
-      hooks: normalizeStringArray(parsedContent.hooks, ["Start with a shocking truth, then reveal the full story."]).slice(0, 10),
+      hooks: normalizeStringArray(parsedContent.hooks, ["Start with a shocking truth."]).slice(0, 10),
       script: typeof parsedContent.script === "string" && parsedContent.script.trim() ? parsedContent.script.trim() : content,
-      hashtags: normalizeStringArray(parsedContent.hashtags, [`#${sanitizedTopic.replace(/\s+/g, "")}`, "#viral", "#youtube"]).slice(0, 10),
-      description:
-        typeof parsedContent.description === "string" && parsedContent.description.trim()
-          ? parsedContent.description.trim()
-          : `${sanitizedTopic} explained with a high-retention script and SEO-ready description.`,
+      hashtags: normalizeStringArray(parsedContent.hashtags, [`#${sanitizedTopic.replace(/\s+/g, "")}`, "#viral"]).slice(0, 10),
+      description: typeof parsedContent.description === "string" && parsedContent.description.trim()
+        ? parsedContent.description.trim()
+        : `${sanitizedTopic} - high-retention script with SEO-ready description.`,
     });
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    return jsonResponse({ error: errorMessage }, 500);
+    return jsonResponse({ success: false, error: errorMessage, action: "Try again or check your API key." }, 500);
   }
 });
