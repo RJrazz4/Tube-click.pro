@@ -5,10 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-type FalFailure = {
-  status: number;
-  message: string;
-};
+const RETRY_DELAYS = [2000, 5000];
 
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -30,99 +27,94 @@ function buildPrompt(title: string, emotion: string, style: string, ratio: strin
     `${style || "Modern"} style`,
     `${ratio} aspect ratio`,
     variation,
-    "single dominant subject",
-    "bold composition",
-    "high contrast cinematic lighting",
-    "vibrant color separation",
-    "professional YouTube thumbnail aesthetic",
-    "no text",
-    "no watermark",
-    "ultra detailed",
+    "single dominant subject, bold composition, high contrast cinematic lighting, vibrant color separation, professional YouTube thumbnail aesthetic, no text, no watermark, ultra detailed",
   ].join(", ");
 }
 
-async function readFailure(response: Response) {
-  try {
-    const data = await response.json();
-    return data?.error?.message || data?.detail || data?.error || "Thumbnail generation failed.";
-  } catch {
-    return await response.text() || "Thumbnail generation failed.";
-  }
-}
+async function generateThumbnail(prompt: string, apiKey: string, falSize: string): Promise<string> {
+  let lastError = "Thumbnail generation failed.";
 
-async function generateThumbnail(prompt: string, apiKey: string, falSize: string) {
-  const submitResponse = await fetch("https://queue.fal.run/fal-ai/fast-lightning-sdxl", {
-    method: "POST",
-    headers: {
-      Authorization: `Key ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      prompt,
-      image_size: falSize,
-      num_inference_steps: 4,
-      num_images: 1,
-      enable_safety_checker: false,
-    }),
-  });
+  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+    if (attempt > 0) {
+      await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt - 1]));
+    }
 
-  if (!submitResponse.ok) {
-    throw {
-      status: submitResponse.status,
-      message: await readFailure(submitResponse),
-    } satisfies FalFailure;
-  }
+    const submitResponse = await fetch("https://queue.fal.run/fal-ai/fast-lightning-sdxl", {
+      method: "POST",
+      headers: {
+        Authorization: `Key ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt,
+        image_size: falSize,
+        num_inference_steps: 4,
+        num_images: 1,
+        enable_safety_checker: false,
+      }),
+    });
 
-  const queueData = await submitResponse.json();
-  const requestId = queueData?.request_id;
+    if (submitResponse.status === 401 || submitResponse.status === 403) {
+      throw { status: 401, message: "Invalid Fal.ai API key." };
+    }
 
-  if (!requestId) {
-    throw { status: 502, message: "No request ID returned by Fal.ai." } satisfies FalFailure;
-  }
+    if (!submitResponse.ok) {
+      if (submitResponse.status === 429 && attempt < RETRY_DELAYS.length) continue;
+      lastError = `Fal.ai error: ${submitResponse.status}`;
+      if (attempt === RETRY_DELAYS.length) throw { status: submitResponse.status, message: lastError };
+      continue;
+    }
 
-  const startedAt = Date.now();
+    const queueData = await submitResponse.json();
+    const requestId = queueData?.request_id;
 
-  while (Date.now() - startedAt < 30000) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (!requestId) {
+      throw { status: 502, message: "No request ID returned by Fal.ai." };
+    }
 
-    const statusResponse = await fetch(
-      `https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/${requestId}/status`,
-      { headers: { Authorization: `Key ${apiKey}` } },
-    );
+    const startedAt = Date.now();
 
-    if (!statusResponse.ok) continue;
+    while (Date.now() - startedAt < 30000) {
+      await new Promise(r => setTimeout(r, 1000));
 
-    const statusData = await statusResponse.json();
-
-    if (statusData.status === "COMPLETED") {
-      const resultResponse = await fetch(
-        `https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/${requestId}`,
+      const statusResponse = await fetch(
+        `https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/${requestId}/status`,
         { headers: { Authorization: `Key ${apiKey}` } },
       );
 
-      if (!resultResponse.ok) {
-        throw {
-          status: resultResponse.status,
-          message: await readFailure(resultResponse),
-        } satisfies FalFailure;
+      if (!statusResponse.ok) continue;
+
+      const statusData = await statusResponse.json();
+
+      if (statusData.status === "COMPLETED") {
+        const resultResponse = await fetch(
+          `https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/${requestId}`,
+          { headers: { Authorization: `Key ${apiKey}` } },
+        );
+
+        if (!resultResponse.ok) {
+          throw { status: resultResponse.status, message: "Failed to fetch result." };
+        }
+
+        const resultData = await resultResponse.json();
+        const imageUrl = resultData?.images?.[0]?.url;
+
+        if (!imageUrl) {
+          throw { status: 502, message: "No image URL returned." };
+        }
+
+        return imageUrl;
       }
 
-      const resultData = await resultResponse.json();
-      const imageUrl = resultData?.images?.[0]?.url;
-
-      if (!imageUrl) {
-        throw { status: 502, message: "No image URL returned by Fal.ai." } satisfies FalFailure;
+      if (statusData.status === "FAILED") {
+        throw { status: 502, message: "Image generation failed on Fal.ai." };
       }
-
-      return imageUrl as string;
     }
 
-    if (statusData.status === "FAILED") {
-      throw { status: 502, message: "Fal.ai could not generate this thumbnail." } satisfies FalFailure;
-    }
+    throw { status: 504, message: "Thumbnail generation timed out." };
   }
 
-  throw { status: 504, message: "Thumbnail generation timed out. Please try again." } satisfies FalFailure;
+  throw { status: 500, message: lastError };
 }
 
 serve(async (req) => {
@@ -138,15 +130,15 @@ serve(async (req) => {
       "";
 
     if (!falApiKey) {
-      return jsonResponse({ error: "Fal.ai API key not configured. Add your key in Settings to generate thumbnails." }, 400);
+      return jsonResponse({ success: false, error: "Fal.ai API key not configured.", action: "Add your Fal.ai key in Settings." }, 400);
     }
 
     if (!title || typeof title !== 'string' || title.trim().length < 3) {
-      return jsonResponse({ error: "Title is required and must be at least 3 characters." }, 400);
+      return jsonResponse({ success: false, error: "Title required (min 3 chars).", action: "Enter a longer title." }, 400);
     }
 
     if (title.length > 200) {
-      return jsonResponse({ error: "Title too long. Maximum 200 characters for best results." }, 400);
+      return jsonResponse({ success: false, error: "Title too long (max 200).", action: "Shorten your title." }, 400);
     }
 
     const dimensions = getDimensions(aspectRatio);
@@ -165,35 +157,32 @@ serve(async (req) => {
             falApiKey,
             dimensions.falSize,
           );
-
           return { imageUrl, status: 200 };
-        } catch (error) {
-          const failure = error as FalFailure;
-          return { imageUrl: null, status: failure.status || 500, error: failure.message || "Thumbnail generation failed." };
+        } catch (error: any) {
+          return { imageUrl: null, status: error.status || 500, error: error.message || "Failed." };
         }
       }),
     );
 
-    const thumbnails = results.map((result) => result.imageUrl);
+    const thumbnails = results.map((r) => r.imageUrl);
     const successCount = thumbnails.filter(Boolean).length;
 
     if (successCount === 0) {
-      const firstFailure = results.find((result) => result.error);
+      const firstFailure = results.find((r) => r.error);
 
       if (firstFailure?.status === 401 || firstFailure?.status === 403) {
-        return jsonResponse({ error: "Invalid Fal.ai API key or access denied. Update your key in Settings." }, 401);
+        return jsonResponse({ success: false, error: "Invalid Fal.ai API key.", action: "Update your key in Settings." }, 401);
       }
-
       if (firstFailure?.status === 429) {
-        return jsonResponse({ error: "Fal.ai rate limit exceeded. Please wait and try again." }, 429);
+        return jsonResponse({ success: false, error: "Fal.ai rate limit exceeded.", action: "Wait and try again." }, 429);
       }
 
-      return jsonResponse({ error: firstFailure?.error || "Thumbnail generation failed." }, firstFailure?.status || 502);
+      return jsonResponse({ success: false, error: firstFailure?.error || "Generation failed.", action: "Try again." }, firstFailure?.status || 502);
     }
 
     return jsonResponse({ thumbnails, dimensions: { width: dimensions.width, height: dimensions.height, ratio: dimensions.ratio } });
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return jsonResponse({ error: errorMessage }, 500);
+    return jsonResponse({ success: false, error: errorMessage, action: "Try again." }, 500);
   }
 });
