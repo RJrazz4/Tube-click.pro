@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
+import { generateContent } from "@/lib/localAiServices";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsText } from "@/lib/export";
 import { cleanScript } from "@/lib/scriptCleaner";
@@ -89,17 +89,7 @@ export default function ChatAgent() {
     try {
       setMessages((prev) => [...prev, { role: "assistant", content: `🎯 Analyzing your topic and generating ${languageLabel} content...` }]);
 
-      const { data, error } = await supabase.functions.invoke('generate-content', {
-        body: { topic: trimmedTopic, platform, style, language }
-      });
-
-      if (error) {
-        throw new Error(error.message || 'Failed to connect to content generator');
-      }
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      const data = await generateContent({ topic: trimmedTopic, platform, style, language });
 
       // Validate response structure
       if (!data.titles || !Array.isArray(data.titles)) {

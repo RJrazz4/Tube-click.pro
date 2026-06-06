@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 import JSZip from "jszip";
+import { analyzeStoryboard, generateStoryboardImage } from "@/lib/localAiServices";
 
 interface Scene {
   beat_type: string;
@@ -119,25 +120,7 @@ export default function Storyboard() {
     setScenes([]);
 
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-storyboard`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ script }),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to analyze script');
-      }
-
-      const data = await response.json();
+      const data = await analyzeStoryboard(script);
       
       // Enforce exactly 6 scenes
       const limitedScenes = (data.scenes || []).slice(0, 6);
@@ -193,33 +176,13 @@ export default function Storyboard() {
         setTimeout(() => reject(new Error('Scene generation timed out')), SCENE_TIMEOUT);
       });
 
-      // Create fetch promise
-      const fetchPromise = fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-storyboard-image`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ 
-            prompt: promptToUse,
-            sceneNumber: scene.scene_number
-          }),
-          signal: abortControllerRef.current.signal
-        }
+      const imagePromise = generateStoryboardImage(
+        promptToUse,
+        scene.scene_number,
+        abortControllerRef.current.signal
       );
 
-      // Race between timeout and fetch
-      const response = await Promise.race([fetchPromise, timeoutPromise]);
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to generate image');
-      }
-
-      const data = await response.json();
+      const data = await Promise.race([imagePromise, timeoutPromise]);
       
       if (!data.imageUrl) {
         throw new Error('No image returned from API');

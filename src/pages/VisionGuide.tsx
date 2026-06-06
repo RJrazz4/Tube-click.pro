@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
+import { generateVisionGuide } from "@/lib/localAiServices";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsText } from "@/lib/export";
 
@@ -123,31 +123,20 @@ export default function VisionGuide() {
         throw new Error('Failed to process any images');
       }
 
-      // Call the edge function
-      const { data, error } = await supabase.functions.invoke('vision-guide', {
-        body: { images: imageData }
-      });
-
-      if (error) {
-        throw new Error(error.message || 'Failed to connect to vision API');
-      }
+      const generatedGuide = await generateVisionGuide(imageData);
       
-      if (data.error) {
-        throw new Error(data.error);
-      }
-      
-      if (!data.guide || !data.guide.trim()) {
+      if (!generatedGuide.trim()) {
         throw new Error('No guide content was generated');
       }
 
-      setGuide(data.guide);
+      setGuide(generatedGuide);
       incrementStat('guidesCreated');
       
       // Save to local storage
       saveContent({
         type: 'guide',
         title: `Tutorial Guide - ${new Date().toLocaleDateString()}`,
-        content: data.guide
+        content: generatedGuide
       });
 
       toast.success("Guide generated successfully!");

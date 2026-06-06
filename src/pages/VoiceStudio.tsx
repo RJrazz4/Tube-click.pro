@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
+import { generateElevenLabsSpeech } from "@/lib/localAiServices";
 
 // ElevenLabs voice options with descriptions
 const ELEVENLABS_VOICES = [
@@ -102,31 +103,13 @@ export default function VoiceStudio() {
     animateVisualizer();
 
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({
-            text,
-            voiceId: selectedElevenLabsVoice,
-            stability: stability[0],
-            similarityBoost: 0.75,
-            speed: speed[0],
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to generate audio');
-      }
-
-      const audioBlob = await response.blob();
+      const audioBlob = await generateElevenLabsSpeech({
+        text,
+        voiceId: selectedElevenLabsVoice,
+        stability: stability[0],
+        similarityBoost: 0.75,
+        speed: speed[0],
+      });
       
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       

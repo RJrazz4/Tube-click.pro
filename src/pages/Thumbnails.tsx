@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { generateThumbnails } from "@/lib/localAiServices";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsImage } from "@/lib/export";
 
@@ -75,24 +75,13 @@ export default function Thumbnails() {
 
     try {
       if (useAI) {
-        // Use AI image generation via edge function
-        const { data, error } = await supabase.functions.invoke('generate-thumbnail', {
-          body: { 
-            title: trimmedTitle, 
-            emotion, 
-            style, 
-            aspectRatio,
-            count: 4
-          }
+        const data = await generateThumbnails({
+          title: trimmedTitle,
+          emotion,
+          style,
+          aspectRatio,
+          count: 4,
         });
-
-        if (error) {
-          throw new Error(error.message || 'Failed to connect to thumbnail generator');
-        }
-        
-        if (data.error) {
-          throw new Error(data.error);
-        }
 
         if (data.thumbnails && Array.isArray(data.thumbnails) && data.thumbnails.length > 0) {
           const newStates: ThumbnailState[] = data.thumbnails.map((url: string | null) => ({
