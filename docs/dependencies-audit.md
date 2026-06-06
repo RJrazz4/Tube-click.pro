@@ -25,8 +25,8 @@ Removed hosted platform infrastructure and generated backend coupling from the r
 
 | Service | Current app usage | Required for initialization? | Configuration source | Status |
 | --- | --- | --- | --- | --- |
-| Google Gemini API | Planned direct replacement for content generation, thumbnail/storyboard prompt/image flows, and screenshot guide generation | No | Browser localStorage key `gemini-api-key` via settings UI | Missing value; first critical AI dependency for Phase 4. |
-| ElevenLabs API | Planned direct replacement for premium MP3 text-to-speech | No | Browser localStorage key `elevenlabs-api-key` via settings UI | Missing value; needed after Gemini setup. |
+| Google Gemini API | Planned direct replacement for content generation, thumbnail/storyboard prompt/image flows, and screenshot guide generation | No | Browser localStorage key `gemini-api-key` via settings UI, or `VITE_GEMINI_API_KEY` during local development | Provided by user during setup; do not commit the secret value. |
+| ElevenLabs API | Planned direct replacement for premium MP3 text-to-speech | No | Browser localStorage key `elevenlabs-api-key` via settings UI, or `VITE_ELEVENLABS_API_KEY` during local development | Missing value; next critical dependency. |
 | Pollinations image endpoint | Fallback thumbnail image generation when AI mode fails or is disabled | No | No API key currently required | Still active as a public fallback endpoint. |
 | Browser Web Speech API | Browser-native TTS fallback | No | Native browser capability | Still active; no key required. |
 | Google AdSense / Search Console metadata | Static HTML verification and AdSense metadata | No | Static tags in `index.html` | Still present; no runtime key needed. |
@@ -35,9 +35,10 @@ Removed hosted platform infrastructure and generated backend coupling from the r
 
 | Variable/key | Needed by | Notes |
 | --- | --- | --- |
-| `gemini-api-key` | Local Gemini service implementation in Phase 4 | The settings UI already stores this key in localStorage; direct API implementation is paused until the value is provided. |
-| `elevenlabs-api-key` | Local ElevenLabs service implementation in Phase 4 | The settings UI already stores this key in localStorage; direct API implementation will follow Gemini setup. |
+| `gemini-api-key` / `VITE_GEMINI_API_KEY` | Local Gemini service implementation in Phase 4 | Value received out-of-band during the setup loop. The secret must be entered through local runtime configuration and must not be committed. |
+| `elevenlabs-api-key` / `VITE_ELEVENLABS_API_KEY` | Local ElevenLabs service implementation in Phase 4 | Still required before Phase 4 integration can begin. |
 
-## First critical dependency
+## Setup loop status
 
-Dependency 1: Google Gemini API Key - Please provide the value.
+- Dependency 1: Google Gemini API Key - Provided by user out-of-band and intentionally not stored in the repository.
+- Dependency 2: ElevenLabs API Key - Please provide the value.
