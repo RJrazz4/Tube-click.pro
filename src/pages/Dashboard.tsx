@@ -1,6 +1,6 @@
  import { useState, useEffect } from "react";
  import { Link } from "react-router-dom";
- import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Film, Loader2, X, Sparkles, RefreshCw } from "lucide-react";
+ import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Film, Loader2, X, Sparkles, RefreshCw, Wrench } from "lucide-react";
  import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,14 @@ const tools = [
     icon: Mic,
     path: "/voice",
     gradient: "from-orange-400 to-red-500",
+    glow: "",
+  },
+  {
+    title: "Prompt Growth Toolkit",
+    description: "500+ prompts, frameworks, tools list",
+    icon: Wrench,
+    path: "/prompt-toolkit",
+    gradient: "from-indigo-400 to-purple-600",
     glow: "",
   },
 ];
