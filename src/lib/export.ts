@@ -177,7 +177,7 @@ export const exportAllAsZip = async (): Promise<void> => {
             `====================\n\n` +
             `${item.content}\n\n` +
             `---\n` +
-            `Note: For MP3 audio, use Voiceover Studio with ElevenLabs API key.\n` +
+            `Note: For generated audio, use Voice Studio with Puter.js text-to-speech or voice conversion.\n` +
             `Browser TTS does not support audio file export.`
           );
           filesAdded++;
@@ -242,7 +242,7 @@ IMPORTANT NOTES
 ✓ Voiceover transcripts are ready for text-to-speech
 ✓ Storyboard prompts include camera motion directions
 
-⚠ MP3 Audio Files: Use Voiceover Studio with ElevenLabs API
+⚠ Audio Files: Use Voice Studio with Puter.js TTS or voice conversion
 ⚠ Storyboard Images: Download via Storyboard page ZIP button
 
 ${errors.length > 0 ? `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nWARNINGS\n────────\n${errors.join('\n')}` : ''}

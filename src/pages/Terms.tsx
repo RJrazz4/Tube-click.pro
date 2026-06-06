@@ -30,7 +30,7 @@ export default function Terms() {
             TubeGenius Pro operates on a <strong className="text-foreground">"Bring Your Own Key" (BYOK)</strong> model. This means:
           </p>
           <ul className="list-disc pl-6 space-y-2">
-            <li>You must provide your own API keys for third-party services (Google AI, OpenAI, ElevenLabs, etc.)</li>
+            <li>You must provide your own API keys for third-party services (Google AI or other optional providers)</li>
             <li>You are solely responsible for all API usage and associated costs incurred through your keys</li>
             <li>You must comply with the terms of service of each third-party API provider</li>
             <li>We do not have access to your API keys – they are stored locally on your device</li>

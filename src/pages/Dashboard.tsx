@@ -43,7 +43,7 @@ const tools = [
   },
   {
     title: "Voiceover Studio",
-    description: "Text-to-speech with ElevenLabs AI",
+    description: "Free Puter.js TTS & voice conversion",
     icon: Mic,
     path: "/voice",
     gradient: "from-orange-400 to-red-500",

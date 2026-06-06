@@ -54,10 +54,10 @@ export default function Privacy() {
           <ul className="list-disc pl-6 space-y-2">
             <li><strong className="text-foreground">Google AI (Gemini)</strong> – For content generation and image analysis</li>
             <li><strong className="text-foreground">OpenAI</strong> – For advanced text generation capabilities</li>
-            <li><strong className="text-foreground">ElevenLabs</strong> – For voice synthesis features</li>
+            <li><strong className="text-foreground">Puter.js</strong> – For browser-based voice synthesis and voice conversion</li>
           </ul>
           <p>
-            When you use these features, your prompts and content are sent directly to these third-party services using your own API keys. Please review their respective privacy policies for information on how they handle your data.
+            When you use these features, your prompts and content are sent directly to the selected third-party services. Voice Studio does not require an API key. Please review their respective privacy policies for information on how they handle your data.
           </p>
         </section>
 

@@ -22,6 +22,7 @@ The application no longer depends on a hosted platform wrapper or generated back
 Current user-provided API keys are stored by the app settings UI in browser localStorage:
 
 - `gemini-api-key` for Google Gemini-powered generation.
-- `elevenlabs-api-key` for ElevenLabs text-to-speech.
+
+Voice Studio uses Puter.js for browser-native text-to-speech and voice conversion without API keys.
 
 See `docs/dependencies-audit.md` for the current migration audit and dependency map.

@@ -1,603 +1,338 @@
-import { useState, useRef, useEffect } from "react";
-import { Mic, Play, Pause, Square, Volume2, Download, Loader2, Sparkles, Speaker } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowRightLeft, Download, FileAudio, Loader2, Mic, Play, Square, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
-import { generateElevenLabsSpeech } from "@/lib/localAiServices";
+import { voiceService } from "@/lib/localAiServices";
 
-// ElevenLabs voice options with descriptions
-const ELEVENLABS_VOICES = [
-  { id: 'george', name: 'George', description: 'British male, warm & professional', gender: 'male' },
-  { id: 'brian', name: 'Brian', description: 'American male, deep & authoritative', gender: 'male' },
-  { id: 'daniel', name: 'Daniel', description: 'British male, calm & storytelling', gender: 'male' },
-  { id: 'liam', name: 'Liam', description: 'American male, young & energetic', gender: 'male' },
-  { id: 'chris', name: 'Chris', description: 'American male, conversational', gender: 'male' },
-  { id: 'charlie', name: 'Charlie', description: 'Australian male, friendly', gender: 'male' },
-  { id: 'eric', name: 'Eric', description: 'American male, mature & wise', gender: 'male' },
-  { id: 'will', name: 'Will', description: 'American male, casual & engaging', gender: 'male' },
-  { id: 'sarah', name: 'Sarah', description: 'American female, soft & soothing', gender: 'female' },
-  { id: 'alice', name: 'Alice', description: 'British female, clear & articulate', gender: 'female' },
-  { id: 'matilda', name: 'Matilda', description: 'American female, warm & friendly', gender: 'female' },
-  { id: 'jessica', name: 'Jessica', description: 'American female, professional', gender: 'female' },
-  { id: 'lily', name: 'Lily', description: 'British female, gentle & calming', gender: 'female' },
-  { id: 'laura', name: 'Laura', description: 'American female, upbeat & cheerful', gender: 'female' },
+const TTS_VOICES = [
+  { id: "standard", name: "Standard", description: "Balanced default Puter voice" },
+  { id: "Joanna", name: "Joanna", description: "Clear female narration" },
+  { id: "Matthew", name: "Matthew", description: "Warm male narration" },
+  { id: "Amy", name: "Amy", description: "British female voice" },
+  { id: "Brian", name: "Brian", description: "British male voice" },
+];
+
+const CONVERSION_VOICES = [
+  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", description: "Calm storytelling voice" },
+  { id: "pNInz6obpgDQGcFmaJgB", name: "Adam", description: "Deep cinematic male voice" },
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella", description: "Expressive female voice" },
+  { id: "ErXwobaYiN019PkySvjV", name: "Antoni", description: "Friendly creator voice" },
 ];
 
 export default function VoiceStudio() {
   const [text, setText] = useState("");
-  const [useElevenLabs, setUseElevenLabs] = useState(true);
-  const [selectedElevenLabsVoice, setSelectedElevenLabsVoice] = useState("george");
-  const [stability, setStability] = useState([0.5]);
-  const [speed, setSpeed] = useState([1]);
-  
-  // Browser TTS state
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState<string>("");
-  const [rate, setRate] = useState([1]);
-  const [pitch, setPitch] = useState([1]);
-  
-  // Playback state
+  const [ttsVoice, setTtsVoice] = useState("standard");
+  const [targetVoice, setTargetVoice] = useState(CONVERSION_VOICES[0].id);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [visualizerHeights, setVisualizerHeights] = useState<number[]>(Array(30).fill(20));
-  
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const animationRef = useRef<number | null>(null);
+  const [activeMode, setActiveMode] = useState("tts");
+  const playerRef = useRef<HTMLAudioElement | null>(null);
+
+  const selectedTtsVoice = useMemo(
+    () => TTS_VOICES.find((voice) => voice.id === ttsVoice) ?? TTS_VOICES[0],
+    [ttsVoice]
+  );
+  const selectedConversionVoice = useMemo(
+    () => CONVERSION_VOICES.find((voice) => voice.id === targetVoice) ?? CONVERSION_VOICES[0],
+    [targetVoice]
+  );
 
   useEffect(() => {
-    const loadVoices = () => {
-      const availableVoices = speechSynthesis.getVoices();
-      setVoices(availableVoices);
-      if (availableVoices.length > 0 && !selectedVoice) {
-        const englishVoice = availableVoices.find((v) => v.lang.startsWith("en"));
-        setSelectedVoice(englishVoice?.name || availableVoices[0].name);
-      }
-    };
-
-    loadVoices();
-    speechSynthesis.onvoiceschanged = loadVoices;
-
     return () => {
-      speechSynthesis.cancel();
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      voiceService.stop();
     };
   }, []);
 
-  const animateVisualizer = () => {
-    const heights = Array(30).fill(0).map(() => 20 + Math.random() * 80);
-    setVisualizerHeights(heights);
-    animationRef.current = requestAnimationFrame(animateVisualizer);
-  };
+  const attachAudio = (audio: HTMLAudioElement) => {
+    const playableUrl = audio.src || audio.currentSrc || audio.toString();
 
-  const stopVisualizer = () => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
+    if (!playableUrl) {
+      throw new Error("The generated audio did not include a playable URL.");
     }
-    setVisualizerHeights(Array(30).fill(20));
+
+    audio.onplay = () => setIsPlaying(true);
+    audio.onpause = () => setIsPlaying(false);
+    audio.onended = () => setIsPlaying(false);
+    playerRef.current = audio;
+    setAudioUrl(playableUrl);
   };
 
-  const generateElevenLabsAudio = async () => {
-    if (!text.trim()) {
-      toast.error("Please enter some text to convert to speech");
+  const handleTextToSpeech = async () => {
+    const trimmedText = text.trim();
+
+    if (!trimmedText) {
+      toast.error("Please enter text to convert into speech.");
       return;
     }
 
-    // Validate text length to prevent API overuse
-    if (text.length > 5000) {
-      toast.error("Text too long. Maximum 5000 characters allowed.");
-      return;
-    }
-
-    setIsGenerating(true);
-    animateVisualizer();
+    setIsProcessing(true);
+    setAudioUrl(null);
 
     try {
-      const audioBlob = await generateElevenLabsSpeech({
-        text,
-        voiceId: selectedElevenLabsVoice,
-        stability: stability[0],
-        similarityBoost: 0.75,
-        speed: speed[0],
-      });
-      
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-      
-      const url = URL.createObjectURL(audioBlob);
-      setAudioUrl(url);
-
-      // Auto-play
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      
-      audio.onplay = () => {
-        setIsPlaying(true);
-        animateVisualizer();
-      };
-      
-      audio.onended = () => {
-        setIsPlaying(false);
-        stopVisualizer();
-      };
-      
-      audio.onpause = () => {
-        setIsPlaying(false);
-        stopVisualizer();
-      };
-
-      await audio.play();
-
-      // Track stats
-      incrementStat('voiceoversGenerated');
+      const audio = await voiceService.textToSpeech(trimmedText, ttsVoice);
+      attachAudio(audio);
+      incrementStat("voiceoversGenerated");
       saveContent({
-        type: 'voiceover',
-        title: `ElevenLabs - ${selectedElevenLabsVoice}`,
-        content: text
+        type: "voiceover",
+        title: `Puter TTS - ${selectedTtsVoice.name}`,
+        content: trimmedText,
       });
-
-      toast.success("Professional voiceover generated!");
-
+      toast.success("Puter text-to-speech generated and playing.");
     } catch (error) {
-      console.error("ElevenLabs error:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to generate voiceover");
-      stopVisualizer();
+      console.error("Puter TTS error:", error);
+      toast.error(error instanceof Error ? error.message : "Audio generation failed.");
     } finally {
-      setIsGenerating(false);
+      setIsProcessing(false);
     }
   };
 
-  const handleBrowserTTSPlay = () => {
-    if (!text.trim()) {
-      toast.error("Please enter some text to convert to speech");
+  const handleVoiceConversion = async () => {
+    if (!audioFile) {
+      toast.error("Please upload an audio file first.");
       return;
     }
 
-    // Browser TTS has no text length limit but warn for very long text
-    if (text.length > 10000) {
-      toast.warning("Very long text may cause browser TTS to be slow or unstable");
-    }
+    setIsProcessing(true);
+    setAudioUrl(null);
 
-    if (isPaused) {
-      speechSynthesis.resume();
-      setIsPaused(false);
-      setIsPlaying(true);
-      animateVisualizer();
-      return;
-    }
-
-    speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voice = voices.find((v) => v.name === selectedVoice);
-    
-    if (voice) utterance.voice = voice;
-    utterance.rate = rate[0];
-    utterance.pitch = pitch[0];
-
-    utterance.onstart = () => {
-      setIsPlaying(true);
-      animateVisualizer();
-    };
-
-    utterance.onend = () => {
-      setIsPlaying(false);
-      setIsPaused(false);
-      stopVisualizer();
-    };
-
-    utterance.onerror = () => {
-      setIsPlaying(false);
-      setIsPaused(false);
-      stopVisualizer();
-      toast.error("Speech synthesis error");
-    };
-
-    speechSynthesis.speak(utterance);
-    
-    incrementStat('voiceoversGenerated');
-    saveContent({
-      type: 'voiceover',
-      title: `Browser TTS - ${selectedVoice}`,
-      content: text
-    });
-  };
-
-  const handlePlay = () => {
-    if (useElevenLabs) {
-      if (audioUrl && audioRef.current) {
-        audioRef.current.play();
-      } else {
-        generateElevenLabsAudio();
-      }
-    } else {
-      handleBrowserTTSPlay();
-    }
-  };
-
-  const handlePause = () => {
-    if (useElevenLabs && audioRef.current) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-      stopVisualizer();
-    } else if (isPlaying) {
-      speechSynthesis.pause();
-      setIsPaused(true);
-      setIsPlaying(false);
-      stopVisualizer();
+    try {
+      const audio = await voiceService.convertVoice(audioFile, targetVoice);
+      attachAudio(audio);
+      incrementStat("voiceoversGenerated");
+      saveContent({
+        type: "voiceover",
+        title: `Voice Conversion - ${selectedConversionVoice.name}`,
+        content: `${audioFile.name} converted to ${selectedConversionVoice.name}`,
+      });
+      toast.success("Voice conversion generated and playing.");
+    } catch (error) {
+      console.error("Puter voice conversion error:", error);
+      toast.error(error instanceof Error ? error.message : "Voice conversion failed.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleStop = () => {
-    if (useElevenLabs && audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    } else {
-      speechSynthesis.cancel();
-    }
+    voiceService.stop();
     setIsPlaying(false);
-    setIsPaused(false);
-    stopVisualizer();
   };
 
   const handleDownload = () => {
-    if (audioUrl) {
-      const a = document.createElement('a');
-      a.href = audioUrl;
-      a.download = `voiceover-${selectedElevenLabsVoice}-${Date.now()}.mp3`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      toast.success("MP3 downloaded!");
-    } else if (useElevenLabs) {
-      toast.info("Generate a voiceover first by clicking the Play button");
-    } else {
-      // BROWSER LIMITATION: Web Speech API cannot export audio blobs
-      // Only ElevenLabs provides downloadable MP3 files
-      toast.info("MP3 download requires ElevenLabs. Browser TTS cannot export audio files.");
+    if (!audioUrl) {
+      toast.error("No generated audio is ready to download.");
+      return;
     }
+
+    const link = document.createElement("a");
+    link.href = audioUrl;
+    link.download = `puter-voice-${Date.now()}.mp3`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
-
-  const handleRegenerate = () => {
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-      setAudioUrl(null);
-    }
-    generateElevenLabsAudio();
-  };
-
-  const sampleTexts = [
-    "Hey everyone, welcome back to my channel! Today we're going to explore something absolutely incredible that will change how you think about everything.",
-    "What's up YouTube! In this video, I'm going to show you the secrets that nobody talks about. Make sure to stay until the end because the last tip is a game-changer.",
-    "Namaste dosto! Aaj hum baat karenge ek bahut important topic ke baare mein. Agar aap video pasand aaye toh like aur subscribe zaroor karein!",
-  ];
-
-  const selectedVoiceInfo = ELEVENLABS_VOICES.find(v => v.id === selectedElevenLabsVoice);
 
   return (
     <div className="space-y-4 md:space-y-6 animate-fade-in">
-      <div>
+      <div className="rounded-2xl border border-border bg-gradient-to-r from-orange-500/15 via-card to-primary/15 p-5 md:p-6">
         <h1 className="font-display text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
           <Mic className="w-6 h-6 md:w-7 md:h-7 text-orange-400" />
-          Voiceover Studio
+          Voice Studio
         </h1>
-        <p className="text-sm md:text-base text-muted-foreground mt-1">
-          Generate professional AI voiceovers with ElevenLabs or browser TTS
+        <p className="text-sm md:text-base text-muted-foreground mt-2 max-w-3xl">
+          Free, serverless AI voice tools powered by Puter.js — generate narration or convert uploaded audio without API keys.
         </p>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
-        {/* Controls */}
-        <Card className="cyber-card border-border lg:col-span-1">
-          <CardHeader className="pb-3 md:pb-4">
-            <CardTitle className="font-display text-base md:text-lg text-foreground flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-primary" />
-              Voice Settings
-            </CardTitle>
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] gap-4 md:gap-6">
+        <Card className="cyber-card border-border">
+          <CardHeader>
+            <CardTitle className="font-display text-lg text-foreground">Create Audio</CardTitle>
+            <CardDescription>Choose a workflow and Puter.js will handle voice generation locally in the browser.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 md:space-y-5">
-            {/* ElevenLabs Toggle */}
-            <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-              <div className="flex items-center gap-2">
-                <Speaker className="w-4 h-4 text-primary" />
-                <Label className="text-sm font-medium">ElevenLabs AI</Label>
-              </div>
-              <Switch
-                checked={useElevenLabs}
-                onCheckedChange={(checked) => {
-                  setUseElevenLabs(checked);
-                  if (audioUrl) {
-                    URL.revokeObjectURL(audioUrl);
-                    setAudioUrl(null);
-                  }
-                }}
-              />
-            </div>
+          <CardContent>
+            <Tabs value={activeMode} onValueChange={setActiveMode} className="space-y-5">
+              <TabsList className="grid w-full grid-cols-2 bg-secondary">
+                <TabsTrigger value="tts" className="gap-2">
+                  <Volume2 className="w-4 h-4" />
+                  Text-to-Speech
+                </TabsTrigger>
+                <TabsTrigger value="conversion" className="gap-2">
+                  <ArrowRightLeft className="w-4 h-4" />
+                  Voice Conversion
+                </TabsTrigger>
+              </TabsList>
 
-            {useElevenLabs ? (
-              <>
-                {/* ElevenLabs Voice Selector */}
-                <div className="space-y-1.5 md:space-y-2">
-                  <Label className="text-sm text-foreground">AI Voice</Label>
-                  <Select value={selectedElevenLabsVoice} onValueChange={setSelectedElevenLabsVoice}>
-                    <SelectTrigger className="bg-secondary border-border h-10 md:h-11 text-sm">
-                      <SelectValue placeholder="Select a voice" />
+              <TabsContent value="tts" className="space-y-4 mt-0">
+                <div className="space-y-2">
+                  <Label htmlFor="tts-text">Script</Label>
+                  <Textarea
+                    id="tts-text"
+                    value={text}
+                    onChange={(event) => setText(event.target.value)}
+                    placeholder="Paste your narration script here..."
+                    className="min-h-[220px] bg-secondary border-border resize-none"
+                    maxLength={3000}
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Puter TTS supports up to 3000 characters per request.</span>
+                    <span>{text.length}/3000</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Voice</Label>
+                  <Select value={ttsVoice} onValueChange={setTtsVoice} disabled={isProcessing}>
+                    <SelectTrigger className="bg-secondary border-border">
+                      <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-card border-border max-h-[300px]">
-                      <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium">Male Voices</div>
-                      {ELEVENLABS_VOICES.filter(v => v.gender === 'male').map((voice) => (
+                    <SelectContent>
+                      {TTS_VOICES.map((voice) => (
                         <SelectItem key={voice.id} value={voice.id}>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{voice.name}</span>
-                            <span className="text-xs text-muted-foreground">{voice.description}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                      <div className="px-2 py-1.5 text-xs text-muted-foreground font-medium mt-2">Female Voices</div>
-                      {ELEVENLABS_VOICES.filter(v => v.gender === 'female').map((voice) => (
-                        <SelectItem key={voice.id} value={voice.id}>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{voice.name}</span>
-                            <span className="text-xs text-muted-foreground">{voice.description}</span>
-                          </div>
+                          {voice.name} — {voice.description}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {selectedVoiceInfo && (
-                    <p className="text-xs text-muted-foreground">{selectedVoiceInfo.description}</p>
+                </div>
+
+                <Button
+                  onClick={handleTextToSpeech}
+                  disabled={isProcessing || !text.trim()}
+                  className="w-full h-12 bg-gradient-to-r from-orange-500 to-primary hover:opacity-90 text-white font-semibold"
+                >
+                  {isProcessing && activeMode === "tts" ? (
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  ) : (
+                    <Play className="w-5 h-5 mr-2" />
                   )}
-                </div>
+                  Generate & Play Voice
+                </Button>
+              </TabsContent>
 
-                {/* Stability Slider */}
-                <div className="space-y-2 md:space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm text-foreground">Stability</Label>
-                    <span className="text-xs md:text-sm text-muted-foreground">{(stability[0] * 100).toFixed(0)}%</span>
-                  </div>
-                  <Slider
-                    value={stability}
-                    onValueChange={setStability}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    className="cursor-pointer"
-                  />
-                  <p className="text-xs text-muted-foreground">Lower = more expressive, Higher = more consistent</p>
-                </div>
-
-                {/* Speed Slider */}
-                <div className="space-y-2 md:space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm text-foreground">Speed</Label>
-                    <span className="text-xs md:text-sm text-muted-foreground">{speed[0].toFixed(1)}x</span>
-                  </div>
-                  <Slider
-                    value={speed}
-                    onValueChange={setSpeed}
-                    min={0.7}
-                    max={1.2}
-                    step={0.05}
-                    className="cursor-pointer"
+              <TabsContent value="conversion" className="space-y-4 mt-0">
+                <div className="space-y-2">
+                  <Label htmlFor="voice-file">Audio Input</Label>
+                  <label
+                    htmlFor="voice-file"
+                    className="flex min-h-[180px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-secondary/30 p-6 text-center transition-colors hover:border-primary/60"
+                  >
+                    <FileAudio className="w-10 h-10 text-primary mb-3" />
+                    <span className="text-sm font-medium text-foreground">
+                      {audioFile ? audioFile.name : "Upload an audio file"}
+                    </span>
+                    <span className="text-xs text-muted-foreground mt-1">MP3, WAV, M4A, or other browser-supported audio files</span>
+                  </label>
+                  <input
+                    id="voice-file"
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={(event) => setAudioFile(event.target.files?.[0] ?? null)}
+                    disabled={isProcessing}
                   />
                 </div>
-              </>
-            ) : (
-              <>
-                {/* Browser Voice Selector */}
-                <div className="space-y-1.5 md:space-y-2">
-                  <Label className="text-sm text-foreground">Browser Voice</Label>
-                  <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                    <SelectTrigger className="bg-secondary border-border h-10 md:h-11 text-sm">
-                      <SelectValue placeholder="Select a voice" />
+
+                <div className="space-y-2">
+                  <Label>Target Voice</Label>
+                  <Select value={targetVoice} onValueChange={setTargetVoice} disabled={isProcessing}>
+                    <SelectTrigger className="bg-secondary border-border">
+                      <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-card border-border max-h-[300px]">
-                      {voices.map((voice) => (
-                        <SelectItem key={voice.name} value={voice.name}>
-                          <span className="text-xs md:text-sm">
-                            {voice.name} ({voice.lang})
-                          </span>
+                    <SelectContent>
+                      {CONVERSION_VOICES.map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          {voice.name} — {voice.description}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* Rate Slider */}
-                <div className="space-y-2 md:space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm text-foreground">Speed</Label>
-                    <span className="text-xs md:text-sm text-muted-foreground">{rate[0].toFixed(1)}x</span>
-                  </div>
-                  <Slider
-                    value={rate}
-                    onValueChange={setRate}
-                    min={0.5}
-                    max={2}
-                    step={0.1}
-                    className="cursor-pointer"
-                  />
-                </div>
-
-                {/* Pitch Slider */}
-                <div className="space-y-2 md:space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm text-foreground">Pitch</Label>
-                    <span className="text-xs md:text-sm text-muted-foreground">{pitch[0].toFixed(1)}</span>
-                  </div>
-                  <Slider
-                    value={pitch}
-                    onValueChange={setPitch}
-                    min={0.5}
-                    max={2}
-                    step={0.1}
-                    className="cursor-pointer"
-                  />
-                </div>
-              </>
-            )}
-
-            {/* Quick Samples */}
-            <div className="space-y-2">
-              <Label className="text-xs md:text-sm text-muted-foreground">Sample scripts</Label>
-              <div className="space-y-2">
-                {sampleTexts.map((sample, index) => (
-                  <button
-                    key={index}
-                    onClick={() => {
-                      setText(sample);
-                      if (audioUrl) {
-                        URL.revokeObjectURL(audioUrl);
-                        setAudioUrl(null);
-                      }
-                    }}
-                    className="w-full text-left p-2 rounded-lg bg-secondary text-xs text-muted-foreground hover:text-foreground hover:bg-primary/20 transition-colors line-clamp-2"
-                  >
-                    {sample}
-                  </button>
-                ))}
-              </div>
-            </div>
+                <Button
+                  onClick={handleVoiceConversion}
+                  disabled={isProcessing || !audioFile}
+                  className="w-full h-12 bg-gradient-to-r from-primary to-orange-500 hover:opacity-90 text-white font-semibold"
+                >
+                  {isProcessing && activeMode === "conversion" ? (
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  ) : (
+                    <ArrowRightLeft className="w-5 h-5 mr-2" />
+                  )}
+                  Convert & Play Voice
+                </Button>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
 
-        {/* Text & Preview */}
-        <Card className="cyber-card border-border lg:col-span-2">
-          <CardHeader className="pb-3 md:pb-4">
-            <CardTitle className="font-display text-base md:text-lg text-foreground">Script Editor</CardTitle>
+        <Card className="cyber-card border-border">
+          <CardHeader>
+            <CardTitle className="font-display text-lg text-foreground flex items-center gap-2">
+              <Volume2 className="w-5 h-5 text-primary" />
+              Playback
+            </CardTitle>
+            <CardDescription>Generated audio plays automatically and can be replayed or downloaded.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4 md:space-y-6">
-            <Textarea
-              value={text}
-              onChange={(e) => {
-                setText(e.target.value);
-                if (audioUrl) {
-                  URL.revokeObjectURL(audioUrl);
-                  setAudioUrl(null);
-                }
-              }}
-              placeholder="Enter your voiceover script here..."
-              className="min-h-[200px] md:min-h-[250px] bg-secondary border-border focus:border-primary resize-none text-sm md:text-base"
-            />
-
-            {/* Character Count */}
-            <div className="flex items-center justify-between text-xs md:text-sm text-muted-foreground">
-              <span>{text.length} characters</span>
-              <span>~{Math.ceil(text.split(/\s+/).filter(Boolean).length / 150)} min read</span>
-            </div>
-
-            {/* Playback Controls */}
-            <div className="flex items-center justify-center gap-3 md:gap-4 p-4 md:p-6 bg-secondary/50 rounded-xl">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleStop}
-                disabled={!isPlaying && !isPaused && !isGenerating}
-                className="w-10 h-10 md:w-12 md:h-12 rounded-full border-border hover:border-primary/50"
-              >
-                <Square className="w-4 h-4 md:w-5 md:h-5" />
-              </Button>
-
-              <Button
-                onClick={isPlaying ? handlePause : handlePlay}
-                disabled={isGenerating}
-                className={cn(
-                  "w-14 h-14 md:w-16 md:h-16 rounded-full",
-                  isPlaying ? "cyber-button-secondary" : "cyber-button"
-                )}
-              >
-                {isGenerating ? (
-                  <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" />
-                ) : isPlaying ? (
-                  <Pause className="w-5 h-5 md:w-6 md:h-6 text-accent-foreground" />
-                ) : (
-                  <Play className="w-5 h-5 md:w-6 md:h-6 text-primary-foreground ml-1" />
-                )}
-              </Button>
-
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleDownload}
-                disabled={!audioUrl || isGenerating}
-                className={cn(
-                  "w-10 h-10 md:w-12 md:h-12 rounded-full border-border",
-                  audioUrl ? "hover:border-green-500 hover:text-green-400" : ""
-                )}
-              >
-                <Download className="w-4 h-4 md:w-5 md:h-5" />
-              </Button>
-            </div>
-
-            {/* Regenerate Button (ElevenLabs only) */}
-            {useElevenLabs && audioUrl && (
-              <div className="flex justify-center">
-                <Button
-                  variant="outline"
-                  onClick={handleRegenerate}
-                  disabled={isGenerating}
-                  className="border-border hover:border-primary/50"
-                >
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Regenerate with New Voice
-                </Button>
+          <CardContent className="space-y-5">
+            <div className="rounded-2xl border border-border bg-secondary/30 p-5">
+              <div className="flex h-24 items-end justify-center gap-1">
+                {Array.from({ length: 28 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className={cn(
+                      "w-1.5 rounded-full bg-gradient-to-t from-orange-500 to-primary transition-all duration-300",
+                      isPlaying ? "animate-pulse" : "opacity-40"
+                    )}
+                    style={{ height: isPlaying ? `${24 + ((index * 11) % 64)}px` : "24px" }}
+                  />
+                ))}
               </div>
-            )}
-
-            {/* Visualizer */}
-            <div className="flex items-center justify-center gap-1 h-12 md:h-16">
-              {visualizerHeights.map((height, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "w-1 rounded-full transition-all duration-100",
-                    isPlaying || isGenerating
-                      ? "bg-gradient-to-t from-neon-purple to-neon-cyan"
-                      : "bg-border"
-                  )}
-                  style={{
-                    height: `${height}%`,
-                    transition: isPlaying || isGenerating ? 'height 0.1s ease' : 'height 0.3s ease'
-                  }}
-                />
-              ))}
             </div>
 
-            {/* Status */}
-            <div className="text-center">
-              <span className={cn(
-                "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs md:text-sm",
-                isGenerating
-                  ? "bg-primary/20 text-primary"
-                  : isPlaying 
-                  ? "bg-green-500/20 text-green-400" 
-                  : isPaused 
-                  ? "bg-yellow-500/20 text-yellow-400"
-                  : audioUrl
-                  ? "bg-blue-500/20 text-blue-400"
-                  : "bg-secondary text-muted-foreground"
-              )}>
-                <Volume2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                {isGenerating ? "Generating..." : isPlaying ? "Playing..." : isPaused ? "Paused" : audioUrl ? "Ready to download MP3" : "Ready to generate"}
-              </span>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                <span className="text-muted-foreground">Mode</span>
+                <span className="font-medium text-foreground">{activeMode === "tts" ? "Text-to-Speech" : "Voice Conversion"}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                <span className="text-muted-foreground">Voice</span>
+                <span className="font-medium text-foreground">
+                  {activeMode === "tts" ? selectedTtsVoice.name : selectedConversionVoice.name}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                <span className="text-muted-foreground">Status</span>
+                <span className={cn("font-medium", isProcessing ? "text-primary" : audioUrl ? "text-green-400" : "text-muted-foreground")}>
+                  {isProcessing ? "Processing" : audioUrl ? "Ready" : "Waiting"}
+                </span>
+              </div>
             </div>
 
-            {/* Info */}
-            <p className="text-center text-xs text-muted-foreground">
-              {useElevenLabs ? (
-                <>✨ Using ElevenLabs AI for professional quality voiceovers with MP3 export</>
-              ) : (
-                <>🔊 Using browser TTS - switch to ElevenLabs for MP3 downloads</>
-              )}
+            {audioUrl && <audio src={audioUrl} controls className="w-full" />}
+
+            <div className="grid grid-cols-2 gap-3">
+              <Button variant="outline" onClick={handleStop} disabled={!audioUrl && !isPlaying}>
+                <Square className="w-4 h-4 mr-2" />
+                Stop
+              </Button>
+              <Button variant="outline" onClick={handleDownload} disabled={!audioUrl}>
+                <Download className="w-4 h-4 mr-2" />
+                Download
+              </Button>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Puter.js runs in the browser and does not require API keys. If generation fails, check network availability and try a shorter script or a different audio file.
             </p>
           </CardContent>
         </Card>

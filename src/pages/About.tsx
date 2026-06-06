@@ -64,7 +64,7 @@ export default function About() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">How It Works</h2>
           <p className="text-muted-foreground leading-relaxed">
-            TubeGenius Pro uses a "Bring Your Own Key" (BYOK) model. You provide your own API keys from providers like Google AI, OpenAI, or ElevenLabs, and our platform provides the interface and tools to use them effectively. This means you only pay for what you use – directly to the API providers – with no middleman fees.
+            TubeGenius Pro uses a local-first model. Voice Studio runs through Puter.js without API keys, while future Gemini-powered tools can use your own locally stored Google AI key when needed.
           </p>
         </section>
 
