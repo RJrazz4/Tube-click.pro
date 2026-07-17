@@ -3,7 +3,7 @@
  * Gemini: GEMINI_API_KEY — fast edge for US storyboard analysis
  */
 export const config = { runtime: 'edge' };
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders, safeJsonBody } from './_shared.js';
+import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError } from './_shared.js';
 
 function extractGeminiText(data: any) {
   return data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('\n').trim();
@@ -28,7 +28,10 @@ export default async function handler(req: Request) {
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
     });
-    if (!res.ok) return jsonResponse({ error: `Gemini ${res.status}` }, res.status);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      return providerErrorResponse(txt, res.status, 'analyze-storyboard');
+    }
     const data = await res.json();
     let content = extractGeminiText(data) || '';
     content = cleanupJson(content);
@@ -53,8 +56,7 @@ export default async function handler(req: Request) {
     }
     return jsonResponse({ scenes });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error('[analyze-storyboard] error:', msg);
-    return jsonResponse({ error: msg || 'Internal server error', service: 'analyze-storyboard' }, 500);
+    console.error('[analyze-storyboard] error:', e);
+    return jsonResponse({ error: sanitizeThrownError(e, 'analyze-storyboard'), code: 'INTERNAL', service: 'analyze-storyboard' }, 500);
   }
 }

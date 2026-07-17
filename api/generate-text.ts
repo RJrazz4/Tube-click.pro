@@ -9,7 +9,7 @@ export const config = {
   runtime: 'edge',
 };
 
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, extractGeminiText, cleanupJson, corsHeaders, safeJsonBody, classifyFetchError } from './_shared.js';
+import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, extractGeminiText, cleanupJson, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError } from './_shared.js';
 
 function normalize(arr: unknown, fallback: string[]) {
   if (!Array.isArray(arr)) return fallback;
@@ -53,8 +53,8 @@ export default async function handler(req: Request) {
     });
 
     if (!res.ok) {
-      const txt = await res.text();
-      return jsonResponse({ error: txt || 'Gemini failed' }, res.status);
+      const txt = await res.text().catch(() => '');
+      return providerErrorResponse(txt, res.status, 'generate-text');
     }
 
     const data = await res.json();
@@ -75,8 +75,7 @@ export default async function handler(req: Request) {
     });
 
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error('[generate-text] error:', msg);
-    return jsonResponse({ error: msg || 'Internal server error', service: 'generate-text' }, 500);
+    console.error('[generate-text] error:', e);
+    return jsonResponse({ error: sanitizeThrownError(e, 'generate-text'), code: 'INTERNAL', service: 'generate-text' }, 500);
   }
 }

@@ -4,7 +4,7 @@
  * Server: GEMINI_API_KEY
  */
 export const config = { runtime: 'edge' };
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders, safeJsonBody } from './_shared.js';
+import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError } from './_shared.js';
 
 function extractText(d: any) {
   return d?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('\n').trim();
@@ -31,14 +31,16 @@ export default async function handler(req: Request) {
     ];
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
     const res = await fetchGeminiWithRetry(url, { contents: [{ role: 'user', parts: content }], generationConfig: { temperature: 0.4 } });
-    if (!res.ok) return jsonResponse({ error: `Gemini ${res.status}` }, res.status);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      return providerErrorResponse(txt, res.status, 'vision-guide');
+    }
     const data = await res.json();
     const guide = extractText(data) || '';
     if (!guide.trim()) return jsonResponse({ error: 'Empty guide' }, 502);
     return jsonResponse({ guide });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error('[vision-guide] error:', msg);
-    return jsonResponse({ error: msg || 'Internal server error', service: 'vision-guide' }, 500);
+    console.error('[vision-guide] error:', e);
+    return jsonResponse({ error: sanitizeThrownError(e, 'vision-guide'), code: 'INTERNAL', service: 'vision-guide' }, 500);
   }
 }

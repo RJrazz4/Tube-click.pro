@@ -5,7 +5,7 @@
  */
 export const config = { runtime: 'edge' };
 
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders, safeJsonBody } from './_shared.js';
+import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError } from './_shared.js';
 
 function extractText(d: any) {
   return d?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('\n').trim();
@@ -35,8 +35,8 @@ export default async function handler(req: Request) {
     });
 
     if (!res.ok) {
-      const txt = await res.text();
-      return jsonResponse({ error: txt || `Gemini ${res.status}` }, res.status);
+      const txt = await res.text().catch(() => '');
+      return providerErrorResponse(txt, res.status, 'seo-tags');
     }
 
     const data = await res.json();
@@ -66,8 +66,7 @@ export default async function handler(req: Request) {
     });
 
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error('[seo-tags] error:', msg);
-    return jsonResponse({ error: msg || 'Internal server error', service: 'seo-tags' }, 500);
+    console.error('[seo-tags] error:', e);
+    return jsonResponse({ error: sanitizeThrownError(e, 'seo-tags'), code: 'INTERNAL', service: 'seo-tags' }, 500);
   }
 }
