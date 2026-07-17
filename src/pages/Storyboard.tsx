@@ -608,7 +608,7 @@ export default function Storyboard() {
                             {isBuildingJ2V ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Video className="w-3.5 h-3.5" />}Render via JSON2Video
                           </Button>
                         </div>
-                        <p className="text-[10px] text-muted-foreground/70">Secure: JSON2VIDEO_API_KEY server-only (process.env). Frontend builds internal payload, server forwards to https://api.json2video.com/v2/movies. Free tier watermark, pro no watermark. Webhook at /api/webhook/json2video receives {url} when done.</p>
+                        <p className="text-[10px] text-muted-foreground/70">Secure: JSON2VIDEO_API_KEY server-only (process.env). Frontend builds internal payload, server forwards to https://api.json2video.com/v2/movies. Free tier watermark, pro no watermark. Webhook at /api/webhook/json2video receives {"{url}"} when done.</p>
                       </div>
                     </>
                   )}

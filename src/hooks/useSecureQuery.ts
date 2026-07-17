@@ -106,5 +106,5 @@ export function useSeoGeneration() {
 
 // Transcript generation — Phase B2
 export function useTranscriptExtraction() {
-  return useSecureMutation<{ transcript: string; segments: any[]; videoId: string }, { url: string }>("transcript");
+  return useSecureMutation<{ transcript: string; segments: any[]; videoId: string; wordCount: number; length: number; source: string }, { url: string }>("transcript");
 }

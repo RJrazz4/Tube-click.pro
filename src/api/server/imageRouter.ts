@@ -109,6 +109,9 @@ export function buildImageUrls(params: {
   return { primary: pollinationsUrl, provider: "fal", fallbackUrls: [snapgenUrl, pollinationsUrl] };
 }
 
+/** Minimal ambient type: this file is shared across runtimes; runtime guards use typeof checks */
+declare const Deno: any;
+
 /**
  * Checks if server has required keys for premium brands
  */
