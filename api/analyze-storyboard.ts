@@ -23,11 +23,12 @@ export default async function handler(req: Request) {
     const systemPrompt = `You are an expert storyboard analyst. Extract 4-10 story-critical scenes as JSON array. Each: beat_type, scene_number, who, what, emotion, location, camera_angle, visual_prompt, motion_prompt. Return only JSON array.`;
     const userPrompt = `Script: ${trimmed}`;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
-    const res = await fetchGeminiWithRetry(url, {
+    const outcome = await fetchGeminiWithRetry(url, {
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
     });
+    const res = outcome.res;
     if (!res.ok) {
       const txt = await res.text().catch(() => '');
       return providerErrorResponse(txt, res.status, 'analyze-storyboard');
@@ -54,7 +55,7 @@ export default async function handler(req: Request) {
     } catch {
       return jsonResponse({ error: 'Failed to parse storyboard' }, 502);
     }
-    return jsonResponse({ scenes });
+    return jsonResponse({ model: outcome.model, ...(outcome.failedOver ? { modelFailover: outcome.attempted } : {}), scenes });
   } catch (e: unknown) {
     console.error('[analyze-storyboard] error:', e);
     return jsonResponse({ error: sanitizeThrownError(e, 'analyze-storyboard'), code: 'INTERNAL', service: 'analyze-storyboard' }, 500);

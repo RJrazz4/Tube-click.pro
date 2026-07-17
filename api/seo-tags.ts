@@ -28,11 +28,12 @@ export default async function handler(req: Request) {
     const userPrompt = `Keyword: ${sanitized} — generate SEO bundle.`;
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
-    const res = await fetchGeminiWithRetry(url, {
+    const outcome = await fetchGeminiWithRetry(url, {
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0.8 },
     });
+    const res = outcome.res;
 
     if (!res.ok) {
       const txt = await res.text().catch(() => '');
@@ -58,6 +59,8 @@ export default async function handler(req: Request) {
     const seoScore = typeof parsed.seoScore === 'number' ? Math.round(parsed.seoScore) : 85;
 
     return jsonResponse({
+      model: outcome.model,
+      ...(outcome.failedOver ? { modelFailover: outcome.attempted } : {}),
       tags,
       seoScore,
       competition: parsed.competition || 'Medium (High Demand)',

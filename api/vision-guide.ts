@@ -30,7 +30,8 @@ export default async function handler(req: Request) {
       ...images.map((d: string) => toInlineData(d))
     ];
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
-    const res = await fetchGeminiWithRetry(url, { contents: [{ role: 'user', parts: content }], generationConfig: { temperature: 0.4 } });
+    const outcome = await fetchGeminiWithRetry(url, { contents: [{ role: 'user', parts: content }], generationConfig: { temperature: 0.4 } });
+    const res = outcome.res;
     if (!res.ok) {
       const txt = await res.text().catch(() => '');
       return providerErrorResponse(txt, res.status, 'vision-guide');
@@ -38,7 +39,7 @@ export default async function handler(req: Request) {
     const data = await res.json();
     const guide = extractText(data) || '';
     if (!guide.trim()) return jsonResponse({ error: 'Empty guide' }, 502);
-    return jsonResponse({ guide });
+    return jsonResponse({ model: outcome.model, ...(outcome.failedOver ? { modelFailover: outcome.attempted } : {}), guide });
   } catch (e: unknown) {
     console.error('[vision-guide] error:', e);
     return jsonResponse({ error: sanitizeThrownError(e, 'vision-guide'), code: 'INTERNAL', service: 'vision-guide' }, 500);

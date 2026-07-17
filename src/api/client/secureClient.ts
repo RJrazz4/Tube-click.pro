@@ -94,11 +94,14 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
   const { url, headers } = getApiEndpoint(functionName);
 
   let lastErr: EdgeFunctionError | null = null;
+  let pendingDelayMs: number | null = null; // Phase E2: provider-hinted delay wins
 
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
     if (attempt > 0) {
-      const base = RETRY_DELAYS[attempt - 1];
-      const jitter = base * 0.2 * (Math.random() * 2 - 1);
+      const base = pendingDelayMs ?? RETRY_DELAYS[attempt - 1];
+      pendingDelayMs = null;
+      // Non-negative jitter only — a provider retryDelay is a minimum, never go below it
+      const jitter = base * 0.2 * Math.random();
       await new Promise(r => setTimeout(r, Math.round(base + jitter)));
     }
 
@@ -121,9 +124,25 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
     const msg = extractMessage(parsed, res.status);
     lastErr = new EdgeFunctionError(msg, res.status);
 
+    if (res.status === 401 || res.status === 403) throw lastErr;
+
+    // Phase E2 — normalized server envelope (has `code`): the server already
+    // applied model failover + policy-driven retries. Only honor an explicit
+    // provider retryAfter hint — exactly once — and fail fast on everything
+    // else (e.g. QUOTA_EXCEEDED_DAILY must NEVER be retried client-side).
+    const code = (parsed as any)?.code;
+    const retryAfterSec = (parsed as any)?.retryAfter;
+    if (typeof code === 'string') {
+      if (typeof retryAfterSec === 'number' && retryAfterSec > 0 && attempt === 0) {
+        pendingDelayMs = Math.min(retryAfterSec, 30) * 1000;
+        continue;
+      }
+      throw lastErr;
+    }
+
+    // Legacy backends (Supabase functions) without a machine-readable code
     const retryable = res.status === 429 || res.status >= 500;
     if (!retryable || attempt === RETRY_DELAYS.length) throw lastErr;
-    if (res.status === 401 || res.status === 403) throw lastErr;
   }
 
   throw lastErr || new EdgeFunctionError("Request failed after retries", 500);

@@ -46,11 +46,12 @@ export default async function handler(req: Request) {
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
 
-    const res = await fetchGeminiWithRetry(url, {
+    const outcome = await fetchGeminiWithRetry(url, {
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0.9 },
     });
+    const res = outcome.res;
 
     if (!res.ok) {
       const txt = await res.text().catch(() => '');
@@ -67,6 +68,8 @@ export default async function handler(req: Request) {
     }
 
     return jsonResponse({
+      model: outcome.model,
+      ...(outcome.failedOver ? { modelFailover: outcome.attempted } : {}),
       titles: normalize(parsed.titles, [`🔥 ${sanitized}`]).slice(0,5),
       hooks: normalize(parsed.hooks, ['Hook']).slice(0,10),
       script: typeof parsed.script === 'string' ? parsed.script.trim() : content,

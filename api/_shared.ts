@@ -45,8 +45,9 @@ export function requireEnv(key: string): string {
   return val;
 }
 
-// GEMINI model constant
+// GEMINI models — chain is env-overridable (Phase E2): GEMINI_MODEL + GEMINI_MODEL_FALLBACKS (CSV)
 export const GEMINI_MODEL = "gemini-2.0-flash";
+export const GEMINI_MODEL_FALLBACKS = ["gemini-2.0-flash-lite"];
 export const RETRY_DELAYS = [2000, 5000, 10000];
 
 export function extractGeminiText(data: any) {
@@ -56,23 +57,112 @@ export function extractGeminiText(data: any) {
     .trim();
 }
 
-export async function fetchGeminiWithRetry(url: string, body: unknown): Promise<Response> {
-  let last: Response | null = null;
-  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
-    if (attempt > 0) {
-      const delay = RETRY_DELAYS[attempt - 1];
-      const jitter = delay * 0.2 * (Math.random() * 2 - 1);
-      await new Promise(r => setTimeout(r, Math.round(delay + jitter)));
+/* ------------------------------------------------------------------ *
+ * Phase 2 — Resilient Gemini fetching: smart retry + model fallback
+ * ------------------------------------------------------------------ */
+
+export interface GeminiFetchOutcome {
+  /** Final Response (ok, or the last error if everything failed) */
+  res: Response;
+  /** Model that produced `res` */
+  model: string;
+  /** Models tried, in order */
+  attempted: string[];
+  /** True when more than one model was tried (rate-limit / daily-quota failover) */
+  failedOver: boolean;
+}
+
+/** Resolve the model chain: GEMINI_MODEL env > default; GEMINI_MODEL_FALLBACKS env (CSV) > default. */
+export function geminiModelChain(): string[] {
+  const primary = (process.env.GEMINI_MODEL || GEMINI_MODEL).trim();
+  const fallbacks = (process.env.GEMINI_MODEL_FALLBACKS || GEMINI_MODEL_FALLBACKS.join(','))
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+  return [...new Set([primary, ...fallbacks])];
+}
+
+function modelFromUrl(url: string): string | null {
+  const m = url.match(/\/models\/([^:/]+):/);
+  return m ? m[1] : null;
+}
+
+function withModel(url: string, model: string): string {
+  return url.replace(/(\/models\/)[^:/]+(:)/, `$1${model}$2`);
+}
+
+const sleepMs = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Fetch Gemini with a policy-driven retry + model fallback chain.
+ *
+ * Policy:
+ *  - Non-429 4xx (bad request / invalid key): fail immediately — every model
+ *    would fail identically.
+ *  - RATE_LIMITED with provider retryDelay: honor it ONCE per model, bounded by
+ *    a global retry budget (default 12s, GEMINI_RETRY_BUDGET_MS) so the function
+ *    always stays inside the Vercel edge maxDuration.
+ *  - QUOTA_EXCEEDED_DAILY: do NOT retry the same model — per-day quota cannot
+ *    recover in seconds. Fail over INSTANTLY to the next model (Google daily
+ *    quotas are per-model, so flash-lite still works when flash is exhausted).
+ *  - UPSTREAM_ERROR (5xx): one short backoff retry, then the next model.
+ *
+ * Detection reuses the Phase 1 normalizer; the response BODY is only ever read
+ * via res.clone(), so callers can still stream the final error body verbatim.
+ */
+export async function fetchGeminiWithRetry(url: string, body: unknown): Promise<GeminiFetchOutcome> {
+  const chain = geminiModelChain();
+  const startModel = modelFromUrl(url);
+  const models = startModel ? [startModel, ...chain.filter(m => m !== startModel)] : chain;
+
+  const MAX_HONORED_DELAY_MS = 15000; // never sleep longer than this at the edge
+  const RETRY_BUDGET_MS = Math.max(0, parseInt(process.env.GEMINI_RETRY_BUDGET_MS || '12000', 10) || 12000);
+  const t0 = Date.now();
+
+  const attempted: string[] = [];
+  let lastRes: Response | null = null;
+  let lastModel = startModel || models[models.length - 1];
+
+  for (const model of models) {
+    attempted.push(model);
+    const modelUrl = (startModel && model !== startModel) ? withModel(url, model) : url;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      lastRes = await fetch(modelUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      lastModel = model;
+
+      if (lastRes.ok) return { res: lastRes, model, attempted, failedOver: attempted.length > 1 };
+
+      // Non-429 4xx: request/config problem — identical across models. Fail fast.
+      if (lastRes.status >= 400 && lastRes.status < 500 && lastRes.status !== 429) {
+        return { res: lastRes, model, attempted, failedOver: attempted.length > 1 };
+      }
+
+      if (attempt === 0) {
+        const errText = await lastRes.clone().text().catch(() => '');
+        const info = parseProviderError(errText, lastRes.status, 'gemini');
+
+        let delayMs = 0;
+        if (info.code === 'RATE_LIMITED' && info.retryAfter) {
+          delayMs = info.retryAfter * 1000 <= MAX_HONORED_DELAY_MS ? info.retryAfter * 1000 : 0;
+        } else if (info.code === 'UPSTREAM_ERROR') {
+          delayMs = 2000;
+        }
+
+        if (delayMs > 0 && (Date.now() - t0 + delayMs) <= RETRY_BUDGET_MS) {
+          await sleepMs(Math.round(delayMs + delayMs * 0.2 * Math.random())); // non-negative jitter
+          continue; // retry SAME model once
+        }
+      }
+      break; // next model (daily quota / hint too long / budget exhausted / unknown transient)
     }
-    last = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    if (last.ok || (last.status < 500 && last.status !== 429)) return last;
-    if (attempt === RETRY_DELAYS.length) return last;
   }
-  return last!;
+
+  return { res: lastRes!, model: lastModel, attempted, failedOver: attempted.length > 1 };
 }
 
 export function cleanupJson(value: string) {
