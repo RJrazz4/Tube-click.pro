@@ -12,7 +12,7 @@
  */
 export const config = { runtime: 'edge' };
 
-import { jsonResponse, corsHeaders } from './_shared';
+import { jsonResponse, corsHeaders } from './_shared.js';
 
 function requireEnv(key: string): string {
   const val = process.env[key] || '';

@@ -10,7 +10,7 @@
  */
 export const config = { runtime: 'edge' };
 
-import { jsonResponse, corsHeaders } from '../_shared';
+import { jsonResponse, corsHeaders } from '../_shared.js';
 
 export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });

@@ -9,7 +9,7 @@ export const config = {
   runtime: 'nodejs', // Must be nodejs for youtube-transcript lib
 };
 
-import { jsonResponse, corsHeaders } from './_shared';
+import { jsonResponse, corsHeaders } from './_shared.js';
 
 // NOTE: youtube-transcript is installed via npm — see package.json
 // For Vercel Node runtime, we can import it directly
@@ -21,7 +21,8 @@ async function getTranscriptLib() {
   try {
     // Try ESM import
     const mod = await import('youtube-transcript');
-    YoutubeTranscriptLib = mod.YoutubeTranscript || mod.default || mod;
+    // CJS interop fallback: the ESM build has no `default` export, hence the cast
+    YoutubeTranscriptLib = mod.YoutubeTranscript || (mod as any).default || mod;
     return YoutubeTranscriptLib;
   } catch (e) {
     console.error('Failed to load youtube-transcript lib', e);

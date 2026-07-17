@@ -4,7 +4,7 @@
  * Server: FAL_API_KEY optional, SNAPGEN_API_KEY optional
  */
 export const config = { runtime: 'edge' };
-import { jsonResponse, corsHeaders } from './_shared';
+import { jsonResponse, corsHeaders } from './_shared.js';
 
 async function genFal(prompt: string): Promise<string | null> {
   const falKey = process.env.FAL_API_KEY;

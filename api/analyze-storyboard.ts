@@ -3,7 +3,7 @@
  * Gemini: GEMINI_API_KEY — fast edge for US storyboard analysis
  */
 export const config = { runtime: 'edge' };
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders } from './_shared';
+import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders } from './_shared.js';
 
 function extractGeminiText(data: any) {
   return data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('\n').trim();
