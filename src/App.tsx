@@ -16,10 +16,12 @@ const Storyboard = lazy(() => import("./pages/Storyboard"));
 const Thumbnails = lazy(() => import("./pages/Thumbnails"));
 const VisionGuide = lazy(() => import("./pages/VisionGuide"));
 const VoiceStudio = lazy(() => import("./pages/VoiceStudio"));
+const Repurposer = lazy(() => import("./pages/Repurposer"));
+const Analytics = lazy(() => import("./pages/Analytics"));
+const SeoOptimizer = lazy(() => import("./pages/SeoOptimizer"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const About = lazy(() => import("./pages/About"));
-// Admin panel is now inline via ghost trigger modal - no route needed
 
 const queryClient = new QueryClient();
 
@@ -58,10 +60,12 @@ const App = () => (
               <Route path="/thumbnails" element={<Thumbnails />} />
               <Route path="/vision-guide" element={<VisionGuide />} />
               <Route path="/voice" element={<VoiceStudio />} />
+              <Route path="/repurposer" element={<Repurposer />} />
+              <Route path="/analytics" element={<Analytics />} />
+              <Route path="/seo" element={<SeoOptimizer />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/about" element={<About />} />
-              {/* Admin panel is now accessible via ghost trigger on logo */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
