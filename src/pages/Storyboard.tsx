@@ -15,18 +15,22 @@ import {
   Camera,
   Heart,
   Video,
-  Clock
+  Clock,
+  Crown,
+  Zap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/api/client/secureClient";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 import JSZip from "jszip";
+import { IMAGE_MODEL_MAP, type ImageModelBrand } from "@/api/server/imageRouter";
 
 interface Scene {
   beat_type: string;
@@ -66,6 +70,7 @@ export default function Storyboard() {
   const [currentGeneratingScene, setCurrentGeneratingScene] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
   const [retryingScene, setRetryingScene] = useState<number | null>(null);
+  const [brand, setBrand] = useState<ImageModelBrand>("Tube.Cinematic");
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Load saved storyboard from localStorage
@@ -196,6 +201,7 @@ export default function Storyboard() {
         {
           prompt: promptToUse,
           sceneNumber: scene.scene_number,
+          brand,
         },
         abortControllerRef.current.signal,
       );
@@ -551,6 +557,38 @@ export default function Storyboard() {
               )}
             </div>
 
+            {/* Brand Selector — Phase C2 White-Label */}
+            <div className="space-y-2">
+              <Label className="text-xs flex items-center gap-1.5">
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                Visual Engine (Storyboard) — {brand}
+              </Label>
+              <div className="grid grid-cols-1 gap-1.5">
+                {(Object.keys(IMAGE_MODEL_MAP) as ImageModelBrand[]).map((b) => {
+                  const cfg = IMAGE_MODEL_MAP[b];
+                  const Icon = b === "Tube.Flash" ? Zap : b === "Tube.Pro" ? Crown : Film;
+                  return (
+                    <button
+                      key={b}
+                      onClick={() => setBrand(b)}
+                      disabled={isGenerating || isAnalyzing}
+                      className={cn(
+                        "p-2.5 rounded-lg border text-left flex items-center gap-2.5 transition-all text-xs disabled:opacity-50",
+                        brand === b ? "border-primary bg-primary/10 ring-1 ring-primary/20" : "border-border bg-secondary/50 hover:border-primary/30"
+                      )}
+                    >
+                      <Icon className={cn("w-4 h-4", brand === b ? "text-primary" : "text-muted-foreground")} />
+                      <div className="flex-1">
+                        <p className="font-semibold text-foreground flex items-center gap-1">{b} <span className={cn("px-1 py-0 rounded text-[9px]", cfg.costTier === "free" ? "bg-green-500/20 text-green-400" : "bg-amber-500/20 text-amber-400")}>{cfg.costTier.toUpperCase()}</span></p>
+                        <p className="text-[10px] text-muted-foreground truncate">{cfg.provider} • {cfg.quality}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground/70">White-label: client sends brand, server maps to {IMAGE_MODEL_MAP[brand].provider} — no keys exposed.</p>
+            </div>
+
             {/* Status summary */}
             {scenes.length > 0 && (
               <div className="p-3 rounded-lg bg-secondary/50 border border-border">
@@ -571,6 +609,7 @@ export default function Storyboard() {
                     </span>
                   )}
                 </div>
+                <p className="text-[11px] text-muted-foreground mt-1.5 text-center">Brand: {brand} • {IMAGE_MODEL_MAP[brand].provider} • {IMAGE_MODEL_MAP[brand].costTier}</p>
               </div>
             )}
 
