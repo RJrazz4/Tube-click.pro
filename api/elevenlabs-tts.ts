@@ -5,7 +5,7 @@
  */
 export const config = { runtime: 'edge' };
 
-import { corsHeaders, requireEnv } from './_shared';
+import { corsHeaders, requireEnv } from './_shared.js';
 
 const VOICES: Record<string, string> = {
   'george': 'JBFqnCBsd6RMkjVDRZzb',

@@ -7,7 +7,7 @@
  */
 export const config = { runtime: 'edge' };
 
-import { jsonResponse, corsHeaders } from './_shared';
+import { jsonResponse, corsHeaders } from './_shared.js';
 
 function dims(ratio: string) {
   return ratio === '9:16' ? { w: 1080, h: 1920, fal: 'portrait_16_9' } : { w: 1280, h: 720, fal: 'landscape_16_9' };

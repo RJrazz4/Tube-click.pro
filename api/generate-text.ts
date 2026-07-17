@@ -9,7 +9,7 @@ export const config = {
   runtime: 'edge',
 };
 
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, extractGeminiText, cleanupJson, corsHeaders } from './_shared';
+import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, extractGeminiText, cleanupJson, corsHeaders } from './_shared.js';
 
 function normalize(arr: unknown, fallback: string[]) {
   if (!Array.isArray(arr)) return fallback;

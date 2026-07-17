@@ -4,7 +4,7 @@
  * Server: GEMINI_API_KEY
  */
 export const config = { runtime: 'edge' };
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders } from './_shared';
+import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders } from './_shared.js';
 
 function extractText(d: any) {
   return d?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('\n').trim();
