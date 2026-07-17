@@ -33,7 +33,9 @@ export default async function handler(req: Request) {
       env: process.env.VERCEL_ENV || 'development',
     });
 
-  } catch (e: any) {
-    return jsonResponse({ error: e.message }, 500);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[config] unexpected error:', msg);
+    return jsonResponse({ error: 'Internal server error', detail: msg }, 500);
   }
 }

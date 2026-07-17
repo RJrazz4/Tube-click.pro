@@ -5,7 +5,7 @@
  */
 export const config = { runtime: 'edge' };
 
-import { corsHeaders, requireEnv } from './_shared.js';
+import { corsHeaders, requireEnv, jsonResponse, safeJsonBody } from './_shared.js';
 
 const VOICES: Record<string, string> = {
   'george': 'JBFqnCBsd6RMkjVDRZzb',
@@ -26,12 +26,14 @@ const VOICES: Record<string, string> = {
 
 export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
-  if (req.method !== 'POST') return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   try {
-    const { text, voiceId, stability, similarityBoost, speed } = await req.json();
-    if (!text || !text.trim()) return new Response(JSON.stringify({ error: 'Text required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    if (text.length > 5000) return new Response(JSON.stringify({ error: 'Max 5000 chars' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const body = await safeJsonBody(req);
+    if (body.error) return jsonResponse({ error: body.error }, 400);
+    const { text, voiceId, stability, similarityBoost, speed } = body.data;
+    if (!text || !text.trim()) return jsonResponse({ error: 'Text required' }, 400);
+    if (text.length > 5000) return jsonResponse({ error: 'Max 5000 chars' }, 400);
 
     const apiKey = requireEnv('ELEVENLABS_API_KEY');
     const resolved = VOICES[voiceId?.toLowerCase()] || voiceId || VOICES['george'];
@@ -54,13 +56,15 @@ export default async function handler(req: Request) {
 
     if (!elRes.ok) {
       const err = await elRes.text();
-      return new Response(JSON.stringify({ error: err || `ElevenLabs ${elRes.status}` }), { status: elRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return jsonResponse({ error: err || `ElevenLabs ${elRes.status}` }, elRes.status);
     }
 
     const buf = await elRes.arrayBuffer();
     return new Response(buf, { status: 200, headers: { ...corsHeaders, 'Content-Type': 'audio/mpeg' } });
 
-  } catch (e: any) {
-    return new Response(JSON.stringify({ error: e.message || 'Unknown' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[elevenlabs-tts] error:', msg);
+    return jsonResponse({ error: msg || 'Unknown error', service: 'elevenlabs-tts' }, 500);
   }
 }

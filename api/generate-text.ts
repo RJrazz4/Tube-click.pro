@@ -9,7 +9,7 @@ export const config = {
   runtime: 'edge',
 };
 
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, extractGeminiText, cleanupJson, corsHeaders } from './_shared.js';
+import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, extractGeminiText, cleanupJson, corsHeaders, safeJsonBody, classifyFetchError } from './_shared.js';
 
 function normalize(arr: unknown, fallback: string[]) {
   if (!Array.isArray(arr)) return fallback;
@@ -22,7 +22,11 @@ export default async function handler(req: Request) {
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   try {
-    const { topic, platform, style, language = 'hinglish' } = await req.json();
+    // Parse request body with explicit error handling
+    const body = await safeJsonBody(req);
+    if (body.error) return jsonResponse({ error: body.error }, 400);
+    const { topic, platform, style, language = 'hinglish' } = body.data;
+
     const key = requireEnv('GEMINI_API_KEY');
 
     if (!topic || topic.trim().length < 3) return jsonResponse({ error: 'Topic min 3 chars' }, 400);
@@ -70,7 +74,9 @@ export default async function handler(req: Request) {
       description: typeof parsed.description === 'string' ? parsed.description.trim() : sanitized,
     });
 
-  } catch (e: any) {
-    return jsonResponse({ error: e.message || 'Unknown error' }, 500);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[generate-text] error:', msg);
+    return jsonResponse({ error: msg || 'Internal server error', service: 'generate-text' }, 500);
   }
 }

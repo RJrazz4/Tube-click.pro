@@ -9,7 +9,7 @@ export const config = {
   runtime: 'nodejs', // Must be nodejs for youtube-transcript lib
 };
 
-import { jsonResponse, corsHeaders } from './_shared.js';
+import { jsonResponse, corsHeaders, safeJsonBody } from './_shared.js';
 
 // NOTE: youtube-transcript is installed via npm — see package.json
 // For Vercel Node runtime, we can import it directly
@@ -77,8 +77,9 @@ export default async function handler(req: Request) {
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   try {
-    const body = await req.json();
-    const { url, lang = 'en' } = body;
+    const bodyResult = await safeJsonBody(req);
+    if (bodyResult.error) return jsonResponse({ error: bodyResult.error }, 400);
+    const { url, lang = 'en' } = bodyResult.data;
 
     if (!url || typeof url !== 'string') return jsonResponse({ error: 'YouTube URL required. Example: https://youtube.com/watch?v=dQw4w9WgXcQ' }, 400);
 
@@ -135,7 +136,9 @@ export default async function handler(req: Request) {
       fallback: 'You can still use Multi-Platform Repurposer by pasting title/script manually — transcript extraction is optional free value add.',
     }, 404);
 
-  } catch (e: any) {
-    return jsonResponse({ error: e.message || 'Failed to extract transcript', action: 'Check URL and try again' }, 500);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[transcript] error:', msg);
+    return jsonResponse({ error: msg || 'Failed to extract transcript', action: 'Check URL and try again', service: 'transcript' }, 500);
   }
 }

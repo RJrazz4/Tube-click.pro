@@ -10,14 +10,16 @@
  */
 export const config = { runtime: 'edge' };
 
-import { jsonResponse, corsHeaders } from '../_shared.js';
+import { jsonResponse, corsHeaders, safeJsonBody } from '../_shared.js';
 
 export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse({ error: 'POST only — JSON2Video webhook' }, 405);
 
   try {
-    const payload = await req.json();
+    const bodyResult = await safeJsonBody(req);
+    if (bodyResult.error) return jsonResponse({ error: bodyResult.error }, 400);
+    const payload = bodyResult.data;
     const { width, height, duration, size, url, project, id } = payload;
 
     if (!url) return jsonResponse({ error: 'Missing url in webhook payload' }, 400);
@@ -39,8 +41,9 @@ export default async function handler(req: Request) {
       next: 'Save to dashboard, send email notification',
     });
 
-  } catch (e: any) {
-    console.error('[JSON2Video Webhook] Error', e);
-    return jsonResponse({ error: e.message }, 500);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[JSON2Video Webhook] Error:', msg);
+    return jsonResponse({ error: msg || 'Internal server error', service: 'webhook-json2video' }, 500);
   }
 }
