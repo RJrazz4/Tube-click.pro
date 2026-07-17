@@ -35,27 +35,28 @@ serve(async (req) => {
   }
 
   try {
-    const { text, voiceId, stability, similarityBoost, speed, customApiKey } = await req.json();
+    const { text, voiceId, stability, similarityBoost, speed } = await req.json();
 
-    const ELEVENLABS_API_KEY = (typeof customApiKey === "string" ? customApiKey.trim() : "") || Deno.env.get('ELEVENLABS_API_KEY') || "";
+    // SECURE: Server env only — VectorEngine white-label (VECTORENGINE_API_KEY) fallback to ELEVENLABS_API_KEY
+    const ELEVENLABS_API_KEY = Deno.env.get('VECTORENGINE_API_KEY') || Deno.env.get('ELEVENLABS_API_KEY') || "";
 
     if (!ELEVENLABS_API_KEY) {
       return new Response(
-        JSON.stringify({ success: false, error: 'ElevenLabs API key not configured.', action: 'Add your ElevenLabs key in Settings.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: 'ELEVENLABS_API_KEY not configured on server.', action: 'Admin: set secrets.' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (!text || typeof text !== 'string' || !text.trim()) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Text is required.', action: 'Enter text to convert to speech.' }),
+        JSON.stringify({ success: false, error: 'Text is required.', action: 'Enter text.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (text.length > 5000) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Text too long (max 5000 chars).', action: 'Shorten your text.' }),
+        JSON.stringify({ success: false, error: 'Text too long (max 5000 chars).', action: 'Shorten text.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -63,7 +64,6 @@ serve(async (req) => {
     const voiceKey = voiceId?.toLowerCase();
     const resolvedVoiceId = VOICES[voiceKey] || voiceId || VOICES['george'];
 
-    // Retry loop for ElevenLabs
     let lastError = 'Voice generation failed.';
 
     for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
@@ -102,14 +102,12 @@ serve(async (req) => {
 
       if (response.status === 401 || response.status === 403) {
         return new Response(
-          JSON.stringify({ success: false, error: 'Invalid ElevenLabs API key.', action: 'Update your ElevenLabs key in Settings.' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ success: false, error: 'Server ElevenLabs key invalid.', action: 'Admin: check ELEVENLABS_API_KEY.' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      if (response.status === 429 && attempt < RETRY_DELAYS.length) {
-        continue;
-      }
+      if (response.status === 429 && attempt < RETRY_DELAYS.length) continue;
 
       try {
         const errorData = await response.json();
@@ -120,7 +118,7 @@ serve(async (req) => {
 
       if (attempt === RETRY_DELAYS.length) {
         return new Response(
-          JSON.stringify({ success: false, error: lastError, action: 'Try again or check your API key.' }),
+          JSON.stringify({ success: false, error: lastError, action: 'Try again.' }),
           { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

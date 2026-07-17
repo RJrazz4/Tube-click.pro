@@ -37,30 +37,22 @@ function normalizeStringArray(values: unknown, fallback: string[]) {
 
 async function fetchGeminiWithRetry(url: string, body: unknown): Promise<Response> {
   let lastResponse: Response | null = null;
-
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
     if (attempt > 0) {
       const delay = RETRY_DELAYS[attempt - 1];
       const jitter = delay * 0.2 * (Math.random() * 2 - 1);
       await new Promise(r => setTimeout(r, Math.round(delay + jitter)));
     }
-
     lastResponse = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-
-    // Only retry on 429 or 5xx
     if (lastResponse.ok || (lastResponse.status < 500 && lastResponse.status !== 429)) {
       return lastResponse;
     }
-
-    if (attempt === RETRY_DELAYS.length) {
-      return lastResponse;
-    }
+    if (attempt === RETRY_DELAYS.length) return lastResponse;
   }
-
   return lastResponse!;
 }
 
@@ -79,15 +71,15 @@ serve(async (req) => {
   }
 
   try {
-    const { topic, platform, style, language = "hinglish", customApiKey } = await req.json();
+    // SECURE: No customApiKey from client — server env only
+    const { topic, platform, style, language = "hinglish" } = await req.json();
     const geminiApiKey =
-      (typeof customApiKey === "string" ? customApiKey.trim() : "") ||
       Deno.env.get("GEMINI_API_KEY") ||
       Deno.env.get("GOOGLE_AI_API_KEY") ||
       "";
 
     if (!geminiApiKey) {
-      return jsonResponse({ success: false, error: "Gemini API key not configured. Add your key in Settings.", action: "Open the Ghost Admin panel and enter your Gemini API key." }, 400);
+      return jsonResponse({ success: false, error: "GEMINI_API_KEY not configured on server. Set via supabase secrets set GEMINI_API_KEY=...", action: "Contact admin." }, 500);
     }
 
     if (!topic || typeof topic !== 'string' || topic.trim().length < 3) {
@@ -156,14 +148,12 @@ Script must be ready-to-read voiceover text.`;
 
     if (!response.ok) {
       const errorMessage = await readGeminiError(response);
-
       if (response.status === 400 || response.status === 401 || response.status === 403) {
-        return jsonResponse({ success: false, error: "Invalid Gemini API key or access denied.", action: "Update your Gemini API key in Settings." }, 401);
+        return jsonResponse({ success: false, error: "Server Gemini key invalid or unauthorized.", action: "Admin: check server env GEMINI_API_KEY." }, 500);
       }
       if (response.status === 429) {
-        return jsonResponse({ success: false, error: "Gemini rate limit exceeded after retries.", action: "Wait 30 seconds and try again, or check your Gemini API quota." }, 429);
+        return jsonResponse({ success: false, error: "Gemini rate limit exceeded after retries.", action: "Wait 30 seconds and try again." }, 429);
       }
-
       return jsonResponse({ success: false, error: errorMessage || "Gemini content generation failed.", action: "Try again in a moment." }, 500);
     }
 
@@ -201,6 +191,6 @@ Script must be ready-to-read voiceover text.`;
     });
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    return jsonResponse({ success: false, error: errorMessage, action: "Try again or check your API key." }, 500);
+    return jsonResponse({ success: false, error: errorMessage, action: "Try again." }, 500);
   }
 });

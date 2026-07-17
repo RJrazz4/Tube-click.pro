@@ -12,6 +12,15 @@ dist
 dist-ssr
 *.local
 
+# Env — CRITICAL: never commit real keys
+.env
+.env.local
+.env.production
+.env.development
+
+# Bun duplicate binary lock
+bun.lockb
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

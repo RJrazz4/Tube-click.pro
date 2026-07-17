@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
-import { getLockerUrl } from "@/components/GhostAdminModal";
+import { getLockerUrl } from "@/lib/monetization/locker";
 
 interface VoiceVerificationModalProps {
   open: boolean;

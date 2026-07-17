@@ -15,19 +15,24 @@ import {
   Camera,
   Heart,
   Video,
-  Clock
+  Clock,
+  Crown,
+  Zap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { getStoredApiKey } from "@/lib/byok";
-import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/lib/edgeFunctionClient";
+import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/api/client/secureClient";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 import JSZip from "jszip";
+import { IMAGE_MODEL_MAP, type ImageModelBrand } from "@/api/server/imageRouter";
+import { useJson2Video } from "@/hooks/useJson2Video";
+import { FileJson } from "lucide-react";
 
 interface Scene {
   beat_type: string;
@@ -67,6 +72,9 @@ export default function Storyboard() {
   const [currentGeneratingScene, setCurrentGeneratingScene] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
   const [retryingScene, setRetryingScene] = useState<number | null>(null);
+  const [brand, setBrand] = useState<ImageModelBrand>("Tube.Cinematic");
+  const [aspectRatioJ2V, setAspectRatioJ2V] = useState<"9:16" | "16:9">("9:16");
+  const { isBuilding: isBuildingJ2V, buildPayload: buildJ2VPayload, downloadJson: downloadJ2VJson, sendToJson2Video: sendJ2V } = useJson2Video();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Load saved storyboard from localStorage
@@ -131,7 +139,6 @@ export default function Storyboard() {
     try {
       const data = await fetchEdgeFunctionJson<{ scenes: Scene[] }>("analyze-storyboard", {
         script,
-        customApiKey: getStoredApiKey("text"),
       });
       
       // Dynamic scene count (4-10)
@@ -198,7 +205,7 @@ export default function Storyboard() {
         {
           prompt: promptToUse,
           sceneNumber: scene.scene_number,
-          customApiKey: getStoredApiKey("image"),
+          brand,
         },
         abortControllerRef.current.signal,
       );
@@ -540,18 +547,109 @@ export default function Storyboard() {
                   )}
 
                   {completedCount > 0 && (
-                    <Button
-                      variant="outline"
-                      onClick={downloadAllAsZip}
-                      disabled={isGenerating || isAnalyzing}
-                      className="w-full border-border hover:border-green-500/50 hover:text-green-400"
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Download Storyboard ZIP ({completedCount} images)
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={downloadAllAsZip}
+                        disabled={isGenerating || isAnalyzing}
+                        className="w-full border-border hover:border-green-500/50 hover:text-green-400"
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Download Storyboard ZIP ({completedCount} images)
+                      </Button>
+
+                      {/* JSON2Video Payload Export — Phase D2 */}
+                      <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20 space-y-2">
+                        <Label className="text-xs flex items-center gap-1.5"><FileJson className="w-3.5 h-3.5 text-purple-400" />JSON2Video Assembly — {aspectRatioJ2V} Shorts/Reels</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button onClick={() => setAspectRatioJ2V("9:16")} disabled={isGenerating} className={cn("p-2 rounded-lg border text-xs", aspectRatioJ2V === "9:16" ? "border-purple-500 bg-purple-500/20 text-purple-300" : "border-border bg-secondary")}>9:16 Shorts</button>
+                          <button onClick={() => setAspectRatioJ2V("16:9")} disabled={isGenerating} className={cn("p-2 rounded-lg border text-xs", aspectRatioJ2V === "16:9" ? "border-purple-500 bg-purple-500/20 text-purple-300" : "border-border bg-secondary")}>16:9 YouTube</button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const completed = scenes.filter(s => s.imageUrl);
+                              if (completed.length === 0) { toast.error("Generate images first"); return; }
+                              const payload = buildJ2VPayload({
+                                storyboardScenes: completed.map(s => ({ imageUrl: s.imageUrl!, visual_prompt: s.visual_prompt, motion_prompt: s.motion_prompt, scene_number: s.scene_number, beat_type: s.beat_type })),
+                                voiceoverText: script.slice(0, 2000),
+                                topic: script.slice(0, 60) || "TubeGenius Storyboard",
+                                aspectRatio: aspectRatioJ2V,
+                                tier: "pro",
+                              });
+                              if (payload) downloadJ2VJson(payload, "api");
+                            }}
+                            disabled={isBuildingJ2V || isGenerating}
+                            className="h-9 text-xs gap-1 border-purple-500/30 hover:border-purple-500/50"
+                          >
+                            {isBuildingJ2V ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileJson className="w-3.5 h-3.5" />}Export JSON2Video
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              const completed = scenes.filter(s => s.imageUrl);
+                              if (completed.length === 0) { toast.error("Generate images first"); return; }
+                              const payload = buildJ2VPayload({
+                                storyboardScenes: completed.map(s => ({ imageUrl: s.imageUrl!, visual_prompt: s.visual_prompt, motion_prompt: s.motion_prompt, scene_number: s.scene_number, beat_type: s.beat_type })),
+                                voiceoverText: script.slice(0, 2000),
+                                topic: script.slice(0, 60) || "TubeGenius Storyboard",
+                                aspectRatio: aspectRatioJ2V,
+                                tier: "pro",
+                              });
+                              if (payload) {
+                                const res = await sendJ2V(payload);
+                                if (res && (res as any).blueprint) {
+                                  toast.info("JSON2VIDEO_API_KEY not set — payload blueprint ready, download JSON above");
+                                }
+                              }
+                            }}
+                            disabled={isBuildingJ2V || isGenerating}
+                            className="h-9 text-xs gap-1 border-border"
+                          >
+                            {isBuildingJ2V ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Video className="w-3.5 h-3.5" />}Render via JSON2Video
+                          </Button>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground/70">Secure: JSON2VIDEO_API_KEY server-only (process.env). Frontend builds internal payload, server forwards to https://api.json2video.com/v2/movies. Free tier watermark, pro no watermark. Webhook at /api/webhook/json2video receives {url} when done.</p>
+                      </div>
+                    </>
                   )}
                 </>
               )}
+            </div>
+
+            {/* Brand Selector — Phase C2 White-Label */}
+            <div className="space-y-2">
+              <Label className="text-xs flex items-center gap-1.5">
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                Visual Engine (Storyboard) — {brand}
+              </Label>
+              <div className="grid grid-cols-1 gap-1.5">
+                {(Object.keys(IMAGE_MODEL_MAP) as ImageModelBrand[]).map((b) => {
+                  const cfg = IMAGE_MODEL_MAP[b];
+                  const Icon = b === "Tube.Flash" ? Zap : b === "Tube.Pro" ? Crown : Film;
+                  return (
+                    <button
+                      key={b}
+                      onClick={() => setBrand(b)}
+                      disabled={isGenerating || isAnalyzing}
+                      className={cn(
+                        "p-2.5 rounded-lg border text-left flex items-center gap-2.5 transition-all text-xs disabled:opacity-50",
+                        brand === b ? "border-primary bg-primary/10 ring-1 ring-primary/20" : "border-border bg-secondary/50 hover:border-primary/30"
+                      )}
+                    >
+                      <Icon className={cn("w-4 h-4", brand === b ? "text-primary" : "text-muted-foreground")} />
+                      <div className="flex-1">
+                        <p className="font-semibold text-foreground flex items-center gap-1">{b} <span className={cn("px-1 py-0 rounded text-[9px]", cfg.costTier === "free" ? "bg-green-500/20 text-green-400" : "bg-amber-500/20 text-amber-400")}>{cfg.costTier.toUpperCase()}</span></p>
+                        <p className="text-[10px] text-muted-foreground truncate">{cfg.provider} • {cfg.quality}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground/70">White-label: client sends brand, server maps to {IMAGE_MODEL_MAP[brand].provider} — no keys exposed.</p>
             </div>
 
             {/* Status summary */}
@@ -574,6 +672,7 @@ export default function Storyboard() {
                     </span>
                   )}
                 </div>
+                <p className="text-[11px] text-muted-foreground mt-1.5 text-center">Brand: {brand} • {IMAGE_MODEL_MAP[brand].provider} • {IMAGE_MODEL_MAP[brand].costTier}</p>
               </div>
             )}
 

@@ -1,84 +1,77 @@
-// Stats tracking for TubeGenius Pro
-export interface Stats {
-  scriptsGenerated: number;
-  thumbnailsCreated: number;
-  voiceoversGenerated: number;
-  guidesCreated: number;
-  lastUpdated: string;
-}
+/**
+ * Stats & Content persistence — Phase A2
+ * Now Zustand-backed with persistence + migration from old localStorage keys.
+ * API kept backward compatible for existing pages importing from here.
+ */
 
-export interface SavedContent {
-  id: string;
-  type: 'script' | 'thumbnail' | 'voiceover' | 'guide' | 'storyboard';
-  title: string;
-  content: string; // For scripts/guides it's text, for thumbnails it's base64 or URL
-  createdAt: string;
-}
+import { useContentStore, type Stats, type SavedContent } from "@/stores/useContentStore";
 
-const STATS_KEY = 'tubegenius-stats';
-const CONTENT_KEY = 'tubegenius-content';
+// Re-export types for convenience
+export type { Stats, SavedContent };
 
+// Direct store access for non-react code (e.g., inside event handlers)
 export const getStats = (): Stats => {
-  const stored = localStorage.getItem(STATS_KEY);
-  if (stored) {
-    return JSON.parse(stored);
+  // Zustand persist store may not be hydrated yet, fallback to default
+  try {
+    return useContentStore.getState().getStats();
+  } catch {
+    return {
+      scriptsGenerated: 0,
+      thumbnailsCreated: 0,
+      voiceoversGenerated: 0,
+      guidesCreated: 0,
+      lastUpdated: new Date().toISOString(),
+    };
   }
-  return {
-    scriptsGenerated: 0,
-    thumbnailsCreated: 0,
-    voiceoversGenerated: 0,
-    guidesCreated: 0,
-    lastUpdated: new Date().toISOString(),
-  };
 };
 
 export const updateStats = (updates: Partial<Stats>): Stats => {
-  const current = getStats();
-  const newStats = {
-    ...current,
-    ...updates,
-    lastUpdated: new Date().toISOString(),
-  };
-  localStorage.setItem(STATS_KEY, JSON.stringify(newStats));
-  return newStats;
+  try {
+    useContentStore.getState().updateStats(updates);
+    return useContentStore.getState().getStats();
+  } catch {
+    return getStats();
+  }
 };
 
 export const incrementStat = (key: keyof Omit<Stats, 'lastUpdated'>): Stats => {
-  const current = getStats();
-  return updateStats({
-    [key]: current[key] + 1,
-  });
+  try {
+    useContentStore.getState().incrementStat(key);
+    return useContentStore.getState().getStats();
+  } catch {
+    return getStats();
+  }
 };
 
 export const getSavedContent = (): SavedContent[] => {
-  const stored = localStorage.getItem(CONTENT_KEY);
-  if (stored) {
-    return JSON.parse(stored);
+  try {
+    return useContentStore.getState().getSavedContent();
+  } catch {
+    return [];
   }
-  return [];
 };
 
 export const saveContent = (content: Omit<SavedContent, 'id' | 'createdAt'>): SavedContent => {
-  const saved = getSavedContent();
-  const newContent: SavedContent = {
-    ...content,
-    id: Math.random().toString(36).substr(2, 9),
-    createdAt: new Date().toISOString(),
-  };
-  saved.unshift(newContent);
-  // Keep only last 50 items
-  const trimmed = saved.slice(0, 50);
-  localStorage.setItem(CONTENT_KEY, JSON.stringify(trimmed));
-  return newContent;
+  try {
+    return useContentStore.getState().saveContent(content);
+  } catch {
+    // Fallback if store not ready
+    return {
+      ...content,
+      id: Math.random().toString(36).substr(2, 9),
+      createdAt: new Date().toISOString(),
+    };
+  }
 };
 
 export const deleteContent = (id: string): void => {
-  const saved = getSavedContent();
-  const filtered = saved.filter((c) => c.id !== id);
-  localStorage.setItem(CONTENT_KEY, JSON.stringify(filtered));
+  try {
+    useContentStore.getState().deleteContent(id);
+  } catch {}
 };
 
 export const clearAllContent = (): void => {
-  localStorage.removeItem(CONTENT_KEY);
-  localStorage.removeItem(STATS_KEY);
+  try {
+    useContentStore.getState().clearAll();
+  } catch {}
 };
