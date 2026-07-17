@@ -51,9 +51,13 @@ export function requireEnv(key: string): string {
  * ------------------------------------------------------------------ */
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 /** Primary model (OpenRouter path) — override via OPENROUTER_MODEL */
-export const OPENROUTER_MODEL = "google/gemini-2.0-flash";
+export const OPENROUTER_MODEL = "google/gemini-2.5-flash";
 /** Fallback chain (CSV) — override via OPENROUTER_MODEL_FALLBACKS */
-export const OPENROUTER_MODEL_FALLBACKS = ["google/gemini-2.0-flash-lite"];
+export const OPENROUTER_MODEL_FALLBACKS = ["google/gemini-2.5-flash-lite"];
+/* NOTE (Phase F2, live-verified via https://openrouter.ai/api/v1/models on 2026-07-17):
+ * The 2.0 model paths are RETIRED on OpenRouter and every request 400s.
+ * 2.5-flash / 2.5-flash-lite are the direct successors (same tier, support
+ * response_format + temperature, 1M context). */
 
 export function extractGeminiText(data: any) {
   return data?.candidates?.[0]?.content?.parts
@@ -119,6 +123,7 @@ export function toOpenRouterBody(geminiStyleBody: any, model: string): any {
     messages.push({ role, content: singleText ? converted[0].text : converted });
   }
 
+  if (!messages.length) throw new Error("OpenRouter payload invalid: no messages were built from the request body.");
   const out: any = { model, messages };
   const cfg = geminiStyleBody?.generationConfig ?? {};
   if (typeof cfg.temperature === "number") out.temperature = cfg.temperature;
@@ -163,12 +168,14 @@ export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<Op
   let keysTried = 0;
   let lastRes: Response | null = null;
   let lastModel = models[0];
+  let lastOrBody: any = null;
 
   for (const model of models) {
     if (!attempted.includes(model)) attempted.push(model);
     const orBody = toOpenRouterBody(geminiStyleBody, model);
+    lastOrBody = orBody;
 
-    for (let ki = 0; ki < keys.length; ki++) {
+    keysLoop: for (let ki = 0; ki < keys.length; ki++) {
       keysTried++;
       for (let attempt = 0; attempt < 2; attempt++) {
         lastRes = await fetch(OPENROUTER_URL, {
@@ -176,7 +183,9 @@ export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<Op
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${keys[ki]}`,
-            "X-Title": "TubeClick.Pro",
+            // Phase F2: env-driven attribution headers — no literal <YOUR_SITE_*> placeholders
+            "X-Title": process.env.OPENROUTER_SITE_TITLE || "TubeClick.Pro",
+            ...(process.env.OPENROUTER_SITE_URL ? { "HTTP-Referer": process.env.OPENROUTER_SITE_URL } : {}),
           },
           body: JSON.stringify(orBody),
         });
@@ -199,16 +208,26 @@ export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<Op
 
         if (OR_ROTATE_CODES.has(info.code)) break;
 
+        // Invalid/retired model ID is doomed for EVERY key on that model:
+        // skip ALL remaining keys and jump straight to the next model in the chain.
+        if (info.code === "MODEL_NOT_FOUND") break keysLoop;
+
         if (attempt === 0 && info.code === "UPSTREAM_ERROR" && (Date.now() - t0 + 1500) <= RETRY_BUDGET_MS) {
           await sleepMsOR(Math.round(1500 * (1 + 0.2 * Math.random())));
           continue;
         }
 
+        // Phase F2: log the exact (auth-free) outbound payload on fatal errors so
+        // Vercel logs show precisely what the provider rejected — speeds up future 400 audits.
+        console.error(`[openrouter] fatal on model=${model} key#${ki + 1} — outbound snapshot: ${JSON.stringify(orBody).slice(0, 1200)}`);
         return { res: lastRes, model, attempted, failedOver: attempted.length > 1 || keysTried > 1 };
       }
     }
   }
 
+  if (lastOrBody) {
+    console.error(`[openrouter] ALL keys x models exhausted — last outbound snapshot: ${JSON.stringify(lastOrBody).slice(0, 1200)}`);
+  }
   return { res: lastRes!, model: lastModel, attempted, failedOver: attempted.length > 1 || keysTried > 1 };
 }
 
@@ -295,7 +314,8 @@ export function parseProviderError(rawText: string | null | undefined, httpStatu
     || providerStatus === 'UNAUTHENTICATED' || providerStatus === 'PERMISSION_DENIED'
     || /api.?key.?not.?valid|api_key_invalid|invalid.?api.?key|invalid.?key|permission.?denied|unauthorized|unauthenticated/.test(haystack);
   const isContentBlocked = !isQuota && /content.?blocked|content.?policy|policy.?violation|blocked.?by.?safety/.test(haystack);
-  const isModelMissing = !isQuota && !isKeyIssue && (httpStatus === 404 || providerStatus === 'NOT_FOUND');
+  const isModelMissing = !isQuota && !isKeyIssue && (httpStatus === 404 || providerStatus === 'NOT_FOUND'
+    || /not.?a.?valid.?model|no.?endpoints?.?found|unknown.?model|invalid.?model/.test(haystack));
 
   if (isKeyIssue) {
     return {
