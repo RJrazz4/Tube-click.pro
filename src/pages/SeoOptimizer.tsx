@@ -178,7 +178,7 @@ export default function SeoOptimizer() {
 
             <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
               <ShieldCheck className="w-3 h-3 text-green-400" />
-              Secure: GEMINI_API_KEY lives in Deno.env / process.env — no client exposure. React Query caches 10min for instant revisit.
+              Secure: OPENROUTER_API_KEYS (rotated) live in process.env — no client exposure. React Query caches 10min for instant revisit.
             </p>
           </CardContent>
         </Card>

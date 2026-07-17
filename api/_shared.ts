@@ -45,10 +45,15 @@ export function requireEnv(key: string): string {
   return val;
 }
 
-// GEMINI models — chain is env-overridable (Phase E2): GEMINI_MODEL + GEMINI_MODEL_FALLBACKS (CSV)
-export const GEMINI_MODEL = "gemini-2.0-flash";
-export const GEMINI_MODEL_FALLBACKS = ["gemini-2.0-flash-lite"];
-export const RETRY_DELAYS = [2000, 5000, 10000];
+/* ------------------------------------------------------------------ *
+ * Phase F1 — OpenRouter configuration (OpenAI-compatible chat completions)
+ * Provider migration: direct Gemini REST → OpenRouter with API-key rotation.
+ * ------------------------------------------------------------------ */
+export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+/** Primary model (OpenRouter path) — override via OPENROUTER_MODEL */
+export const OPENROUTER_MODEL = "google/gemini-2.0-flash";
+/** Fallback chain (CSV) — override via OPENROUTER_MODEL_FALLBACKS */
+export const OPENROUTER_MODEL_FALLBACKS = ["google/gemini-2.0-flash-lite"];
 
 export function extractGeminiText(data: any) {
   return data?.candidates?.[0]?.content?.parts
@@ -58,111 +63,153 @@ export function extractGeminiText(data: any) {
 }
 
 /* ------------------------------------------------------------------ *
- * Phase 2 — Resilient Gemini fetching: smart retry + model fallback
+ * Phase F1 — OpenRouter fetching: API-KEY ROTATION + model fallback
  * ------------------------------------------------------------------ */
 
-export interface GeminiFetchOutcome {
+export interface OpenRouterFetchOutcome {
   /** Final Response (ok, or the last error if everything failed) */
   res: Response;
-  /** Model that produced `res` */
+  /** OpenRouter model id that produced `res` (e.g. "google/gemini-2.0-flash-lite") */
   model: string;
-  /** Models tried, in order */
+  /** Models attempted, in order — key material is NEVER recorded */
   attempted: string[];
-  /** True when more than one model was tried (rate-limit / daily-quota failover) */
+  /** True when key rotation and/or model failover actually happened */
   failedOver: boolean;
 }
 
-/** Resolve the model chain: GEMINI_MODEL env > default; GEMINI_MODEL_FALLBACKS env (CSV) > default. */
-export function geminiModelChain(): string[] {
-  const primary = (process.env.GEMINI_MODEL || GEMINI_MODEL).trim();
-  const fallbacks = (process.env.GEMINI_MODEL_FALLBACKS || GEMINI_MODEL_FALLBACKS.join(','))
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
+/** OPENROUTER_API_KEYS=sk-or-1,sk-or-2,... → trimmed, deduped array. Throws a clear config error when empty. */
+export function openRouterKeys(): string[] {
+  const raw = (process.env.OPENROUTER_API_KEYS || "").trim();
+  const unique = [...new Set(raw.split(",").map(k => k.trim()).filter(Boolean))];
+  if (!unique.length) {
+    throw new Error("OPENROUTER_API_KEYS not configured on server. Set a comma-separated list of OpenRouter keys (key1,key2,key3) in the Vercel project env vars.");
+  }
+  return unique;
+}
+
+/** Model chain: OPENROUTER_MODEL env > default; OPENROUTER_MODEL_FALLBACKS env (CSV) > default. */
+export function openRouterModelChain(): string[] {
+  const primary = (process.env.OPENROUTER_MODEL || OPENROUTER_MODEL).trim();
+  const fallbacks = (process.env.OPENROUTER_MODEL_FALLBACKS || OPENROUTER_MODEL_FALLBACKS.join(","))
+    .split(",").map(s => s.trim()).filter(Boolean);
   return [...new Set([primary, ...fallbacks])];
 }
 
-function modelFromUrl(url: string): string | null {
-  const m = url.match(/\/models\/([^:/]+):/);
-  return m ? m[1] : null;
+/**
+ * Convert our internal Gemini-style request body into OpenRouter's
+ * OpenAI-compatible chat.completions payload. Vision (inlineData) parts
+ * become image_url data URIs; responseMimeType: application/json maps to
+ * response_format: { type: "json_object" }.
+ */
+export function toOpenRouterBody(geminiStyleBody: any, model: string): any {
+  const messages: any[] = [];
+  const sysText = (geminiStyleBody?.systemInstruction?.parts ?? [])
+    .map((p: any) => p?.text).filter((t: any): t is string => typeof t === "string" && !!t).join("\n");
+  if (sysText) messages.push({ role: "system", content: sysText });
+
+  for (const c of geminiStyleBody?.contents ?? []) {
+    const parts: any[] = c?.parts ?? [];
+    const converted: any[] = [];
+    for (const p of parts) {
+      if (typeof p?.text === "string") converted.push({ type: "text", text: p.text });
+      else if (p?.inlineData?.data) converted.push({ type: "image_url", image_url: { url: `data:${p.inlineData.mimeType || "image/png"};base64,${p.inlineData.data}` } });
+    }
+    const role = c?.role === "model" ? "assistant" : (c?.role === "system" ? "system" : "user");
+    const singleText = converted.length === 1 && converted[0]?.type === "text";
+    messages.push({ role, content: singleText ? converted[0].text : converted });
+  }
+
+  const out: any = { model, messages };
+  const cfg = geminiStyleBody?.generationConfig ?? {};
+  if (typeof cfg.temperature === "number") out.temperature = cfg.temperature;
+  if (cfg.responseMimeType === "application/json") out.response_format = { type: "json_object" };
+  if (typeof cfg.maxOutputTokens === "number") out.max_tokens = cfg.maxOutputTokens;
+  return out;
 }
 
-function withModel(url: string, model: string): string {
-  return url.replace(/(\/models\/)[^:/]+(:)/, `$1${model}$2`);
+/** Extract assistant text from an OpenAI-compatible chat.completions response */
+export function extractOpenRouterText(data: any): string {
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) return content.map((p: any) => p?.text || "").join("\n").trim();
+  return "";
 }
 
-const sleepMs = (ms: number) => new Promise(r => setTimeout(r, ms));
+const sleepMsOR = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+/** Error classes where sleeping is useless — rotating key/model IS the fix */
+const OR_ROTATE_CODES = new Set(["RATE_LIMITED", "QUOTA_EXCEEDED_DAILY", "INSUFFICIENT_CREDITS", "API_KEY_INVALID"]);
 
 /**
- * Fetch Gemini with a policy-driven retry + model fallback chain.
+ * Fetch OpenRouter with API-KEY ROTATION and MODEL FAILOVER.
  *
- * Policy:
- *  - Non-429 4xx (bad request / invalid key): fail immediately — every model
- *    would fail identically.
- *  - RATE_LIMITED with provider retryDelay: honor it ONCE per model, bounded by
- *    a global retry budget (default 12s, GEMINI_RETRY_BUDGET_MS) so the function
- *    always stays inside the Vercel edge maxDuration.
- *  - QUOTA_EXCEEDED_DAILY: do NOT retry the same model — per-day quota cannot
- *    recover in seconds. Fail over INSTANTLY to the next model (Google daily
- *    quotas are per-model, so flash-lite still works when flash is exhausted).
- *  - UPSTREAM_ERROR (5xx): one short backoff retry, then the next model.
- *
- * Detection reuses the Phase 1 normalizer; the response BODY is only ever read
- * via res.clone(), so callers can still stream the final error body verbatim.
+ * Policy (Phase F1 spec):
+ *  1. Model loop (chain of models), inner KEY loop (rotation): for each model, try key1, key2, ...
+ *  2. 429 quota/rate-limit, 402 insufficient credits, 401/403 invalid key → rotate to the
+ *     next key INSTANTLY; when every key is spent → next model, keys reset.
+ *  3. Provider Retry-After header → honored ONCE per (model,key) if it fits the budget.
+ *  4. 5xx → one short backoff on the same key, then rotate.
+ *  5. Non-429 4xx (bad request) → identical across keys/models → fail fast (1 request).
+ *  Total sleep bounded by AI_RETRY_BUDGET_MS (default 12000) to stay inside edge maxDuration.
+ *  Key material is never logged or returned — rotation logs reference key index only.
  */
-export async function fetchGeminiWithRetry(url: string, body: unknown): Promise<GeminiFetchOutcome> {
-  const chain = geminiModelChain();
-  const startModel = modelFromUrl(url);
-  const models = startModel ? [startModel, ...chain.filter(m => m !== startModel)] : chain;
-
-  const MAX_HONORED_DELAY_MS = 15000; // never sleep longer than this at the edge
-  const RETRY_BUDGET_MS = Math.max(0, parseInt(process.env.GEMINI_RETRY_BUDGET_MS || '12000', 10) || 12000);
+export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<OpenRouterFetchOutcome> {
+  const keys = openRouterKeys();
+  const models = openRouterModelChain();
+  const RETRY_BUDGET_MS = Math.max(0, parseInt(process.env.AI_RETRY_BUDGET_MS || process.env.GEMINI_RETRY_BUDGET_MS || "12000", 10) || 12000);
   const t0 = Date.now();
 
   const attempted: string[] = [];
+  let keysTried = 0;
   let lastRes: Response | null = null;
-  let lastModel = startModel || models[models.length - 1];
+  let lastModel = models[0];
 
   for (const model of models) {
-    attempted.push(model);
-    const modelUrl = (startModel && model !== startModel) ? withModel(url, model) : url;
+    if (!attempted.includes(model)) attempted.push(model);
+    const orBody = toOpenRouterBody(geminiStyleBody, model);
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      lastRes = await fetch(modelUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      lastModel = model;
+    for (let ki = 0; ki < keys.length; ki++) {
+      keysTried++;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        lastRes = await fetch(OPENROUTER_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${keys[ki]}`,
+            "X-Title": "TubeClick.Pro",
+          },
+          body: JSON.stringify(orBody),
+        });
+        lastModel = model;
 
-      if (lastRes.ok) return { res: lastRes, model, attempted, failedOver: attempted.length > 1 };
+        const failedOver = attempted.length > 1 || keysTried > 1;
+        if (lastRes.ok) return { res: lastRes, model, attempted, failedOver };
 
-      // Non-429 4xx: request/config problem — identical across models. Fail fast.
-      if (lastRes.status >= 400 && lastRes.status < 500 && lastRes.status !== 429) {
-        return { res: lastRes, model, attempted, failedOver: attempted.length > 1 };
-      }
+        const errText = await lastRes.clone().text().catch(() => "");
+        const info = parseProviderError(errText, lastRes.status, "openrouter");
+        console.error(`[openrouter] ${info.code} (HTTP ${lastRes.status}) model=${model} key#${ki + 1}/${keys.length}`);
 
-      if (attempt === 0) {
-        const errText = await lastRes.clone().text().catch(() => '');
-        const info = parseProviderError(errText, lastRes.status, 'gemini');
-
-        let delayMs = 0;
-        if (info.code === 'RATE_LIMITED' && info.retryAfter) {
-          delayMs = info.retryAfter * 1000 <= MAX_HONORED_DELAY_MS ? info.retryAfter * 1000 : 0;
-        } else if (info.code === 'UPSTREAM_ERROR') {
-          delayMs = 2000;
+        if (attempt === 0 && info.code === "RATE_LIMITED") {
+          const raSec = toRetrySeconds(lastRes.headers.get("retry-after") || undefined);
+          if (raSec && raSec * 1000 <= 15000 && (Date.now() - t0 + raSec * 1000) <= RETRY_BUDGET_MS) {
+            await sleepMsOR(Math.round(raSec * 1000 * (1 + 0.1 * Math.random())));
+            continue;
+          }
         }
 
-        if (delayMs > 0 && (Date.now() - t0 + delayMs) <= RETRY_BUDGET_MS) {
-          await sleepMs(Math.round(delayMs + delayMs * 0.2 * Math.random())); // non-negative jitter
-          continue; // retry SAME model once
+        if (OR_ROTATE_CODES.has(info.code)) break;
+
+        if (attempt === 0 && info.code === "UPSTREAM_ERROR" && (Date.now() - t0 + 1500) <= RETRY_BUDGET_MS) {
+          await sleepMsOR(Math.round(1500 * (1 + 0.2 * Math.random())));
+          continue;
         }
+
+        return { res: lastRes, model, attempted, failedOver: attempted.length > 1 || keysTried > 1 };
       }
-      break; // next model (daily quota / hint too long / budget exhausted / unknown transient)
     }
   }
 
-  return { res: lastRes!, model: lastModel, attempted, failedOver: attempted.length > 1 };
+  return { res: lastRes!, model: lastModel, attempted, failedOver: attempted.length > 1 || keysTried > 1 };
 }
 
 export function cleanupJson(value: string) {
@@ -255,7 +302,17 @@ export function parseProviderError(rawText: string | null | undefined, httpStatu
       code: 'API_KEY_INVALID',
       status: 500,
       message: 'The AI service API key is invalid or unauthorized — this is a server configuration issue, not something you did wrong.',
-      action: 'Admin: verify GEMINI_API_KEY in the Vercel project environment variables.',
+      action: 'Admin: verify OPENROUTER_API_KEYS in the Vercel project environment variables.',
+    };
+  }
+
+  // OpenRouter 402 — paid credit pool exhausted on THIS key → rotate/fail over
+  if (httpStatus === 402 || /insufficient.?credits|payment.?required|out.?of.?credits/.test(haystack)) {
+    return {
+      code: 'INSUFFICIENT_CREDITS',
+      status: 402,
+      message: 'The AI credit pool is temporarily exhausted. Please try again later.',
+      action: 'Admin: top up OpenRouter credits or add more keys to OPENROUTER_API_KEYS.',
     };
   }
 
@@ -284,7 +341,7 @@ export function parseProviderError(rawText: string | null | undefined, httpStatu
       code: 'MODEL_NOT_FOUND',
       status: 502,
       message: 'The requested AI model is currently unavailable. Please try again in a moment.',
-      action: 'Admin: check the configured GEMINI_MODEL against the list of available models.',
+      action: 'Admin: check the configured OPENROUTER_MODEL against the list of available models.',
     };
   }
 

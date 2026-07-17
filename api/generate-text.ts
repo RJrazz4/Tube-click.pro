@@ -1,7 +1,7 @@
 /**
  * Vercel Edge Function — /api/generate-text
- * Secure Gemini integration — TubeBot AI Agent + SEO
- * Server keys only: GEMINI_API_KEY via process.env
+ * Secure OpenRouter integration — TubeBot AI Agent + SEO (key-rotated)
+ * Server keys only: OPENROUTER_API_KEYS via process.env
  * Runtime: edge (fastest for US audience)
  */
 
@@ -9,7 +9,7 @@ export const config = {
   runtime: 'edge',
 };
 
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, extractGeminiText, cleanupJson, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError } from './_shared.js';
+import { jsonResponse, cleanupJson, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError, fetchOpenRouterWithRetry, extractOpenRouterText } from './_shared.js';
 
 function normalize(arr: unknown, fallback: string[]) {
   if (!Array.isArray(arr)) return fallback;
@@ -27,8 +27,6 @@ export default async function handler(req: Request) {
     if (body.error) return jsonResponse({ error: body.error }, 400);
     const { topic, platform, style, language = 'hinglish' } = body.data;
 
-    const key = requireEnv('GEMINI_API_KEY');
-
     if (!topic || topic.trim().length < 3) return jsonResponse({ error: 'Topic min 3 chars' }, 400);
     if (topic.length > 500) return jsonResponse({ error: 'Topic max 500 chars' }, 400);
 
@@ -44,9 +42,7 @@ export default async function handler(req: Request) {
     const systemPrompt = `You are a viral YouTube content strategist.\n${langInstr}\nRespond in exact JSON: { "titles": [...5], "hooks": [...10], "script": "60s script narration only", "hashtags": [...10], "description": "SEO desc" }`;
     const userPrompt = `Topic: ${sanitized}\nPlatform: ${platform}\nStyle: ${style}\nLanguage: ${language}\nGenerate viral content as specified.`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
-
-    const outcome = await fetchGeminiWithRetry(url, {
+    const outcome = await fetchOpenRouterWithRetry({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0.9 },
@@ -59,7 +55,7 @@ export default async function handler(req: Request) {
     }
 
     const data = await res.json();
-    const content = extractGeminiText(data);
+    const content = extractOpenRouterText(data);
     if (!content) return jsonResponse({ error: 'Empty Gemini response' }, 502);
 
     let parsed: any;

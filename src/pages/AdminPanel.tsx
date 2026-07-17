@@ -175,7 +175,7 @@ export default function AdminPanel() {
         </CardHeader>
         <CardContent className="space-y-3 text-xs font-mono bg-secondary/50 rounded-lg p-4">
           <div className="space-y-1 text-muted-foreground">
-            <p><span className="text-foreground">GEMINI_API_KEY</span> = for TubeBot AI Agent + SEO + Transcript</p>
+            <p><span className="text-foreground">OPENROUTER_API_KEYS</span> = key1,key2,... (rotated on quota) for TubeBot AI Agent + SEO + Transcript</p>
             <p><span className="text-foreground">FAL_API_KEY</span> = for Thumbnail Architect + Storyboard (Tube.Flash / Tube.Pro mapping)</p>
             <p><span className="text-foreground">ELEVENLABS_API_KEY</span> = for Voiceover Studio + preview caching</p>
             <p className="pt-2 text-[11px]">See .env.example for full blueprint. For Supabase: Dashboard → Edge Functions → Secrets</p>

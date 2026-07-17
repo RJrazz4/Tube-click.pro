@@ -9,7 +9,8 @@
 export const SECURE_ENV_CONTRACT = {
   principle: "Never expose provider keys in frontend bundle or localStorage",
   serverEnv: {
-    "GEMINI_API_KEY": "Google AI Studio — TubeBot, SEO, Transcript, Storyboard analysis",
+    "OPENROUTER_API_KEYS": "OpenRouter (comma-separated, key-rotated on 429/402) — TubeBot, SEO, Vision, Storyboard analysis",
+    "GEMINI_API_KEY": "LEGACY — only used by Supabase functions path (inactive when VITE_USE_VERCEL_EDGE=true)",
     "FAL_API_KEY": "Fal.ai — Thumbnails + Storyboard images (Tube.Pro)",
     "ELEVENLABS_API_KEY": "ElevenLabs — Voiceover Studio (with preview MP3 saving)",
   },
@@ -20,6 +21,7 @@ export const SECURE_ENV_CONTRACT = {
   },
   forbidden: [
     "VITE_GEMINI_API_KEY",
+    "VITE_OPENROUTER_API_KEYS",
     "VITE_FAL_API_KEY",
     "VITE_ELEVENLABS_API_KEY",
     "localStorage 'gemini-api-key'",
@@ -52,7 +54,7 @@ export const SECURE_ENV_CONTRACT = {
   },
   deployment: {
     supabase: "supabase secrets set GEMINI_API_KEY=... && supabase functions deploy --no-verify-jwt",
-    vercel: "Vercel Dashboard -> Settings -> Environment Variables, add server keys, enable Edge runtime",
+    vercel: "Vercel Dashboard -> Settings -> Environment Variables, add OPENROUTER_API_KEYS (key1,key2,...), enable Edge runtime",
   },
   securityChecklist: [
     "No BYOK files",

@@ -1,15 +1,12 @@
 /**
  * Vercel Edge — /api/seo-tags — Phase B1 LLM Routing (SEO)
- * Secure Gemini SEO bundle generation
- * Server: GEMINI_API_KEY
+ * Secure OpenRouter SEO bundle generation (key-rotated)
+ * Server: OPENROUTER_API_KEYS
  */
 export const config = { runtime: 'edge' };
 
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError } from './_shared.js';
+import { jsonResponse, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError, fetchOpenRouterWithRetry, extractOpenRouterText } from './_shared.js';
 
-function extractText(d: any) {
-  return d?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('\n').trim();
-}
 function cleanupJson(v: string) { return v.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim(); }
 
 export default async function handler(req: Request) {
@@ -21,14 +18,12 @@ export default async function handler(req: Request) {
     if (body.error) return jsonResponse({ error: body.error }, 400);
     const { keyword, platform = 'YouTube', language = 'english' } = body.data;
     if (!keyword || keyword.trim().length < 2) return jsonResponse({ error: 'Keyword min 2 chars' }, 400);
-    const key = requireEnv('GEMINI_API_KEY');
     const sanitized = keyword.trim().slice(0,200);
 
     const systemPrompt = `You are YouTube SEO expert for US SaaS. Generate JSON: { "tags": [8-10 high-CTR tags], "seoScore": 0-100, "competition": "Medium (High Demand)", "searchVolume": "45K/mo", "optimizedTitle": "viral title 50-60 chars" }. Tags specific, long-tail, include year, tutorial, strategy. Use power words in title. Language: ${language}, Platform: ${platform}`;
     const userPrompt = `Keyword: ${sanitized} — generate SEO bundle.`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
-    const outcome = await fetchGeminiWithRetry(url, {
+    const outcome = await fetchOpenRouterWithRetry({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0.8 },
@@ -41,7 +36,7 @@ export default async function handler(req: Request) {
     }
 
     const data = await res.json();
-    const content = extractText(data);
+    const content = extractOpenRouterText(data);
     if (!content) return jsonResponse({ error: 'Empty response' }, 502);
 
     let parsed: any;

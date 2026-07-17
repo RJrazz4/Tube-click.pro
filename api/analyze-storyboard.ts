@@ -1,13 +1,10 @@
 /**
  * Vercel Edge — /api/analyze-storyboard
- * Gemini: GEMINI_API_KEY — fast edge for US storyboard analysis
+ * OpenRouter (key-rotated) — fast edge for US storyboard analysis
  */
 export const config = { runtime: 'edge' };
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError } from './_shared.js';
+import { jsonResponse, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError, fetchOpenRouterWithRetry, extractOpenRouterText } from './_shared.js';
 
-function extractGeminiText(data: any) {
-  return data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('\n').trim();
-}
 function cleanupJson(v: string) { return v.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim(); }
 
 export default async function handler(req: Request) {
@@ -18,12 +15,10 @@ export default async function handler(req: Request) {
     if (body.error) return jsonResponse({ error: body.error }, 400);
     const { script } = body.data;
     if (!script || script.trim().length < 100) return jsonResponse({ error: 'Script min 100 chars' }, 400);
-    const key = requireEnv('GEMINI_API_KEY');
     const trimmed = script.slice(0, 10000);
     const systemPrompt = `You are an expert storyboard analyst. Extract 4-10 story-critical scenes as JSON array. Each: beat_type, scene_number, who, what, emotion, location, camera_angle, visual_prompt, motion_prompt. Return only JSON array.`;
     const userPrompt = `Script: ${trimmed}`;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
-    const outcome = await fetchGeminiWithRetry(url, {
+    const outcome = await fetchOpenRouterWithRetry({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
@@ -34,7 +29,7 @@ export default async function handler(req: Request) {
       return providerErrorResponse(txt, res.status, 'analyze-storyboard');
     }
     const data = await res.json();
-    let content = extractGeminiText(data) || '';
+    let content = extractOpenRouterText(data) || '';
     content = cleanupJson(content);
     let scenes;
     try {

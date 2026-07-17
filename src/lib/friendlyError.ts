@@ -28,6 +28,10 @@ const CODE_MAP: Record<string, { title: string; message: string; action?: string
     title: "AI is busy",
     message: "The AI hit a rate limit. Please wait a few seconds and try again.",
   },
+  INSUFFICIENT_CREDITS: {
+    title: "AI credits exhausted",
+    message: "The AI credit pool is empty right now. Please try again later.",
+  },
   API_KEY_INVALID: {
     title: "Configuration issue",
     message: "The AI service key is invalid or unauthorized — this is a server-side configuration issue, not something you did.",

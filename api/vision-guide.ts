@@ -1,14 +1,11 @@
 /**
  * Vercel Edge — /api/vision-guide
- * Gemini Vision: screenshots -> tutorial guide
- * Server: GEMINI_API_KEY
+ * OpenRouter Gemini Vision (key-rotated): screenshots -> tutorial guide
+ * Server: OPENROUTER_API_KEYS
  */
 export const config = { runtime: 'edge' };
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError } from './_shared.js';
+import { jsonResponse, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError, fetchOpenRouterWithRetry, extractOpenRouterText } from './_shared.js';
 
-function extractText(d: any) {
-  return d?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('\n').trim();
-}
 function toInlineData(imgData: string) {
   const m = imgData.match(/^data:(.*?);base64,(.*)$/);
   if (!m) throw new Error('Invalid image format');
@@ -24,20 +21,18 @@ export default async function handler(req: Request) {
     const { images } = body.data;
     if (!images || !Array.isArray(images) || images.length === 0) return jsonResponse({ error: 'No images' }, 400);
     if (images.length > 10) return jsonResponse({ error: 'Max 10 images' }, 400);
-    const key = requireEnv('GEMINI_API_KEY');
     const content = [
       { type: 'text', text: 'You are an expert technical writer. Analyze screenshots and create comprehensive step-by-step tutorial guide in clean Markdown.' },
       ...images.map((d: string) => toInlineData(d))
     ];
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`;
-    const outcome = await fetchGeminiWithRetry(url, { contents: [{ role: 'user', parts: content }], generationConfig: { temperature: 0.4 } });
+    const outcome = await fetchOpenRouterWithRetry({ contents: [{ role: 'user', parts: content }], generationConfig: { temperature: 0.4 } });
     const res = outcome.res;
     if (!res.ok) {
       const txt = await res.text().catch(() => '');
       return providerErrorResponse(txt, res.status, 'vision-guide');
     }
     const data = await res.json();
-    const guide = extractText(data) || '';
+    const guide = extractOpenRouterText(data) || '';
     if (!guide.trim()) return jsonResponse({ error: 'Empty guide' }, 502);
     return jsonResponse({ model: outcome.model, ...(outcome.failedOver ? { modelFailover: outcome.attempted } : {}), guide });
   } catch (e: unknown) {
