@@ -89,7 +89,22 @@ export function useContentGeneration() {
 
 // Helper for thumbnails — with smart caching
 export function useThumbnailGeneration() {
-  return useSecureMutation<{ thumbnails: string[] }, { title: string; emotion: string; style: string; aspectRatio: string; count: number }>(
+  return useSecureMutation<{ thumbnails: string[] }, { title: string; emotion: string; style: string; aspectRatio: string; count: number; brand?: string }>(
     "generate-thumbnail"
   );
+}
+
+// Phase B1 — SEO Tag & Competitor AI via Gemini secure route
+export function useSeoGeneration() {
+  return useSecureMutation<
+    { tags: string[]; seoScore: number; competition: string; searchVolume: string; optimizedTitle: string },
+    { keyword: string; platform?: string; language?: string }
+  >("generate-seo", {
+    gcTime: 1000 * 60 * 10, // keep SEO results 10min
+  });
+}
+
+// Transcript generation — Phase B2
+export function useTranscriptExtraction() {
+  return useSecureMutation<{ transcript: string; segments: any[]; videoId: string }, { url: string }>("transcript");
 }

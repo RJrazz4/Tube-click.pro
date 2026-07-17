@@ -40,6 +40,8 @@ function extractMessage(body: unknown, status: number): string {
 // Map Supabase function names -> Vercel Edge routes
 const VERCEL_ROUTE_MAP: Record<string, string> = {
   "generate-content": "/api/generate-text",
+  "generate-seo": "/api/seo-tags",
+  "seo-tags": "/api/seo-tags",
   "generate-thumbnail": "/api/generate-thumbnail",
   "generate-storyboard-image": "/api/generate-storyboard-image",
   "analyze-storyboard": "/api/analyze-storyboard",
