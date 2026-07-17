@@ -3,7 +3,7 @@
  * Gemini: GEMINI_API_KEY — fast edge for US storyboard analysis
  */
 export const config = { runtime: 'edge' };
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders } from './_shared.js';
+import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders, safeJsonBody } from './_shared.js';
 
 function extractGeminiText(data: any) {
   return data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('\n').trim();
@@ -14,7 +14,9 @@ export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
   try {
-    const { script } = await req.json();
+    const body = await safeJsonBody(req);
+    if (body.error) return jsonResponse({ error: body.error }, 400);
+    const { script } = body.data;
     if (!script || script.trim().length < 100) return jsonResponse({ error: 'Script min 100 chars' }, 400);
     const key = requireEnv('GEMINI_API_KEY');
     const trimmed = script.slice(0, 10000);
@@ -50,7 +52,9 @@ export default async function handler(req: Request) {
       return jsonResponse({ error: 'Failed to parse storyboard' }, 502);
     }
     return jsonResponse({ scenes });
-  } catch (e: any) {
-    return jsonResponse({ error: e.message }, 500);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[analyze-storyboard] error:', msg);
+    return jsonResponse({ error: msg || 'Internal server error', service: 'analyze-storyboard' }, 500);
   }
 }

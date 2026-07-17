@@ -7,7 +7,7 @@
  */
 export const config = { runtime: 'edge' };
 
-import { corsHeaders } from './_shared.js';
+import { corsHeaders, jsonResponse, safeJsonBody } from './_shared.js';
 
 const VOICES: Record<string, string> = {
   'george': 'JBFqnCBsd6RMkjVDRZzb',
@@ -34,16 +34,18 @@ function requireEnv(key: string): string {
 
 export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
-  if (req.method !== 'POST') return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   try {
-    const { text, voiceId, stability, similarityBoost, speed } = await req.json();
-    if (!text || !text.trim()) return new Response(JSON.stringify({ error: 'Text required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    if (text.length > 5000) return new Response(JSON.stringify({ error: 'Max 5000 chars' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const body = await safeJsonBody(req);
+    if (body.error) return jsonResponse({ error: body.error }, 400);
+    const { text, voiceId, stability, similarityBoost, speed } = body.data;
+    if (!text || !text.trim()) return jsonResponse({ error: 'Text required' }, 400);
+    if (text.length > 5000) return jsonResponse({ error: 'Max 5000 chars' }, 400);
 
     // Try VectorEngine key first, fallback to ElevenLabs key — white-label strategy
     let apiKey = '';
-    try { apiKey = requireEnv('VECTORENGINE_API_KEY'); } catch { try { apiKey = requireEnv('ELEVENLABS_API_KEY'); } catch { return new Response(JSON.stringify({ error: 'VOICE_API_KEY not configured (ELEVENLABS_API_KEY or VECTORENGINE_API_KEY)' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); } }
+    try { apiKey = requireEnv('VECTORENGINE_API_KEY'); } catch { try { apiKey = requireEnv('ELEVENLABS_API_KEY'); } catch { return jsonResponse({ error: 'VOICE_API_KEY not configured (ELEVENLABS_API_KEY or VECTORENGINE_API_KEY)' }, 500); } }
 
     const resolved = VOICES[voiceId?.toLowerCase()] || voiceId || VOICES['george'];
 
@@ -59,13 +61,15 @@ export default async function handler(req: Request) {
 
     if (!elRes.ok) {
       const err = await elRes.text();
-      return new Response(JSON.stringify({ error: err || `Voice API ${elRes.status}` }), { status: elRes.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return jsonResponse({ error: err || `Voice API ${elRes.status}` }, elRes.status);
     }
 
     const buf = await elRes.arrayBuffer();
     return new Response(buf, { status: 200, headers: { ...corsHeaders, 'Content-Type': 'audio/mpeg', 'X-Provider': 'VectorEngine (white-labeled ElevenLabs)', 'X-WhiteLabel': 'TubeGenius Neural Engine' } });
 
-  } catch (e: any) {
-    return new Response(JSON.stringify({ error: e.message || 'Unknown' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[vectorengine-tts] error:', msg);
+    return jsonResponse({ error: msg || 'Unknown error', service: 'vectorengine-tts' }, 500);
   }
 }

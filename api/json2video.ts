@@ -12,7 +12,7 @@
  */
 export const config = { runtime: 'edge' };
 
-import { jsonResponse, corsHeaders } from './_shared.js';
+import { jsonResponse, corsHeaders, safeJsonBody } from './_shared.js';
 
 function requireEnv(key: string): string {
   const val = process.env[key] || '';
@@ -35,7 +35,9 @@ export default async function handler(req: Request) {
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed — POST { internal or api }' }, 405);
 
   try {
-    const body = await req.json();
+    const bodyResult = await safeJsonBody(req);
+    if (bodyResult.error) return jsonResponse({ error: bodyResult.error }, 400);
+    const body = bodyResult.data;
     const validation = validateInternalPayload(body);
     if (!validation.valid) return jsonResponse({ error: validation.error }, 400);
 
@@ -120,7 +122,9 @@ export default async function handler(req: Request) {
       webhookSetup: 'POST your webhook URL in payload.exports.destinations[0].endpoint to get notified when video ready at https://assets.json2video.com/...mp4',
     });
 
-  } catch (e: any) {
-    return jsonResponse({ error: e.message || 'Unknown error', action: 'Check payload format and JSON2VIDEO_API_KEY env' }, 500);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[json2video] error:', msg);
+    return jsonResponse({ error: msg || 'Internal server error', action: 'Check payload format and JSON2VIDEO_API_KEY env', service: 'json2video' }, 500);
   }
 }

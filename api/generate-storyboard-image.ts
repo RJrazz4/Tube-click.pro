@@ -4,7 +4,7 @@
  * Server: FAL_API_KEY optional, SNAPGEN_API_KEY optional
  */
 export const config = { runtime: 'edge' };
-import { jsonResponse, corsHeaders } from './_shared.js';
+import { jsonResponse, corsHeaders, safeJsonBody } from './_shared.js';
 
 async function genFal(prompt: string): Promise<string | null> {
   const falKey = process.env.FAL_API_KEY;
@@ -47,7 +47,9 @@ export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
   try {
-    const { prompt, sceneNumber, brand = 'Tube.Cinematic' } = await req.json();
+    const body = await safeJsonBody(req);
+    if (body.error) return jsonResponse({ error: body.error }, 400);
+    const { prompt, sceneNumber, brand = 'Tube.Cinematic' } = body.data;
     if (!prompt) return jsonResponse({ error: 'Prompt required' }, 400);
 
     const selectedBrand = brand as string;
@@ -63,7 +65,9 @@ export default async function handler(req: Request) {
     // Flash — Pollinations free
     return jsonResponse({ imageUrl: pollinationsUrl(prompt, Date.now() + sceneNumber * 456), sceneNumber, brand: selectedBrand, provider: 'pollinations' });
 
-  } catch (e: any) {
-    return jsonResponse({ error: e.message }, 500);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[generate-storyboard-image] error:', msg);
+    return jsonResponse({ error: msg || 'Internal server error', service: 'generate-storyboard-image' }, 500);
   }
 }

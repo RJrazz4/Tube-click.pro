@@ -4,7 +4,7 @@
  * Server: GEMINI_API_KEY
  */
 export const config = { runtime: 'edge' };
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders } from './_shared.js';
+import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders, safeJsonBody } from './_shared.js';
 
 function extractText(d: any) {
   return d?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('\n').trim();
@@ -19,7 +19,9 @@ export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
   try {
-    const { images } = await req.json();
+    const body = await safeJsonBody(req);
+    if (body.error) return jsonResponse({ error: body.error }, 400);
+    const { images } = body.data;
     if (!images || !Array.isArray(images) || images.length === 0) return jsonResponse({ error: 'No images' }, 400);
     if (images.length > 10) return jsonResponse({ error: 'Max 10 images' }, 400);
     const key = requireEnv('GEMINI_API_KEY');
@@ -34,7 +36,9 @@ export default async function handler(req: Request) {
     const guide = extractText(data) || '';
     if (!guide.trim()) return jsonResponse({ error: 'Empty guide' }, 502);
     return jsonResponse({ guide });
-  } catch (e: any) {
-    return jsonResponse({ error: e.message }, 500);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[vision-guide] error:', msg);
+    return jsonResponse({ error: msg || 'Internal server error', service: 'vision-guide' }, 500);
   }
 }

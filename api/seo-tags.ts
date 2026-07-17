@@ -5,7 +5,7 @@
  */
 export const config = { runtime: 'edge' };
 
-import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders } from './_shared.js';
+import { jsonResponse, requireEnv, GEMINI_MODEL, fetchGeminiWithRetry, corsHeaders, safeJsonBody } from './_shared.js';
 
 function extractText(d: any) {
   return d?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('\n').trim();
@@ -17,7 +17,9 @@ export default async function handler(req: Request) {
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   try {
-    const { keyword, platform = 'YouTube', language = 'english' } = await req.json();
+    const body = await safeJsonBody(req);
+    if (body.error) return jsonResponse({ error: body.error }, 400);
+    const { keyword, platform = 'YouTube', language = 'english' } = body.data;
     if (!keyword || keyword.trim().length < 2) return jsonResponse({ error: 'Keyword min 2 chars' }, 400);
     const key = requireEnv('GEMINI_API_KEY');
     const sanitized = keyword.trim().slice(0,200);
@@ -63,7 +65,9 @@ export default async function handler(req: Request) {
       optimizedTitle: parsed.optimizedTitle || `Ultimate Guide to ${sanitized}`,
     });
 
-  } catch (e: any) {
-    return jsonResponse({ error: e.message || 'Unknown' }, 500);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[seo-tags] error:', msg);
+    return jsonResponse({ error: msg || 'Internal server error', service: 'seo-tags' }, 500);
   }
 }

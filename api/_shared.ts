@@ -15,6 +15,30 @@ export function jsonResponse(payload: unknown, status = 200) {
   });
 }
 
+/** Safely parse JSON body — returns { data, error? } — check error before using data */
+export async function safeJsonBody(req: Request): Promise<{ data: any; error?: string }> {
+  try {
+    const data = await req.json();
+    return { data };
+  } catch (e: any) {
+    return { data: null, error: `Invalid JSON body: ${e.message || 'parse error'}` };
+  }
+}
+
+/** Create an AbortController with timeout (ms) — use for external API calls */
+export function timeoutSignal(ms: number): { signal: AbortSignal; clear: () => void } {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  return { signal: ctrl.signal, clear: () => clearTimeout(id) };
+}
+
+/** Classify fetch errors into user-friendly messages */
+export function classifyFetchError(e: unknown, service: string): string {
+  if (e instanceof DOMException && e.name === 'AbortError') return `${service} request timed out`;
+  if (e instanceof TypeError && e.message?.includes('fetch')) return `${service} network error`;
+  return `${service} error: ${(e as any)?.message || 'unknown'}`;
+}
+
 export function requireEnv(key: string): string {
   const val = process.env[key] || "";
   if (!val) throw new Error(`${key} not configured on server. Set in Vercel dashboard or via supabase secrets set ${key}=...`);

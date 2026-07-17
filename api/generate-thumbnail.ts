@@ -7,7 +7,7 @@
  */
 export const config = { runtime: 'edge' };
 
-import { jsonResponse, corsHeaders } from './_shared.js';
+import { jsonResponse, corsHeaders, safeJsonBody } from './_shared.js';
 
 function dims(ratio: string) {
   return ratio === '9:16' ? { w: 1080, h: 1920, fal: 'portrait_16_9' } : { w: 1280, h: 720, fal: 'landscape_16_9' };
@@ -84,7 +84,9 @@ export default async function handler(req: Request) {
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   try {
-    const { title, emotion = 'Exciting', style = 'Modern', aspectRatio = '16:9', count = 4, brand = 'Tube.Pro' } = await req.json();
+    const body = await safeJsonBody(req);
+    if (body.error) return jsonResponse({ error: body.error }, 400);
+    const { title, emotion = 'Exciting', style = 'Modern', aspectRatio = '16:9', count = 4, brand = 'Tube.Pro' } = body.data;
     if (!title || title.trim().length < 3) return jsonResponse({ error: 'Title min 3 chars' }, 400);
 
     const { w, h, fal } = dims(aspectRatio) as any;
@@ -143,7 +145,9 @@ export default async function handler(req: Request) {
       },
     });
 
-  } catch (e: any) {
-    return jsonResponse({ error: e.message || 'Unknown' }, 500);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[generate-thumbnail] error:', msg);
+    return jsonResponse({ error: msg || 'Internal server error', service: 'generate-thumbnail' }, 500);
   }
 }
