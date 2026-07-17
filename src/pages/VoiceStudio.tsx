@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { toastFriendlyError } from "@/lib/errorToast";
 import { fetchEdgeFunctionBlob } from "@/api/client/secureClient";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
@@ -150,7 +151,7 @@ export default function VoiceStudio() {
       toast.success("Cinematic voiceover generated via VectorEngine secure route!");
 
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to generate voiceover");
+      toastFriendlyError(error, "Failed to generate voiceover");
       stopVisualizer();
     } finally { setIsGenerating(false); }
   };

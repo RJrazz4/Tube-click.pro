@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { toastFriendlyError } from "@/lib/errorToast";
 import { useContentStore } from "@/stores/useContentStore";
 import { useTranscriptExtraction } from "@/hooks/useSecureQuery";
 import { QK } from "@/api/client/queryKeys";
@@ -73,7 +74,7 @@ export default function Repurposer() {
       if (err?.status === 404) {
         toast.error("Captions disabled or private video. Paste script manually — transcript is optional free add-on.");
       } else {
-        toast.error(msg);
+        toastFriendlyError(err, "Failed to extract transcript");
       }
     }
   }, [youtubeUrl, queryClient, transcriptMutation]);

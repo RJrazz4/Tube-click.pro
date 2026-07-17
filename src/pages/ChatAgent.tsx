@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
- import { Send, Bot, User, Loader2, Copy, Check, Sparkles, Download, ArrowRight, Hash, FileText, Languages, X, Trash2 } from "lucide-react";
+ import { Send, Bot, User, Loader2, Copy, Check, Sparkles, Download, ArrowRight, Hash, FileText, Languages, X, Trash2, AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/api/client/secureClient";
+import { fetchEdgeFunctionJson } from "@/api/client/secureClient";
+import { friendlyError, type FriendlyError } from "@/lib/friendlyError";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsText } from "@/lib/export";
 import { cleanScript } from "@/lib/scriptCleaner";
@@ -26,6 +27,38 @@ interface GeneratedContent {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  /** Phase E3: structured friendly error card (replaces raw-text error bubbles) */
+  error?: FriendlyError;
+}
+
+/** Phase E3: codes that warrant a retry affordance */
+const RETRYABLE_CODES = ["RATE_LIMITED", "UPSTREAM_ERROR", "NETWORK", "TIMEOUT"];
+
+// Phase E3 — clean inline error card (replaces raw-JSON chat bubbles)
+function ErrorInlineCard({ err, cooldownLeft, onRetry }: { err: FriendlyError; cooldownLeft: number; onRetry?: () => void }) {
+  return (
+    <div className="text-sm space-y-1.5">
+      <div className="flex items-center gap-2 font-semibold text-destructive">
+        <AlertTriangle className="w-4 h-4 shrink-0" />
+        {err.title}
+      </div>
+      <p className="whitespace-pre-wrap leading-relaxed text-foreground/90">{err.message}</p>
+      {err.action && <p className="text-xs text-muted-foreground">{err.action}</p>}
+      {onRetry && (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="mt-1 h-7 px-2.5 text-xs"
+          disabled={cooldownLeft > 0}
+          onClick={onRetry}
+        >
+          <RefreshCw className="w-3 h-3 mr-1.5" />
+          {cooldownLeft > 0 ? `Retry in ${cooldownLeft}s` : "Try again"}
+        </Button>
+      )}
+    </div>
+  );
 }
 
 export default function ChatAgent() {
@@ -47,6 +80,8 @@ export default function ChatAgent() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [lastRequest, setLastRequest] = useState<{ topic: string } | null>(null);
+  const [cooldownLeft, setCooldownLeft] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -56,11 +91,18 @@ export default function ChatAgent() {
     }
   }, [messages]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Phase E3: 1s cooldown ticker for the rate-limit retry button
+  useEffect(() => {
+    if (cooldownLeft <= 0) return;
+    const id = setTimeout(() => setCooldownLeft((c) => Math.max(0, c - 1)), 1000);
+    return () => clearTimeout(id);
+  }, [cooldownLeft]);
+
+  const handleSubmit = async (e?: React.FormEvent, overrideTopic?: string) => {
     e.preventDefault();
     
     // Input validation
-    const trimmedTopic = topic.trim();
+    const trimmedTopic = (overrideTopic ?? topic).trim();
     if (!trimmedTopic) {
       toast.error("Please enter a video topic");
       return;
@@ -80,6 +122,7 @@ export default function ChatAgent() {
 
     setIsGenerating(true);
     setGeneratedContent(null);
+    setLastRequest({ topic: trimmedTopic });
 
     const languageLabel = language === "hinglish" ? "Hinglish" : language === "hindi" ? "Hindi" : "English";
 
@@ -157,28 +200,35 @@ ${processedContent.description}
       setTopic("");
 
     } catch (error: unknown) {
-      const errorStatus = error instanceof EdgeFunctionError ? error.status : 0;
-      const errorMessage = error instanceof Error ? error.message : "Failed to generate content";
+      // Phase E3: typed friendly error — raw provider JSON can never reach a bubble
+      const friendly = friendlyError(error, "Failed to generate content");
 
-      if (errorStatus === 401 || errorStatus === 403) {
-        toast.error("Your Gemini API key is invalid or unauthorized. Update it in Settings.");
-      } else if (errorStatus === 429) {
-        toast.error("Gemini rate limit reached. Please wait a moment and try again.");
-      } else {
-        toast.error(errorMessage);
+      if (friendly.code === "RATE_LIMITED" && friendly.retryAfter) {
+        setCooldownLeft(Math.min(friendly.retryAfter, 60));
       }
-      
+
+      toast.error(friendly.title, {
+        description: friendly.retryAfter ? `${friendly.message} (≈${friendly.retryAfter}s)` : friendly.message,
+      });
+
       setMessages((prev) => {
         const updated = [...prev];
-        updated[updated.length - 1] = { 
-          role: "assistant", 
-          content: `❌ Error: ${errorMessage}\n\nPlease try again or check your connection.` 
+        updated[updated.length - 1] = {
+          role: "assistant",
+          content: "",
+          error: friendly,
         };
         return updated;
       });
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  // Phase E3: retry the last failed request (respects rate-limit cooldown)
+  const retryLast = () => {
+    if (isGenerating || cooldownLeft > 0 || !lastRequest) return;
+    void handleSubmit(undefined, lastRequest.topic);
   };
 
   const handleCopy = async (text: string, label: string) => {
@@ -355,7 +405,15 @@ ${generatedContent.description || 'N/A'}
                                    : "bg-secondary/80 text-foreground border border-border/30"
                                )}
                              >
-                               <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                               {message.error ? (
+                                <ErrorInlineCard
+                                  err={message.error}
+                                  cooldownLeft={cooldownLeft}
+                                  onRetry={lastRequest && RETRYABLE_CODES.includes(message.error.code) ? retryLast : undefined}
+                                />
+                              ) : (
+                                <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                              )}
                              </div>
                            </div>
                            {message.role === "user" && (

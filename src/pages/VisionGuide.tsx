@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
+import { toastFriendlyError } from "@/lib/errorToast";
 import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/api/client/secureClient";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
@@ -143,15 +144,10 @@ export default function VisionGuide() {
 
       toast.success("Guide generated successfully!");
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to generate guide";
-      const errorStatus = error instanceof EdgeFunctionError ? error.status : 0;
-
-      if (errorStatus === 401 || errorStatus === 403) {
-        toast.error("Your Gemini API key is invalid or unauthorized. Update it in Settings.");
-      } else if (errorStatus === 429) {
-        toast.error("Gemini rate limit reached. Please wait a moment and try again.");
+      if (error instanceof EdgeFunctionError && (error.status === 401 || error.status === 403)) {
+        toast.error("Session could not be verified. Please refresh and try again.");
       } else {
-        toast.error(errorMessage);
+        toastFriendlyError(error, "Failed to generate guide");
       }
     } finally {
       setIsGenerating(false);

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { toastFriendlyError } from "@/lib/errorToast";
 import { useSeoGeneration } from "@/hooks/useSecureQuery";
 import { QK } from "@/api/client/queryKeys";
 import { useQueryClient } from "@tanstack/react-query";
@@ -73,12 +74,7 @@ export default function SeoOptimizer() {
 
       toast.success("SEO audit and tag bundle generated via Gemini Edge!");
     } catch (err: any) {
-      const msg = err?.message || "Failed to analyze SEO";
-      if (err?.status === 429) {
-        toast.error("Rate limit — serving cached if available. Wait 30s.");
-      } else {
-        toast.error(msg);
-      }
+      toastFriendlyError(err, "Failed to analyze SEO");
     }
   };
 

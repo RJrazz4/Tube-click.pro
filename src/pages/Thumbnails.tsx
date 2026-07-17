@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
+import { friendlyError } from "@/lib/friendlyError";
 import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/api/client/secureClient";
 import { cn } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
@@ -141,11 +142,9 @@ export default function Thumbnails() {
         else throw new Error("All thumbnails failed to generate");
       }
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to generate thumbnails";
-      const errorStatus = error instanceof EdgeFunctionError ? error.status : 0;
-      if (errorStatus === 429) toast.error("Rate limit — try again or use cached brand");
-      else toast.error(errorMessage);
-      setThumbnailStates(prev => prev.map(s => s.status !== 'complete' ? { url: null, status: 'error', error: errorMessage } : s));
+      const friendly = friendlyError(error, "Failed to generate thumbnails");
+      toast.error(friendly.title, { description: friendly.message });
+      setThumbnailStates(prev => prev.map(s => s.status !== 'complete' ? { url: null, status: 'error', error: friendly.message } : s));
     } finally { setIsGenerating(false); }
   };
 

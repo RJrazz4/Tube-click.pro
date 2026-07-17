@@ -13,11 +13,30 @@
 
 export class EdgeFunctionError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** Phase E1/E2 machine-readable code (QUOTA_EXCEEDED_DAILY, RATE_LIMITED, ...) */
+  code?: string;
+  /** Seconds the provider asked us to wait before retrying */
+  retryAfter?: number;
+  /** Optional next-step guidance from the server */
+  action?: string;
+  constructor(message: string, status: number, opts?: { code?: string; retryAfter?: number; action?: string }) {
     super(message);
     this.name = "EdgeFunctionError";
     this.status = status;
+    this.code = opts?.code;
+    this.retryAfter = opts?.retryAfter;
+    this.action = opts?.action;
   }
+}
+
+/** Extract normalized Phase E1/E2 envelope metadata, if present */
+function errorMeta(parsed: unknown): { code?: string; retryAfter?: number; action?: string } {
+  const p: any = parsed && typeof parsed === "object" ? parsed : {};
+  return {
+    code: typeof p.code === "string" ? p.code : undefined,
+    retryAfter: typeof p.retryAfter === "number" ? p.retryAfter : undefined,
+    action: typeof p.action === "string" ? p.action : undefined,
+  };
 }
 
 async function readResponseBody(response: Response) {
@@ -116,13 +135,13 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
 
     if (res.ok) {
       if (parsed && typeof parsed === "object" && "error" in parsed && (parsed as any).error) {
-        throw new EdgeFunctionError(String((parsed as any).error), res.status || 500);
+        throw new EdgeFunctionError(String((parsed as any).error), res.status || 500, errorMeta(parsed));
       }
       return parsed as T;
     }
 
     const msg = extractMessage(parsed, res.status);
-    lastErr = new EdgeFunctionError(msg, res.status);
+    lastErr = new EdgeFunctionError(msg, res.status, errorMeta(parsed));
 
     if (res.status === 401 || res.status === 403) throw lastErr;
 
@@ -131,10 +150,9 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
     // provider retryAfter hint — exactly once — and fail fast on everything
     // else (e.g. QUOTA_EXCEEDED_DAILY must NEVER be retried client-side).
     const code = (parsed as any)?.code;
-    const retryAfterSec = (parsed as any)?.retryAfter;
     if (typeof code === 'string') {
-      if (typeof retryAfterSec === 'number' && retryAfterSec > 0 && attempt === 0) {
-        pendingDelayMs = Math.min(retryAfterSec, 30) * 1000;
+      if (typeof lastErr.retryAfter === 'number' && lastErr.retryAfter > 0 && attempt === 0) {
+        pendingDelayMs = Math.min(lastErr.retryAfter, 30) * 1000;
         continue;
       }
       throw lastErr;
@@ -169,7 +187,7 @@ export async function fetchEdgeFunctionBlob(functionName: string, body: unknown,
   if (!res.ok) {
     const parsed = await readResponseBody(res);
     const msg = extractMessage(parsed, res.status);
-    throw new EdgeFunctionError(msg, res.status);
+    throw new EdgeFunctionError(msg, res.status, errorMeta(parsed));
   }
 
   return await res.blob();
