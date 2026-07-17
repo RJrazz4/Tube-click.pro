@@ -37,8 +37,8 @@ serve(async (req) => {
   try {
     const { text, voiceId, stability, similarityBoost, speed } = await req.json();
 
-    // SECURE: Server env only — no customApiKey from client
-    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY') || "";
+    // SECURE: Server env only — VectorEngine white-label (VECTORENGINE_API_KEY) fallback to ELEVENLABS_API_KEY
+    const ELEVENLABS_API_KEY = Deno.env.get('VECTORENGINE_API_KEY') || Deno.env.get('ELEVENLABS_API_KEY') || "";
 
     if (!ELEVENLABS_API_KEY) {
       return new Response(

@@ -46,6 +46,7 @@ const VERCEL_ROUTE_MAP: Record<string, string> = {
   "generate-storyboard-image": "/api/generate-storyboard-image",
   "analyze-storyboard": "/api/analyze-storyboard",
   "elevenlabs-tts": "/api/elevenlabs-tts",
+  "vectorengine-tts": "/api/vectorengine-tts",
   "vision-guide": "/api/vision-guide",
   "transcript": "/api/transcript",
 };
