@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Film, Loader2, X, Sparkles, RefreshCw } from "lucide-react";
+import { Bot, Image, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Film, Loader2, X, Sparkles, RefreshCw, Share2, TrendingUp, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,30 @@ const tools = [
     icon: Mic,
     path: "/voice",
     gradient: "from-orange-400 to-red-500",
+    glow: "",
+  },
+  {
+    title: "Multi-Platform Repurposer",
+    description: "Convert scripts to X, IG, LinkedIn & YouTube",
+    icon: Share2,
+    path: "/repurposer",
+    gradient: "from-pink-500 to-rose-600",
+    glow: "",
+  },
+  {
+    title: "Channel Analytics & ROI",
+    description: "Simulate growth, AdSense & brand deals",
+    icon: TrendingUp,
+    path: "/analytics",
+    gradient: "from-blue-500 to-indigo-600",
+    glow: "",
+  },
+  {
+    title: "SEO Tag & Competitor AI",
+    description: "High-CTR tags & search volume audit",
+    icon: Search,
+    path: "/seo",
+    gradient: "from-emerald-500 to-teal-600",
     glow: "",
   },
 ];
@@ -218,7 +242,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Unified 6-Tool Grid */}
+      {/* Unified 8-Tool Grid */}
       <div>
         <h2 className="font-display text-lg md:text-xl font-semibold text-foreground mb-4 md:mb-5 flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-primary" />

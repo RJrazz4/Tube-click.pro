@@ -6,7 +6,10 @@ import {
   Eye, 
   Mic,
   Sparkles,
-  Film
+  Film,
+  Share2,
+  TrendingUp,
+  Search
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -18,6 +21,9 @@ const navItems = [
   { icon: Image, label: "Thumbnails", path: "/thumbnails" },
   { icon: Eye, label: "Vision Guide", path: "/vision-guide" },
   { icon: Mic, label: "Voiceover", path: "/voice" },
+  { icon: Share2, label: "Multi-Platform Repurposer", path: "/repurposer" },
+  { icon: TrendingUp, label: "Analytics & ROI Predictor", path: "/analytics" },
+  { icon: Search, label: "SEO & Tag Optimizer", path: "/seo" },
 ];
 
 export function Sidebar() {
@@ -33,7 +39,7 @@ export function Sidebar() {
       </Link>
 
       {/* Navigation */}
-      <nav className="flex-1 flex flex-col items-center gap-2">
+      <nav className="flex-1 flex flex-col items-center gap-1.5 overflow-y-auto scrollbar-none py-2">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           return (
@@ -43,7 +49,7 @@ export function Sidebar() {
                   to={item.path}
                   aria-label={item.label}
                   className={cn(
-                    "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 relative group",
+                    "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 relative group shrink-0",
                     isActive 
                       ? "bg-primary/20 text-primary neon-glow-purple" 
                       : "text-sidebar-foreground hover:text-primary hover:bg-secondary"
@@ -64,7 +70,7 @@ export function Sidebar() {
       </nav>
 
       {/* Sponsor Block */}
-      <div className="mt-auto">
+      <div className="mt-auto pt-2">
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
             <div 
