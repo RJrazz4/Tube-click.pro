@@ -55,7 +55,7 @@ async function generateThumbnail(prompt: string, apiKey: string, falSize: string
     });
 
     if (submitResponse.status === 401 || submitResponse.status === 403) {
-      throw { status: 401, message: "Invalid Fal.ai API key." };
+      throw { status: 500, message: "Server Fal.ai key invalid. Check FAL_API_KEY env." };
     }
 
     if (!submitResponse.ok) {
@@ -67,53 +67,32 @@ async function generateThumbnail(prompt: string, apiKey: string, falSize: string
 
     const queueData = await submitResponse.json();
     const requestId = queueData?.request_id;
-
-    if (!requestId) {
-      throw { status: 502, message: "No request ID returned by Fal.ai." };
-    }
+    if (!requestId) throw { status: 502, message: "No request ID returned by Fal.ai." };
 
     const startedAt = Date.now();
-
     while (Date.now() - startedAt < 30000) {
       await new Promise(r => setTimeout(r, 1000));
-
       const statusResponse = await fetch(
         `https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/${requestId}/status`,
         { headers: { Authorization: `Key ${apiKey}` } },
       );
-
       if (!statusResponse.ok) continue;
-
       const statusData = await statusResponse.json();
-
       if (statusData.status === "COMPLETED") {
         const resultResponse = await fetch(
           `https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/${requestId}`,
           { headers: { Authorization: `Key ${apiKey}` } },
         );
-
-        if (!resultResponse.ok) {
-          throw { status: resultResponse.status, message: "Failed to fetch result." };
-        }
-
+        if (!resultResponse.ok) throw { status: resultResponse.status, message: "Failed to fetch result." };
         const resultData = await resultResponse.json();
         const imageUrl = resultData?.images?.[0]?.url;
-
-        if (!imageUrl) {
-          throw { status: 502, message: "No image URL returned." };
-        }
-
+        if (!imageUrl) throw { status: 502, message: "No image URL returned." };
         return imageUrl;
       }
-
-      if (statusData.status === "FAILED") {
-        throw { status: 502, message: "Image generation failed on Fal.ai." };
-      }
+      if (statusData.status === "FAILED") throw { status: 502, message: "Image generation failed on Fal.ai." };
     }
-
     throw { status: 504, message: "Thumbnail generation timed out." };
   }
-
   throw { status: 500, message: lastError };
 }
 
@@ -123,14 +102,12 @@ serve(async (req) => {
   }
 
   try {
-    const { title, emotion, style, aspectRatio = "16:9", count = 4, customApiKey } = await req.json();
-    const falApiKey =
-      (typeof customApiKey === "string" ? customApiKey.trim() : "") ||
-      Deno.env.get("FAL_API_KEY") ||
-      "";
+    const { title, emotion, style, aspectRatio = "16:9", count = 4 } = await req.json();
+    // SECURE: Server env only, no customApiKey
+    const falApiKey = Deno.env.get("FAL_API_KEY") || "";
 
     if (!falApiKey) {
-      return jsonResponse({ success: false, error: "Fal.ai API key not configured.", action: "Add your Fal.ai key in Settings." }, 400);
+      return jsonResponse({ success: false, error: "FAL_API_KEY not configured on server.", action: "Admin: set secrets." }, 500);
     }
 
     if (!title || typeof title !== 'string' || title.trim().length < 3) {
@@ -169,14 +146,6 @@ serve(async (req) => {
 
     if (successCount === 0) {
       const firstFailure = results.find((r) => r.error);
-
-      if (firstFailure?.status === 401 || firstFailure?.status === 403) {
-        return jsonResponse({ success: false, error: "Invalid Fal.ai API key.", action: "Update your key in Settings." }, 401);
-      }
-      if (firstFailure?.status === 429) {
-        return jsonResponse({ success: false, error: "Fal.ai rate limit exceeded.", action: "Wait and try again." }, 429);
-      }
-
       return jsonResponse({ success: false, error: firstFailure?.error || "Generation failed.", action: "Try again." }, firstFailure?.status || 502);
     }
 

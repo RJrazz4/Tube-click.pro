@@ -1,60 +1,35 @@
+/**
+ * @deprecated — REMOVED in Phase A1 Secure Audit
+ * TubeGenius Pro no longer uses client-side BYOK (Bring Your Own Key).
+ * All API keys are server-only via Deno.env / process.env.
+ *
+ * This file is intentionally neutered to prevent accidental usage.
+ * GhostAdmin / TopBar now only handle locker_url, not API keys.
+ */
+
 export interface AdminConfig {
   locker_url: string;
-  image_api_key: string;
-  text_api_key: string;
-  voice_api_key: string;
 }
 
 const CONFIG_KEY = "tubegenius_admin_config";
 
-const DEFAULT_CONFIG: AdminConfig = {
-  locker_url: "",
-  image_api_key: "",
-  text_api_key: "",
-  voice_api_key: "",
-};
-
-const STORAGE_KEY_MAP = {
-  image: "fal-api-key",
-  text: "gemini-api-key",
-  voice: "elevenlabs-api-key",
-} as const;
-
-type ApiKeyType = keyof typeof STORAGE_KEY_MAP;
-
 function readStoredConfig(): Partial<AdminConfig> {
   try {
-    const rawConfig = localStorage.getItem(CONFIG_KEY);
-    return rawConfig ? JSON.parse(rawConfig) : {};
+    const raw = localStorage.getItem(CONFIG_KEY);
+    return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
   }
 }
 
-function cleanValue(value: string | null | undefined) {
-  const trimmedValue = value?.trim();
-  return trimmedValue ? trimmedValue : undefined;
-}
-
 export function getStoredAdminConfig(): AdminConfig {
-  const storedConfig = readStoredConfig();
-
+  const stored = readStoredConfig();
   return {
-    locker_url: cleanValue(storedConfig.locker_url) ?? DEFAULT_CONFIG.locker_url,
-    image_api_key:
-      cleanValue(storedConfig.image_api_key) ?? cleanValue(localStorage.getItem(STORAGE_KEY_MAP.image)) ?? DEFAULT_CONFIG.image_api_key,
-    text_api_key:
-      cleanValue(storedConfig.text_api_key) ?? cleanValue(localStorage.getItem(STORAGE_KEY_MAP.text)) ?? DEFAULT_CONFIG.text_api_key,
-    voice_api_key:
-      cleanValue(storedConfig.voice_api_key) ?? cleanValue(localStorage.getItem(STORAGE_KEY_MAP.voice)) ?? DEFAULT_CONFIG.voice_api_key,
+    locker_url: (stored.locker_url || "").trim(),
   };
 }
 
-export function getStoredApiKey(type: ApiKeyType) {
-  const storedConfig = getStoredAdminConfig();
-
-  if (type === "image") return cleanValue(storedConfig.image_api_key);
-  if (type === "text") return cleanValue(storedConfig.text_api_key);
-
-  return cleanValue(storedConfig.voice_api_key);
+// Stub — always returns undefined. Server uses env vars only.
+export function getStoredApiKey(_type: "image" | "text" | "voice"): string | undefined {
+  return undefined;
 }

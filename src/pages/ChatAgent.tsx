@@ -9,8 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getStoredApiKey } from "@/lib/byok";
-import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/lib/edgeFunctionClient";
+import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/api/client/secureClient";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsText } from "@/lib/export";
 import { cleanScript } from "@/lib/scriptCleaner";
@@ -95,7 +94,6 @@ export default function ChatAgent() {
         platform,
         style,
         language,
-        customApiKey: getStoredApiKey("text"),
       });
 
       // Validate response structure

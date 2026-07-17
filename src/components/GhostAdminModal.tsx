@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Shield, Key, Link2, Save, Eye, EyeOff } from "lucide-react";
+import { Shield, Link2, Save, Eye, EyeOff, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,37 +11,30 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { getLockerUrl, setLockerUrl } from "@/lib/monetization/locker";
 
 const ADMIN_PASS = "secret";
 const CONFIG_KEY = "tubegenius_admin_config";
 
 export interface AppConfig {
   locker_url: string;
-  image_api_key: string;
-  text_api_key: string;
-  voice_api_key: string;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
   locker_url: "",
-  image_api_key: "",
-  text_api_key: "",
-  voice_api_key: "",
 };
 
 export function getAppConfig(): AppConfig {
   try {
     const stored = localStorage.getItem(CONFIG_KEY);
-    if (stored) return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return { ...DEFAULT_CONFIG, locker_url: parsed.locker_url || getLockerUrl() };
+    }
   } catch {
     // ignore
   }
-  return DEFAULT_CONFIG;
-}
-
-export function getLockerUrl(): string {
-  const config = getAppConfig();
-  return config.locker_url || "";
+  return { locker_url: getLockerUrl() };
 }
 
 interface GhostAdminModalProps {
@@ -74,7 +67,7 @@ export function GhostAdminModal({ open, onOpenChange }: GhostAdminModalProps) {
       setAuthenticated(true);
       sessionStorage.setItem("admin_auth", "true");
       setConfig(getAppConfig());
-      toast.success("Access granted");
+      toast.success("Access granted — Secure Mode");
     } else {
       toast.error("Invalid passcode");
       setPassword("");
@@ -84,16 +77,8 @@ export function GhostAdminModal({ open, onOpenChange }: GhostAdminModalProps) {
   const handleSave = () => {
     try {
       localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-
-      // Also sync individual keys so existing BYOK logic works
-      if (config.voice_api_key) {
-        localStorage.setItem("elevenlabs-api-key", config.voice_api_key);
-      }
-      if (config.text_api_key) {
-        localStorage.setItem("gemini-api-key", config.text_api_key);
-      }
-
-      toast.success("Configuration saved and applied instantly");
+      setLockerUrl(config.locker_url);
+      toast.success("Monetization locker saved securely");
     } catch {
       toast.error("Failed to save configuration");
     }
@@ -109,7 +94,7 @@ export function GhostAdminModal({ open, onOpenChange }: GhostAdminModalProps) {
                 <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
                   <Shield className="w-6 h-6 text-primary" />
                 </div>
-                <DialogTitle className="font-display text-lg">Admin Access</DialogTitle>
+                <DialogTitle className="font-display text-lg">Secure Admin Access</DialogTitle>
               </div>
             </DialogHeader>
             <form onSubmit={handleLogin} className="space-y-4 mt-4">
@@ -125,6 +110,9 @@ export function GhostAdminModal({ open, onOpenChange }: GhostAdminModalProps) {
                 <Shield className="w-4 h-4 mr-2" />
                 Authenticate
               </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Note: API keys are now server-only. No keys stored in browser.
+              </p>
             </form>
           </>
         ) : (
@@ -133,7 +121,7 @@ export function GhostAdminModal({ open, onOpenChange }: GhostAdminModalProps) {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Shield className="w-6 h-6 text-primary" />
-                  <DialogTitle className="font-display text-lg">Control Panel</DialogTitle>
+                  <DialogTitle className="font-display text-lg">Monetization Control</DialogTitle>
                 </div>
                 <Button
                   variant="outline"
@@ -148,71 +136,41 @@ export function GhostAdminModal({ open, onOpenChange }: GhostAdminModalProps) {
             </DialogHeader>
 
             <div className="space-y-5 mt-4">
+              <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-xs text-green-400">
+                <Lock className="w-3.5 h-3.5 inline mr-1.5" />
+                Secure Mode Active: All AI keys are server-side (Vercel Edge / Supabase env).
+                No client-side BYOK. This is US SaaS compliant.
+              </div>
+
               {/* Locker URL */}
               <div className="space-y-2">
                 <Label className="text-sm flex items-center gap-2">
                   <Link2 className="w-3.5 h-3.5 text-pink-400" />
-                  Monetization Locker URL
+                  Monetization Locker URL (Stripe/Paywall)
                 </Label>
                 <Input
                   type={showPasswords ? "text" : "password"}
                   value={config.locker_url}
                   onChange={(e) => setConfig(prev => ({ ...prev, locker_url: e.target.value }))}
-                  placeholder="https://your-locker-url.com/..."
+                  placeholder="https://your-locker-url.com/verify?userId={user}"
                   className="bg-secondary border-border h-11"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Used for verification modals. Leave empty to disable.
+                  Used for verification modals. Prepares Stripe/Paywall tier guard (Phase D). Leave empty to disable.
                 </p>
               </div>
 
               <Separator className="bg-border" />
 
-              {/* API Keys */}
-              <div className="space-y-4">
-                <Label className="text-sm flex items-center gap-2 font-semibold">
-                  <Key className="w-3.5 h-3.5 text-accent" />
-                  API Keys
-                </Label>
-
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Image Generation (Fal.ai)</Label>
-                  <Input
-                    type={showPasswords ? "text" : "password"}
-                    value={config.image_api_key}
-                    onChange={(e) => setConfig(prev => ({ ...prev, image_api_key: e.target.value }))}
-                    placeholder="Fal.ai key..."
-                    className="bg-secondary border-border h-10"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Text/Script Engine (Gemini)</Label>
-                  <Input
-                    type={showPasswords ? "text" : "password"}
-                    value={config.text_api_key}
-                    onChange={(e) => setConfig(prev => ({ ...prev, text_api_key: e.target.value }))}
-                    placeholder="Gemini key..."
-                    className="bg-secondary border-border h-10"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Voice Engine (ElevenLabs)</Label>
-                  <Input
-                    type={showPasswords ? "text" : "password"}
-                    value={config.voice_api_key}
-                    onChange={(e) => setConfig(prev => ({ ...prev, voice_api_key: e.target.value }))}
-                    placeholder="ElevenLabs key..."
-                    className="bg-secondary border-border h-10"
-                  />
-                </div>
-              </div>
-
               <Button onClick={handleSave} className="w-full cyber-button h-11 text-base">
                 <Save className="w-4 h-4 mr-2" />
-                Save & Apply
+                Save Locker Config
               </Button>
+
+              <p className="text-[11px] text-muted-foreground text-center">
+                API keys are managed via <code>.env</code> on server — see <code>.env.example</code>.
+                Never expose keys in frontend.
+              </p>
             </div>
           </>
         )}

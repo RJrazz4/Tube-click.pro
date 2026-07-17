@@ -4,8 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { getStoredApiKey } from "@/lib/byok";
-import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/lib/edgeFunctionClient";
+import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/api/client/secureClient";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsText } from "@/lib/export";
@@ -126,7 +125,6 @@ export default function VisionGuide() {
 
       const data = await fetchEdgeFunctionJson<{ guide: string }>("vision-guide", {
         images: imageData,
-        customApiKey: getStoredApiKey("text"),
       });
 
       if (!data.guide || !data.guide.trim()) {

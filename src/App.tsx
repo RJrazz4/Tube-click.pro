@@ -5,12 +5,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { createAppQueryClient } from "@/lib/cache/queryClient";
 
 // Eager load the dashboard for instant first paint
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
-// Lazy load heavy tool pages to reduce initial bundle
+// Lazy load heavy tool pages to reduce initial bundle — Phase A1 Performance
 const ChatAgent = lazy(() => import("./pages/ChatAgent"));
 const Storyboard = lazy(() => import("./pages/Storyboard"));
 const Thumbnails = lazy(() => import("./pages/Thumbnails"));
@@ -22,8 +23,10 @@ const SeoOptimizer = lazy(() => import("./pages/SeoOptimizer"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const About = lazy(() => import("./pages/About"));
+const AdminPanel = lazy(() => import("./pages/AdminPanel"));
 
-const queryClient = new QueryClient();
+// Tuned QueryClient for instant feel — stale 5min, gc 10min, no refetch on focus
+const queryClient = createAppQueryClient();
 
 // Loading fallback component
 const PageLoader = () => (
@@ -66,6 +69,7 @@ const App = () => (
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/about" element={<About />} />
+              <Route path="/admin" element={<AdminPanel />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

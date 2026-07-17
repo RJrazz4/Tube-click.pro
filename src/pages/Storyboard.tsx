@@ -23,8 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { getStoredApiKey } from "@/lib/byok";
-import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/lib/edgeFunctionClient";
+import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/api/client/secureClient";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 import JSZip from "jszip";
@@ -131,7 +130,6 @@ export default function Storyboard() {
     try {
       const data = await fetchEdgeFunctionJson<{ scenes: Scene[] }>("analyze-storyboard", {
         script,
-        customApiKey: getStoredApiKey("text"),
       });
       
       // Dynamic scene count (4-10)
@@ -198,7 +196,6 @@ export default function Storyboard() {
         {
           prompt: promptToUse,
           sceneNumber: scene.scene_number,
-          customApiKey: getStoredApiKey("image"),
         },
         abortControllerRef.current.signal,
       );

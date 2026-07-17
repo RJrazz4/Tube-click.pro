@@ -1,29 +1,21 @@
 import { useState, useEffect } from "react";
-import { Shield, Key, Link2, Save, Eye, EyeOff, Lock } from "lucide-react";
+import { Shield, Link2, Save, Eye, EyeOff, Lock, Server, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
 
-const ADMIN_PASS_HASH = "a1b2c3d4e5f6"; // Simple check - not SHA256 for localStorage-only system
 const ADMIN_PASS = "RJ0761";
 const CONFIG_KEY = "tubegenius_admin_config";
 
 interface AppConfig {
   locker_url: string;
-  image_api_key: string;
-  text_api_key: string;
-  voice_api_key: string;
 }
 
 const DEFAULT_CONFIG: AppConfig = {
   locker_url: "",
-  image_api_key: "",
-  text_api_key: "",
-  voice_api_key: "",
 };
 
 export function getAppConfig(): AppConfig {
@@ -44,7 +36,6 @@ export default function AdminPanel() {
   const [password, setPassword] = useState("");
   const [showPasswords, setShowPasswords] = useState(false);
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
-  const navigate = useNavigate();
 
   useEffect(() => {
     const isAuth = sessionStorage.getItem("admin_auth") === "true";
@@ -60,7 +51,7 @@ export default function AdminPanel() {
       setAuthenticated(true);
       sessionStorage.setItem("admin_auth", "true");
       setConfig(getAppConfig());
-      toast.success("Access granted");
+      toast.success("Access granted — Secure Mode");
     } else {
       toast.error("Invalid passcode");
       setPassword("");
@@ -70,7 +61,9 @@ export default function AdminPanel() {
   const handleSave = () => {
     try {
       localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-      toast.success("Configuration saved and applied instantly");
+      // Sync to monetization locker store
+      localStorage.setItem("tubegenius_locker_config", JSON.stringify({ locker_url: config.locker_url, tier: "free" }));
+      toast.success("Locker configuration saved");
     } catch {
       toast.error("Failed to save configuration");
     }
@@ -84,7 +77,8 @@ export default function AdminPanel() {
             <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/20 flex items-center justify-center mb-4">
               <Lock className="w-8 h-8 text-primary" />
             </div>
-            <CardTitle className="font-display text-xl">Admin Access</CardTitle>
+            <CardTitle className="font-display text-xl">Secure Admin Access</CardTitle>
+            <CardDescription>Server-side keys — no BYOK</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
@@ -100,6 +94,9 @@ export default function AdminPanel() {
                 <Shield className="w-4 h-4 mr-2" />
                 Authenticate
               </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                API keys now live in .env on server (Vercel Edge / Supabase). No browser storage.
+              </p>
             </form>
           </CardContent>
         </Card>
@@ -113,10 +110,10 @@ export default function AdminPanel() {
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground flex items-center gap-2">
             <Shield className="w-7 h-7 text-primary" />
-            Control Panel
+            Secure Control Panel
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            All changes apply instantly across the app
+            Phase A1 — Server-Side Secure Architecture. Zero client keys.
           </p>
         </div>
         <Button
@@ -130,6 +127,20 @@ export default function AdminPanel() {
         </Button>
       </div>
 
+      <Card className="cyber-card border-border border-green-500/20 bg-green-500/5">
+        <CardContent className="p-4 flex gap-3">
+          <CheckCircle className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-green-400">Secure Mode Active</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              All external API calls (Gemini, Fal.ai, ElevenLabs) now route through secure
+              serverless routes using <code>process.env</code> / <code>Deno.env</code>.
+              No <code>localStorage</code> API keys. Ready for US premium subscription model.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Locker URL */}
       <Card className="cyber-card border-border">
         <CardHeader>
@@ -137,72 +148,44 @@ export default function AdminPanel() {
             <Link2 className="w-4 h-4 text-pink-400" />
             Monetization Locker URL
           </CardTitle>
+          <CardDescription>Prepare Stripe/Paywall tier guard (Phase D)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Input
             type={showPasswords ? "text" : "password"}
             value={config.locker_url}
             onChange={(e) => setConfig(prev => ({ ...prev, locker_url: e.target.value }))}
-            placeholder="https://your-locker-url.com/..."
+            placeholder="https://your-locker-url.com/verify?userId={user}"
             className="bg-secondary border-border h-11"
           />
           <p className="text-xs text-muted-foreground">
-            Used for verification modals on export/download actions. Leave empty to disable locker.
+            Used for verification modals on export/download. In Pro architecture this will be replaced by Stripe webhook.
           </p>
         </CardContent>
       </Card>
 
-      {/* API Keys */}
+      {/* Server Env Guide */}
       <Card className="cyber-card border-border">
         <CardHeader>
           <CardTitle className="font-display text-base flex items-center gap-2">
-            <Key className="w-4 h-4 text-cyan-400" />
-            API Keys (Client-Side Overrides)
+            <Server className="w-4 h-4 text-cyan-400" />
+            Server Environment Keys (Vercel / Supabase)
           </CardTitle>
+          <CardDescription>Set these in dashboard — never in frontend</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-sm">Image Generation API Key</Label>
-            <Input
-              type={showPasswords ? "text" : "password"}
-              value={config.image_api_key}
-              onChange={(e) => setConfig(prev => ({ ...prev, image_api_key: e.target.value }))}
-              placeholder="Fal.ai key..."
-              className="bg-secondary border-border h-11"
-            />
-          </div>
-
-          <Separator className="bg-border" />
-
-          <div className="space-y-2">
-            <Label className="text-sm">Text/Script API Key</Label>
-            <Input
-              type={showPasswords ? "text" : "password"}
-              value={config.text_api_key}
-              onChange={(e) => setConfig(prev => ({ ...prev, text_api_key: e.target.value }))}
-              placeholder="Gemini key..."
-              className="bg-secondary border-border h-11"
-            />
-          </div>
-
-          <Separator className="bg-border" />
-
-          <div className="space-y-2">
-            <Label className="text-sm">Voice API Key</Label>
-            <Input
-              type={showPasswords ? "text" : "password"}
-              value={config.voice_api_key}
-              onChange={(e) => setConfig(prev => ({ ...prev, voice_api_key: e.target.value }))}
-              placeholder="ElevenLabs key..."
-              className="bg-secondary border-border h-11"
-            />
+        <CardContent className="space-y-3 text-xs font-mono bg-secondary/50 rounded-lg p-4">
+          <div className="space-y-1 text-muted-foreground">
+            <p><span className="text-foreground">GEMINI_API_KEY</span> = for TubeBot AI Agent + SEO + Transcript</p>
+            <p><span className="text-foreground">FAL_API_KEY</span> = for Thumbnail Architect + Storyboard (Tube.Flash / Tube.Pro mapping)</p>
+            <p><span className="text-foreground">ELEVENLABS_API_KEY</span> = for Voiceover Studio + preview caching</p>
+            <p className="pt-2 text-[11px]">See .env.example for full blueprint. For Supabase: Dashboard → Edge Functions → Secrets</p>
           </div>
         </CardContent>
       </Card>
 
       <Button onClick={handleSave} className="w-full cyber-button h-12 text-base">
         <Save className="w-5 h-5 mr-2" />
-        Save & Apply Configuration
+        Save Locker & Secure Config
       </Button>
     </div>
   );

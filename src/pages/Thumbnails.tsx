@@ -7,8 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { getStoredApiKey } from "@/lib/byok";
-import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/lib/edgeFunctionClient";
+import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/api/client/secureClient";
 import { cn } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
 import { incrementStat, saveContent } from "@/lib/stats";
@@ -82,7 +81,6 @@ export default function Thumbnails() {
           style,
           aspectRatio,
           count: 4,
-          customApiKey: getStoredApiKey("image"),
         });
 
         if (data.thumbnails && Array.isArray(data.thumbnails) && data.thumbnails.length > 0) {

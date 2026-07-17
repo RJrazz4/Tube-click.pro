@@ -29,27 +29,22 @@ function cleanupJson(value: string) {
 
 async function fetchGeminiWithRetry(url: string, body: unknown): Promise<Response> {
   let lastResponse: Response | null = null;
-
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
     if (attempt > 0) {
       const delay = RETRY_DELAYS[attempt - 1];
       const jitter = delay * 0.2 * (Math.random() * 2 - 1);
       await new Promise(r => setTimeout(r, Math.round(delay + jitter)));
     }
-
     lastResponse = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-
     if (lastResponse.ok || (lastResponse.status < 500 && lastResponse.status !== 429)) {
       return lastResponse;
     }
-
     if (attempt === RETRY_DELAYS.length) return lastResponse;
   }
-
   return lastResponse!;
 }
 
@@ -68,16 +63,16 @@ serve(async (req) => {
   }
 
   try {
-    const { script, customApiKey } = await req.json();
+    const { script } = await req.json();
 
+    // SECURE: Server env only
     const geminiApiKey =
-      (typeof customApiKey === 'string' ? customApiKey.trim() : '') ||
       Deno.env.get('GEMINI_API_KEY') ||
       Deno.env.get('GOOGLE_AI_API_KEY') ||
       '';
 
     if (!geminiApiKey) {
-      return jsonResponse({ success: false, error: 'Gemini API key not configured. Add your key in Settings.', action: 'Open Ghost Admin and enter your Gemini API key.' }, 400);
+      return jsonResponse({ success: false, error: 'GEMINI_API_KEY not configured on server.', action: 'Contact admin.' }, 500);
     }
 
     if (!script || !script.trim()) {
@@ -85,7 +80,7 @@ serve(async (req) => {
     }
 
     if (script.trim().length < 100) {
-      return jsonResponse({ success: false, error: 'Script too short. Minimum 100 characters.', action: 'Add more content to your script.' }, 400);
+      return jsonResponse({ success: false, error: 'Script too short. Minimum 100 characters.', action: 'Add more content.' }, 400);
     }
 
     const trimmedScript = script.slice(0, 10000);
@@ -116,15 +111,13 @@ Return format: [{ "beat_type": "...", "scene_number": 1, "who": "...", "what": "
 
     if (!response.ok) {
       const errorMessage = await readGeminiError(response);
-
-      if (response.status === 400 || response.status === 401 || response.status === 403) {
-        return jsonResponse({ success: false, error: 'Invalid Gemini API key or access denied.', action: 'Update your key in Settings.' }, 401);
+      if (response.status === 401 || response.status === 403) {
+        return jsonResponse({ success: false, error: 'Server Gemini key invalid.', action: 'Admin: check env.' }, 500);
       }
       if (response.status === 429) {
-        return jsonResponse({ success: false, error: 'Gemini rate limit exceeded after retries.', action: 'Wait 30 seconds and try again.' }, 429);
+        return jsonResponse({ success: false, error: 'Gemini rate limit exceeded.', action: 'Wait 30s.' }, 429);
       }
-
-      return jsonResponse({ success: false, error: errorMessage, action: 'Try again in a moment.' }, 500);
+      return jsonResponse({ success: false, error: errorMessage, action: 'Try again.' }, 500);
     }
 
     const data = await response.json();
@@ -161,13 +154,13 @@ Return format: [{ "beat_type": "...", "scene_number": 1, "who": "...", "what": "
       }));
       
     } catch {
-      return jsonResponse({ success: false, error: 'Failed to analyze script.', action: 'Try again with a clearer script.' }, 502);
+      return jsonResponse({ success: false, error: 'Failed to analyze script.', action: 'Try again with clearer script.' }, 502);
     }
 
     return jsonResponse({ scenes });
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return jsonResponse({ success: false, error: errorMessage, action: 'Try again or check your API key.' }, 500);
+    return jsonResponse({ success: false, error: errorMessage, action: 'Try again.' }, 500);
   }
 });

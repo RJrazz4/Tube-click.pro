@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { getStoredApiKey } from "@/lib/byok";
+import { fetchEdgeFunctionBlob } from "@/api/client/secureClient";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { VoiceVerificationModal } from "@/components/VoiceVerificationModal";
@@ -104,46 +104,15 @@ export default function VoiceStudio() {
     animateVisualizer();
 
     try {
-      const customApiKey = getStoredApiKey("voice");
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({
-            text,
-            voiceId: selectedElevenLabsVoice,
-            stability: stability[0],
-            similarityBoost: 0.75,
-            speed: speed[0],
-            customApiKey,
-          }),
-        }
-      );
+      // Secure: No customApiKey — server uses env vars only
+      const audioBlob = await fetchEdgeFunctionBlob("elevenlabs-tts", {
+        text,
+        voiceId: selectedElevenLabsVoice,
+        stability: stability[0],
+        similarityBoost: 0.75,
+        speed: speed[0],
+      });
 
-      if (!response.ok) {
-        let errorMessage = 'Failed to generate audio';
-
-        try {
-          const error = await response.json();
-          errorMessage = error.error || errorMessage;
-        } catch {
-          errorMessage = await response.text() || errorMessage;
-        }
-
-        if (response.status === 401 || response.status === 403) {
-          throw new Error("Your voice API key is invalid or unauthorized. Update it in Settings.");
-        }
-
-        throw new Error(errorMessage);
-      }
-
-      const audioBlob = await response.blob();
-      
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       
       const url = URL.createObjectURL(audioBlob);
@@ -247,19 +216,19 @@ export default function VoiceStudio() {
         audioRef.current.play();
         return;
       }
-      
-      // Check if user has their own key — if yes, generate directly (no ads)
-      const userKey = getStoredApiKey("voice");
-      if (userKey && userKey.trim()) {
-        generateElevenLabsAudio();
-      } else {
-        // No custom key: show ad-gate verification modal
-        if (!text.trim()) {
-          toast.error("Please enter some text to convert to speech");
-          return;
-        }
-        setShowVerification(true);
+      // Secure architecture: All requests go through server env keys.
+      // Verification modal handles monetization locker paywall if needed.
+      if (!text.trim()) {
+        toast.error("Please enter some text to convert to speech");
+        return;
       }
+      // Direct generation — tier guard handled server-side + locker modal
+      if (audioUrl) {
+        audioRef.current?.play();
+        return;
+      }
+      // Always trigger secure generation path; monetization locker decides paywall
+      generateElevenLabsAudio();
     } else {
       handleBrowserTTSPlay();
     }
