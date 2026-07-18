@@ -14,6 +14,7 @@ import NotFound from "./pages/NotFound";
 // Lazy load heavy tool pages to reduce initial bundle — Phase A1 Performance
 const ChatAgent = lazy(() => import("./pages/ChatAgent"));
 const Storyboard = lazy(() => import("./pages/Storyboard"));
+const StoryboardLegacy = lazy(() => import("./pages/StoryboardLegacy"));
 const Thumbnails = lazy(() => import("./pages/Thumbnails"));
 const VisionGuide = lazy(() => import("./pages/VisionGuide"));
 const VoiceStudio = lazy(() => import("./pages/VoiceStudio"));
@@ -60,6 +61,7 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/chat-agent" element={<ChatAgent />} />
               <Route path="/storyboard" element={<Storyboard />} />
+              <Route path="/storyboard/legacy" element={<StoryboardLegacy />} />
               <Route path="/thumbnails" element={<Thumbnails />} />
               <Route path="/vision-guide" element={<VisionGuide />} />
               <Route path="/voice" element={<VoiceStudio />} />

@@ -174,7 +174,7 @@
       "count": 1
     }
   },
-  "src/pages/Storyboard.tsx": {
+  "src/pages/StoryboardLegacy.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     },
