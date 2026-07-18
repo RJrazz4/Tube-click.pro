@@ -211,7 +211,16 @@
     background-size: 200% 200%;
     animation: gradient-shift 3s ease infinite;
   }
-   
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease both;
+  }
+  
    /* Glassmorphism utility classes */
    .glass-card {
      @apply relative rounded-2xl border backdrop-blur-md bg-card/80 shadow-lg border-border/50;
