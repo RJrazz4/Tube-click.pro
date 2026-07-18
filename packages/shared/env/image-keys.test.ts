@@ -5,6 +5,9 @@ import {
   IMAGE_PROVIDER_IDS,
   parseImageKeyPools,
   parseImageKeyPoolsWithReport,
+  parseIndividualEnvKeys,
+  mergeKeyPools,
+  INDIVIDUAL_KEY_ENV_VARS,
 } from "./image-keys.js";
 
 function collect() {
@@ -17,16 +20,16 @@ describe("parseImageKeyPools", () => {
     const inputs: Array<string | undefined | null> = [undefined, null, "", "   "];
     for (const raw of inputs) {
       const { issues, sink } = collect();
-      expect(parseImageKeyPools(raw, sink)).toEqual({ agnes: [], gemini: [], hf: [], together: [], replicate: [] });
+      expect(parseImageKeyPools(raw, sink)).toEqual({ agnes: [], gemini: [], hf: [], together: [], replicate: [], nvidia: [] });
       expect(issues).toEqual([]);
     }
   });
 
   it("parses multiple pools preserving order and deduping keys", () => {
     const { issues, sink } = collect();
-    const pools = parseImageKeyPools("agnes:a1,a2;gemini:g1;hf:h1,h2,h1;together:t1,t2;replicate:r1", sink);
+    const pools = parseImageKeyPools("agnes:a1,a2;gemini:g1;hf:h1,h2,h1;together:t1,t2;replicate:r1;nvidia:n1", sink);
     expect(issues).toEqual([]);
-    expect(pools).toEqual({ agnes: ["a1", "a2"], gemini: ["g1"], hf: ["h1", "h2"], together: ["t1", "t2"], replicate: ["r1"] });
+    expect(pools).toEqual({ agnes: ["a1", "a2"], gemini: ["g1"], hf: ["h1", "h2"], together: ["t1", "t2"], replicate: ["r1"], nvidia: ["n1"] });
   });
 
   it("tolerates whitespace around separators", () => {
@@ -37,6 +40,7 @@ describe("parseImageKeyPools", () => {
       hf: ["h1"],
       together: [],
       replicate: [],
+      nvidia: [],
     });
   });
 
@@ -48,6 +52,7 @@ describe("parseImageKeyPools", () => {
       hf: ["h1"],
       together: [],
       replicate: [],
+      nvidia: [],
     });
   });
 
@@ -59,6 +64,19 @@ describe("parseImageKeyPools", () => {
       hf: ["z"],
       together: ["t1"],
       replicate: [],
+      nvidia: [],
+    });
+  });
+
+  it("accepts nvidia aliases", () => {
+    const { sink } = collect();
+    expect(parseImageKeyPools("nvidia:n1;nvidia-nim:n2", sink)).toEqual({
+      agnes: [],
+      gemini: [],
+      hf: [],
+      together: [],
+      replicate: [],
+      nvidia: ["n1", "n2"],
     });
   });
 
@@ -73,7 +91,7 @@ describe("parseImageKeyPools", () => {
     expect(parseImageKeyPools("gemeni:SECRETKEY123", sink)).toBeNull();
     expect(issues).toHaveLength(1);
     expect(issues[0]).toContain("gemeni");
-    expect(issues[0]).toContain("agnes, gemini, hf, together, replicate");
+    expect(issues[0]).toContain("agnes, gemini, hf, together, replicate, nvidia");
     expect(issues[0]).not.toContain("SECRETKEY123");
   });
 
@@ -95,7 +113,7 @@ describe("parseImageKeyPools", () => {
     // Windows-style line endings in the env var (CRLF between groups)
     const pools = parseImageKeyPools("agnes:a1\r\n;gemini:g1\r\n;hf:h1", sink);
     expect(issues).toEqual([]);
-    expect(pools).toEqual({ agnes: ["a1"], gemini: ["g1"], hf: ["h1"], together: [], replicate: [] });
+    expect(pools).toEqual({ agnes: ["a1"], gemini: ["g1"], hf: ["h1"], together: [], replicate: [], nvidia: [] });
   });
 
   it("handles trailing \\r from CRLF group splitting", () => {
@@ -103,17 +121,17 @@ describe("parseImageKeyPools", () => {
     // Trailing \r after split by ; (edge case from line ending normalization)
     const pools = parseImageKeyPools("agnes:a1\r;gemini:g1\r;hf:h1", sink);
     expect(issues).toEqual([]);
-    expect(pools).toEqual({ agnes: ["a1"], gemini: ["g1"], hf: ["h1"], together: [], replicate: [] });
+    expect(pools).toEqual({ agnes: ["a1"], gemini: ["g1"], hf: ["h1"], together: [], replicate: [], nvidia: [] });
   });
 });
 
 describe("parseImageKeyPoolsWithReport", () => {
   it("reports correct diagnostics for valid input", () => {
-    const report = parseImageKeyPoolsWithReport("agnes:a1;gemini:g1;hf:h1;together:t1;replicate:r1");
-    expect(report.groupsFound).toBe(5);
+    const report = parseImageKeyPoolsWithReport("agnes:a1;gemini:g1;hf:h1;together:t1;replicate:r1;nvidia:n1");
+    expect(report.groupsFound).toBe(6);
     expect(report.errors).toEqual([]);
     expect(report.warnings).toEqual([]);
-    expect(report.parsed).toEqual({ agnes: ["a1"], gemini: ["g1"], hf: ["h1"], together: ["t1"], replicate: ["r1"] });
+    expect(report.parsed).toEqual({ agnes: ["a1"], gemini: ["g1"], hf: ["h1"], together: ["t1"], replicate: ["r1"], nvidia: ["n1"] });
   });
 
   it("reports warnings for empty pools", () => {
@@ -127,9 +145,81 @@ describe("parseImageKeyPoolsWithReport", () => {
   });
 });
 
+describe("parseIndividualEnvKeys", () => {
+  it("parses comma-separated keys from individual env vars", () => {
+    const pools = parseIndividualEnvKeys({
+      HUGGINGFACE_API_KEY: "hf_key1,hf_key2",
+      AGNES_API_KEY: "agnes_key1",
+      TOGETHER_API_KEY: "together_key1,together_key2",
+      REPLICATE_API_KEY: "rep_key1",
+      NVIDIA_API_KEY: "nv_key1,nv_key2",
+    });
+    expect(pools.hf).toEqual(["hf_key1", "hf_key2"]);
+    expect(pools.agnes).toEqual(["agnes_key1"]);
+    expect(pools.together).toEqual(["together_key1", "together_key2"]);
+    expect(pools.replicate).toEqual(["rep_key1"]);
+    expect(pools.nvidia).toEqual(["nv_key1", "nv_key2"]);
+    expect(pools.gemini).toEqual([]);
+  });
+
+  it("handles missing env vars gracefully", () => {
+    const pools = parseIndividualEnvKeys({});
+    expect(pools).toEqual({ agnes: [], gemini: [], hf: [], together: [], replicate: [], nvidia: [] });
+  });
+
+  it("trims whitespace and filters empty keys", () => {
+    const pools = parseIndividualEnvKeys({
+      HUGGINGFACE_API_KEY: " hf_key1 , , hf_key2 , ",
+    });
+    expect(pools.hf).toEqual(["hf_key1", "hf_key2"]);
+  });
+
+  it("deduplicates keys within a single env var", () => {
+    const pools = parseIndividualEnvKeys({
+      NVIDIA_API_KEY: "key1,key2,key1",
+    });
+    expect(pools.nvidia).toEqual(["key1", "key2"]);
+  });
+
+  it("ignores blank env vars", () => {
+    const pools = parseIndividualEnvKeys({
+      HUGGINGFACE_API_KEY: "",
+      AGNES_API_KEY: "   ",
+      TOGETHER_API_KEY: "tk1",
+    });
+    expect(pools.hf).toEqual([]);
+    expect(pools.agnes).toEqual([]);
+    expect(pools.together).toEqual(["tk1"]);
+  });
+});
+
+describe("mergeKeyPools", () => {
+  it("merges individual and legacy pools with deduplication", () => {
+    const individual = { agnes: ["a1"], gemini: [], hf: ["h1"], together: [], replicate: [], nvidia: [] };
+    const legacy = { agnes: ["a2"], gemini: ["g1"], hf: ["h1", "h2"], together: [], replicate: [], nvidia: [] };
+    const merged = mergeKeyPools(individual, legacy);
+    expect(merged.agnes).toEqual(["a1", "a2"]);
+    expect(merged.gemini).toEqual(["g1"]);
+    expect(merged.hf).toEqual(["h1", "h2"]); // h1 deduped
+  });
+
+  it("individual keys take priority (appear first)", () => {
+    const individual = { agnes: ["priority_key"], gemini: [], hf: [], together: [], replicate: [], nvidia: [] };
+    const legacy = { agnes: ["legacy_key"], gemini: [], hf: [], together: [], replicate: [], nvidia: [] };
+    const merged = mergeKeyPools(individual, legacy);
+    expect(merged.agnes[0]).toBe("priority_key");
+  });
+});
+
 describe("image provider constants", () => {
-  it("exposes canonical provider ids", () => {
-    expect(IMAGE_PROVIDER_IDS).toEqual(["agnes", "gemini", "hf", "together", "replicate"]);
+  it("exposes canonical provider ids including nvidia", () => {
+    expect(IMAGE_PROVIDER_IDS).toEqual(["agnes", "gemini", "hf", "together", "replicate", "nvidia"]);
+  });
+
+  it("maps all individual env vars to valid provider ids", () => {
+    for (const providerId of Object.values(INDIVIDUAL_KEY_ENV_VARS)) {
+      expect(IMAGE_PROVIDER_IDS).toContain(providerId);
+    }
   });
 
   it("emptyImageKeyPools returns an independent object per call", () => {

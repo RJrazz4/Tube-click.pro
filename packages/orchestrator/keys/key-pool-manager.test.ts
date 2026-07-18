@@ -6,7 +6,7 @@ import { AllKeysExhaustedError, ProviderNotConfiguredError } from "./errors.js";
 import { KeyPool } from "./key-pool.js";
 import { KeyPoolManager } from "./key-pool-manager.js";
 
-const POOLS: ImageKeyPools = { agnes: ["a1", "a2"], gemini: [], hf: ["h1"], together: [], replicate: [] };
+const POOLS: ImageKeyPools = { agnes: ["a1", "a2"], gemini: [], hf: ["h1"], together: [], replicate: [], nvidia: [] };
 
 describe("KeyPoolManager", () => {
   it("builds pools only for configured providers, in canonical order", () => {
@@ -32,7 +32,7 @@ describe("KeyPoolManager", () => {
   it("propagates the injected clock into every pool", () => {
     let t = 1_000;
     const m = new KeyPoolManager(
-      { agnes: ["a1"], gemini: [], hf: ["h1"], together: [], replicate: [] },
+      { agnes: ["a1"], gemini: [], hf: ["h1"], together: [], replicate: [], nvidia: [] },
       { now: () => t },
     );
     m.pool("agnes").recordFailure("a1", { cooldownMs: 500 });
@@ -58,6 +58,7 @@ describe("KeyPoolManager", () => {
       hf: ["hf-key-002-secret"],
       together: ["together-key-003-secret"],
       replicate: [],
+      nvidia: [],
     });
     const snap = m.snapshotAll();
     expect(Object.keys(snap)).toEqual(["agnes", "hf", "together"]);
@@ -70,7 +71,7 @@ describe("KeyPoolManager", () => {
   });
 
   it("handles a zero-key environment (Pollinations-only deployments)", () => {
-    const m = new KeyPoolManager({ agnes: [], gemini: [], hf: [], together: [], replicate: [] });
+    const m = new KeyPoolManager({ agnes: [], gemini: [], hf: [], together: [], replicate: [], nvidia: [] });
     expect(m.configuredProviders()).toEqual([]);
     expect(m.snapshotAll()).toEqual({});
     expect(() => m.pool("hf")).toThrow(ProviderNotConfiguredError);

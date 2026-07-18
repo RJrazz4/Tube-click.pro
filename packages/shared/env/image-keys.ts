@@ -1,19 +1,25 @@
 /**
- * Phase A1 — Pooled image-provider API keys.
+ * Phase A1+ — Pooled image-provider API keys (5-Engine Architecture).
  *
- * IMAGE_API_KEYS carries every image-provider key in ONE env var so the
- * orchestrator can rotate/fallback without redeploys:
+ * PRIMARY: Individual standard environment variables (one per provider):
+ *   HUGGINGFACE_API_KEY=key1,key2    (comma-separated multi-account)
+ *   AGNES_API_KEY=ak1,ak2
+ *   TOGETHER_API_KEY=tk1,tk2
+ *   REPLICATE_API_KEY=rp1,rp2
+ *   NVIDIA_API_KEY=nv1,nv2
  *
- *   IMAGE_API_KEYS="agnes:ak_live_1,ak_live_2;gemini:gk_1;hf:hf_tok;together:tk_1;replicate:rp_1"
+ * LEGACY BACKWARD COMPAT: IMAGE_API_KEYS still supported as fallback:
+ *   IMAGE_API_KEYS="agnes:ak_live_1,ak_live_2;gemini:gk_1;hf:hf_tok"
  *
  *   - groups separated by ";"
  *   - each group is "<provider>:<key1,key2,...>"
  *   - key order within a pool is preserved (Phase A2 KeyPool rotates round-robin)
  *   - duplicate keys are dropped (first occurrence wins)
  *
- * Zero-Cost Hydra Router support:
+ * Zero-Cost Hydra Router support (5-Engine Pool):
  *   - hf: HuggingFace Inference (free tier)
  *   - together: Together AI (free tier)
+ *   - nvidia: NVIDIA NIM (free tier)
  *   - replicate: Replicate (free tier)
  *
  * Pollinations is NOT pooled here — it needs no key (see POLLINATIONS_ENABLED).
@@ -23,7 +29,7 @@
  */
 import { z } from "zod";
 
-export const IMAGE_PROVIDER_IDS = ["agnes", "gemini", "hf", "together", "replicate"] as const;
+export const IMAGE_PROVIDER_IDS = ["agnes", "gemini", "hf", "together", "replicate", "nvidia"] as const;
 export type ImageProviderId = (typeof IMAGE_PROVIDER_IDS)[number];
 
 /** Every pool always exists — an empty pool means "provider not configured". */
@@ -33,10 +39,11 @@ export interface ImageKeyPools {
   hf: string[];
   together: string[];
   replicate: string[];
+  nvidia: string[];
 }
 
 export function emptyImageKeyPools(): ImageKeyPools {
-  return { agnes: [], gemini: [], hf: [], together: [], replicate: [] };
+  return { agnes: [], gemini: [], hf: [], together: [], replicate: [], nvidia: [] };
 }
 
 /** Report sink for validation problems (wired to Zod ctx.addIssue by the field). */
@@ -52,6 +59,20 @@ const PROVIDER_ALIASES: Readonly<Record<string, ImageProviderId>> = {
   together: "together",
   togetherai: "together",
   replicate: "replicate",
+  nvidia: "nvidia",
+  "nvidia-nim": "nvidia",
+};
+
+/**
+ * Mapping from individual env var names to provider IDs.
+ * These are the PRIMARY configuration method (Phase 5-Engine Architecture).
+ */
+export const INDIVIDUAL_KEY_ENV_VARS: Readonly<Record<string, ImageProviderId>> = {
+  HUGGINGFACE_API_KEY: "hf",
+  AGNES_API_KEY: "agnes",
+  TOGETHER_API_KEY: "together",
+  REPLICATE_API_KEY: "replicate",
+  NVIDIA_API_KEY: "nvidia",
 };
 
 /**
@@ -128,6 +149,62 @@ export const imageKeyPoolsField = z
     );
     return pools ?? z.NEVER;
   });
+
+/**
+ * Parse individual env vars into ImageKeyPools.
+ * This is the PRIMARY configuration method for the 5-Engine Architecture.
+ * Each env var supports comma-separated values for multi-account rotation.
+ *
+ * @param source The env source object (e.g. process.env)
+ * @returns ImageKeyPools with keys parsed from individual env vars
+ */
+export function parseIndividualEnvKeys(source: EnvSourceForKeys): ImageKeyPools {
+  const pools = emptyImageKeyPools();
+  const seen = new Map<ImageProviderId, Set<string>>();
+
+  for (const [envVar, providerId] of Object.entries(INDIVIDUAL_KEY_ENV_VARS)) {
+    const raw = source[envVar];
+    if (raw === undefined || raw.trim() === "") continue;
+
+    const keys = raw
+      .split(",")
+      .map((k) => k.trim())
+      .filter((k) => k.length > 0);
+
+    if (keys.length === 0) continue;
+
+    const bucket = seen.get(providerId) ?? new Set<string>();
+    for (const key of keys) bucket.add(key);
+    seen.set(providerId, bucket);
+  }
+
+  for (const [provider, bucket] of seen) {
+    pools[provider] = [...bucket];
+  }
+
+  return pools;
+}
+
+/**
+ * Merge individual env var pools with legacy IMAGE_API_KEYS pools.
+ * Individual env vars take precedence (keys are additive — both sources
+ * contribute keys to the same provider pool).
+ */
+export function mergeKeyPools(
+  individual: ImageKeyPools,
+  legacy: ImageKeyPools,
+): ImageKeyPools {
+  const merged = emptyImageKeyPools();
+  for (const id of IMAGE_PROVIDER_IDS) {
+    // Deduplicate: individual keys first (priority), then legacy keys
+    const combined = new Set<string>([...individual[id], ...legacy[id]]);
+    merged[id] = [...combined];
+  }
+  return merged;
+}
+
+/** Env source type for individual key parsing (avoids circular import from index). */
+export type EnvSourceForKeys = Record<string, string | undefined>;
 
 /**
  * Debug helper: parse and return a detailed report of what was parsed.

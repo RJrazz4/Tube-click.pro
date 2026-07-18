@@ -19,7 +19,7 @@ describe("parseEnv — happy paths", () => {
       POLLINATIONS_ENABLED: "false",
       TIER_LIMITS: '{"free":{"maxScenes":3}}',
     });
-    expect(env.imageKeyPools).toEqual({ agnes: [SECRET_IMAGE_KEY, "a2"], gemini: ["g1"], hf: ["h1"], together: ["t1"], replicate: ["r1"] });
+    expect(env.imageKeyPools).toEqual({ agnes: [SECRET_IMAGE_KEY, "a2"], gemini: ["g1"], hf: ["h1"], together: ["t1"], replicate: ["r1"], nvidia: [] });
     expect(env.openrouterKeys).toEqual([SECRET_OR_KEY, "sk-or-2"]);
     expect(env.pollinationsEnabled).toBe(false);
     expect(env.tierLimits.free.maxScenes).toBe(3);
@@ -28,10 +28,37 @@ describe("parseEnv — happy paths", () => {
 
   it("applies all defaults when nothing is configured", () => {
     const env = parseEnv({});
-    expect(env.imageKeyPools).toEqual({ agnes: [], gemini: [], hf: [], together: [], replicate: [] });
+    expect(env.imageKeyPools).toEqual({ agnes: [], gemini: [], hf: [], together: [], replicate: [], nvidia: [] });
     expect(env.openrouterKeys).toEqual([]);
     expect(env.pollinationsEnabled).toBe(true);
     expect(env.tierLimits).toEqual(defaultTierLimits());
+  });
+
+  it("reads individual env vars (5-Engine Architecture) and merges with legacy", () => {
+    const env = parseEnv({
+      HUGGINGFACE_API_KEY: "hf_from_individual,hf_second",
+      NVIDIA_API_KEY: "nv_key1",
+      IMAGE_API_KEYS: "hf:hf_from_legacy;together:t1",
+    });
+    // Individual + legacy merged, individual keys first, deduped
+    expect(env.imageKeyPools.hf).toEqual(["hf_from_individual", "hf_second", "hf_from_legacy"]);
+    expect(env.imageKeyPools.together).toEqual(["t1"]);
+    expect(env.imageKeyPools.nvidia).toEqual(["nv_key1"]);
+  });
+
+  it("individual env vars work without IMAGE_API_KEYS", () => {
+    const env = parseEnv({
+      HUGGINGFACE_API_KEY: "hf_key1",
+      TOGETHER_API_KEY: "tk1,tk2",
+      NVIDIA_API_KEY: "nv1",
+      REPLICATE_API_KEY: "rp1",
+    });
+    expect(env.imageKeyPools.hf).toEqual(["hf_key1"]);
+    expect(env.imageKeyPools.together).toEqual(["tk1", "tk2"]);
+    expect(env.imageKeyPools.nvidia).toEqual(["nv1"]);
+    expect(env.imageKeyPools.replicate).toEqual(["rp1"]);
+    expect(env.imageKeyPools.agnes).toEqual([]);
+    expect(env.imageKeyPools.gemini).toEqual([]);
   });
 
   it("falls back to the legacy singular OPENROUTER_API_KEY", () => {
@@ -131,6 +158,7 @@ describe("summarizeEnv", () => {
       hfKeys: 1,
       togetherKeys: 1,
       replicateKeys: 1,
+      nvidiaKeys: 0,
       openrouterKeys: 1,
       pollinationsEnabled: true,
       freeMaxScenes: 4,

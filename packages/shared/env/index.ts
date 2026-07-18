@@ -1,10 +1,18 @@
 /**
- * Phase A1 — Zod-validated server environment (fail-fast at boot).
+ * Phase A1+ — Zod-validated server environment (fail-fast at boot).
+ * 5-Engine Architecture: supports individual env vars + legacy IMAGE_API_KEYS.
  *
  *   const env = loadEnv();            // throws EnvValidationError on bad config
  *   console.log(summarizeEnv(env));   // counts + flags only — zero key material
  *
- * Variables:
+ * Variables (PRIMARY — 5-Engine Architecture):
+ *   HUGGINGFACE_API_KEY     comma-separated HuggingFace keys
+ *   AGNES_API_KEY           comma-separated Agnes keys
+ *   TOGETHER_API_KEY        comma-separated Together AI keys
+ *   REPLICATE_API_KEY       comma-separated Replicate keys
+ *   NVIDIA_API_KEY          comma-separated NVIDIA NIM keys
+ *
+ * Variables (LEGACY fallback):
  *   IMAGE_API_KEYS          pooled provider keys: "agnes:k1,k2;gemini:k3;hf:k4"
  *   OPENROUTER_API_KEYS     manager-brain keys, comma-separated (preferred)
  *   OPENROUTER_API_KEY      legacy singular alias (used when plural absent)
@@ -20,6 +28,8 @@ import { z } from "zod";
 import {
   imageKeyPoolsField,
   type ImageKeyPools,
+  parseIndividualEnvKeys,
+  mergeKeyPools,
 } from "./image-keys.js";
 import {
   tierLimitsField,
@@ -108,11 +118,18 @@ const appEnvInputSchema = z.object({
 /**
  * Validate a raw environment source. Throws {@link EnvValidationError}
  * listing every problem (paths labelled with the real variable names).
+ *
+ * 5-Engine Architecture: reads individual env vars (HUGGINGFACE_API_KEY, etc.)
+ * as PRIMARY, and merges with legacy IMAGE_API_KEYS as fallback.
  */
 export function parseEnv(source: EnvSource): AppEnv {
   // Plural (pooled) form wins; legacy singular is the fallback.
   const openrouterRaw = source.OPENROUTER_API_KEYS ?? source.OPENROUTER_API_KEY;
 
+  // Phase 1: Parse individual env vars (5-Engine Architecture — PRIMARY)
+  const individualPools = parseIndividualEnvKeys(source);
+
+  // Phase 2: Parse legacy IMAGE_API_KEYS (backward compat)
   const result = appEnvInputSchema.safeParse({
     IMAGE_API_KEYS: source.IMAGE_API_KEYS,
     OPENROUTER_KEYS: openrouterRaw,
@@ -132,8 +149,11 @@ export function parseEnv(source: EnvSource): AppEnv {
     );
   }
 
+  // Phase 3: Merge individual + legacy pools (individual takes priority)
+  const mergedPools = mergeKeyPools(individualPools, result.data.IMAGE_API_KEYS);
+
   const env: AppEnv = {
-    imageKeyPools: result.data.IMAGE_API_KEYS,
+    imageKeyPools: mergedPools,
     openrouterKeys: result.data.OPENROUTER_KEYS,
     pollinationsEnabled: result.data.POLLINATIONS_ENABLED,
     tierLimits: result.data.TIER_LIMITS,
@@ -163,6 +183,7 @@ export function summarizeEnv(env: AppEnv): Record<string, number | boolean | str
     hfKeys: env.imageKeyPools.hf.length,
     togetherKeys: env.imageKeyPools.together.length,
     replicateKeys: env.imageKeyPools.replicate.length,
+    nvidiaKeys: env.imageKeyPools.nvidia.length,
     openrouterKeys: env.openrouterKeys.length,
     pollinationsEnabled: env.pollinationsEnabled,
     freeMaxScenes: env.tierLimits.free.maxScenes ?? "unlimited",

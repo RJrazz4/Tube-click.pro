@@ -74,14 +74,14 @@ export class RoutingImpossibleError extends Error {
 /**
  * Zero-Cost Hydra Router: canonical precedence within each cost class.
  *
- * Layer 1 (Free Keyed): HuggingFace → Together AI → Replicate
+ * Layer 1 (Free Keyed): HuggingFace → Together AI → NVIDIA NIM → Replicate
  * Layer 2 (Free Keyless): Pollinations (always tail)
  * Layer 3 (Premium): Agnes → Gemini
  *
  * Pollinations is NOT in these arrays — it is always the tail fallback.
  */
 const PREMIUM_ORDER: ReadonlyArray<Exclude<ProviderId, "pollinations">> = ["agnes", "gemini"];
-const FREE_KEYED_ORDER: ReadonlyArray<Exclude<ProviderId, "pollinations">> = ["hf", "together", "replicate"];
+const FREE_KEYED_ORDER: ReadonlyArray<Exclude<ProviderId, "pollinations">> = ["hf", "together", "nvidia", "replicate"];
 const ULTIMATE: ProviderId = "pollinations";
 
 export function route(scene: ScenePlan, ctx: RouteContext): RoutingDecision {

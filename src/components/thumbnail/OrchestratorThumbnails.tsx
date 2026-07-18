@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { GenerationProgress } from "@/components/generation/GenerationProgress";
+import { Processing3D } from "@/components/ui/Processing3D";
 import { useTierConfig } from "@/hooks/useTierConfig";
 import { orchestratorApi } from "@/lib/orchestrator/client";
 import { downloadImage } from "@/lib/orchestrator/download";
@@ -66,6 +67,8 @@ export function OrchestratorThumbnails() {
   const [result, setResult] = useState<OrchestratorThumbnailsResponse | null>(null);
   const [downloading, setDownloading] = useState<number | null>(null);
   const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  /** Per-card <img> onLoad flags — drives the per-card 3D loader. */
+  const [loaded, setLoaded] = useState<Record<number, boolean>>({});
   const abortRef = useRef<AbortController | null>(null);
 
   // Tier catalog: authoritative options when reachable, plan defaults otherwise.
@@ -99,10 +102,16 @@ export function OrchestratorThumbnails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalog, engineTier]);
 
+  /** Mark a single card's image as loaded (its 3D loader disappears). */
+  const markLoaded = useCallback((idx: number) => {
+    setLoaded((prev) => (prev[idx] ? prev : { ...prev, [idx]: true }));
+  }, []);
+
   const runGeneration = useCallback(async () => {
     setError(null);
     setBusy(true);
     setRunStartedAt(Date.now());
+    setLoaded({}); // reset per-card loaders for the new run
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -241,14 +250,32 @@ export function OrchestratorThumbnails() {
           <div className="grid gap-4 sm:grid-cols-2">
             {cardViews.map((view) => (
               <Card key={view.sceneIndex} className="overflow-hidden border-border/60">
-                <div className="relative aspect-video bg-muted/30">
+                <div className="relative aspect-video bg-muted/30 overflow-hidden">
                   {view.status === "success" && view.imageUrl ? (
-                    <img
-                      src={view.imageUrl}
-                      alt={view.title}
-                      loading="lazy"
-                      className="h-full w-full object-cover"
-                    />
+                    <>
+                      <img
+                        src={view.imageUrl}
+                        alt={view.title}
+                        loading="lazy"
+                        onLoad={() => markLoaded(view.sceneIndex)}
+                        onError={() => markLoaded(view.sceneIndex)}
+                        className={cn(
+                          "h-full w-full object-cover transition-opacity duration-300",
+                          loaded[view.sceneIndex] ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                      {/* Per-card 3D loader — spins on top of THIS card
+                          and only disappears when this card's <img> loads. */}
+                      {!loaded[view.sceneIndex] && (
+                        <div className="absolute inset-0 grid place-items-center bg-muted/40">
+                          <Processing3D
+                            variant="tile"
+                            brand={result?.tier === "free" ? "free" : "pro"}
+                            label={`Painting ${view.title}…`}
+                          />
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
                       <ImageOff className="h-6 w-6 text-muted-foreground" />
@@ -306,12 +333,27 @@ export function OrchestratorThumbnails() {
                     )}
                   </div>
                   {view.status === "failed" && view.errorMessage && (
-                    <p className="text-xs text-destructive/80 line-clamp-2">{view.errorMessage}</p>
+                    <p className="text-xs text-destructive/80 line-clamp-3">{view.errorMessage}</p>
                   )}
                 </CardContent>
               </Card>
             ))}
           </div>
+
+          {/* Explicit "all engines failed" diagnostic when every option failed */}
+          {cardViews.every((v) => v.status === "failed") && (
+            <Card className="border-destructive/50 bg-destructive/10">
+              <CardContent className="flex items-start gap-3 pt-6">
+                <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-medium">All 5 engines failed for this batch</p>
+                  <p className="text-sm text-muted-foreground">
+                    {cardViews[0]?.errorMessage ?? "Every provider in the pool returned errors. Check API keys and rate limits."}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
     </div>

@@ -32,7 +32,7 @@ export class ProviderNotConfiguredError extends Error {
   readonly provider: string;
 
   constructor(provider: string) {
-    super(`Provider "${provider}" has no configured API keys (check IMAGE_API_KEYS)`);
+    super(`Provider "${provider}" has no configured API keys (set the provider's env var, e.g. HUGGINGFACE_API_KEY, or check IMAGE_API_KEYS)`);
     this.name = "ProviderNotConfiguredError";
     this.provider = provider;
   }

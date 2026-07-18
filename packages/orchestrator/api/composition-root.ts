@@ -31,6 +31,7 @@ import {
   HuggingFaceAdapter,
   TogetherAIAdapter,
   ReplicateAdapter,
+  NvidiaAdapter,
   PollinationsAdapter,
   RequestQueue,
   type ImageProvider,
@@ -178,7 +179,16 @@ function defaultProviders(
     console.log(`[orchestrator] Together AI adapter initialized with ${togetherKeys.length} key(s) - HYDRA LAYER 1 ACTIVE`);
   }
 
-  // Replicate (free - Zero-Cost Hydra Layer 1 Tertiary)
+  // NVIDIA NIM (free - Zero-Cost Hydra Layer 1 Tertiary)
+  const nvidiaKeys = env.imageKeyPools.nvidia;
+  adapters.push(new NvidiaAdapter({ keys: nvidiaKeys, queue: lane("nvidia"), ...shared }));
+  if (nvidiaKeys.length === 0) {
+    console.warn("[orchestrator] NVIDIA adapter initialized with 0 keys - provider will be unavailable (HYDRA LAYER 1 UNAVAILABLE)");
+  } else {
+    console.log(`[orchestrator] NVIDIA adapter initialized with ${nvidiaKeys.length} key(s) - HYDRA LAYER 1 ACTIVE`);
+  }
+
+  // Replicate (free - Zero-Cost Hydra Layer 1 Quaternary)
   const replicateKeys = env.imageKeyPools.replicate;
   adapters.push(new ReplicateAdapter({ keys: replicateKeys, queue: lane("replicate"), ...shared }));
   if (replicateKeys.length === 0) {
@@ -205,14 +215,15 @@ function defaultProviders(
 export function logKeyDiagnostics(env: AppEnv, rawImageKeys: string | undefined): void {
   const report = parseImageKeyPoolsWithReport(rawImageKeys);
 
-  console.log("[orchestrator] IMAGE_API_KEYS Zero-Cost Hydra Router diagnostic report:");
-  console.log(`  - Raw value length: ${report.rawLength} chars`);
-  console.log(`  - Groups found: ${report.groupsFound}`);
+  console.log("[orchestrator] 5-Engine Hydra Router diagnostic report:");
+  console.log(`  - Raw IMAGE_API_KEYS length: ${report.rawLength} chars`);
+  console.log(`  - Legacy groups found: ${report.groupsFound}`);
   console.log(`  - Layer 1 (Free Keyed):`);
   console.log(`    - HF keys: ${report.parsed.hf.length}`);
   console.log(`    - Together AI keys: ${report.parsed.together.length}`);
+  console.log(`    - NVIDIA keys: ${report.parsed.nvidia.length}`);
   console.log(`    - Replicate keys: ${report.parsed.replicate.length}`);
-  console.log(`  - Layer 2 (Premium):`);
+  console.log(`  - Layer 3 (Premium):`);
   console.log(`    - Agnes keys: ${report.parsed.agnes.length}`);
   console.log(`    - Gemini keys: ${report.parsed.gemini.length}`);
 
@@ -226,15 +237,15 @@ export function logKeyDiagnostics(env: AppEnv, rawImageKeys: string | undefined)
     report.errors.forEach((e) => console.error(`  - ${e}`));
   }
 
-  const hasFreeKeyed = report.parsed.hf.length > 0 || report.parsed.together.length > 0 || report.parsed.replicate.length > 0;
+  const hasFreeKeyed = report.parsed.hf.length > 0 || report.parsed.together.length > 0 || report.parsed.nvidia.length > 0 || report.parsed.replicate.length > 0;
   const hasPremium = report.parsed.agnes.length > 0 || report.parsed.gemini.length > 0;
 
   if (!hasFreeKeyed && !hasPremium) {
     console.error("[orchestrator] CRITICAL: No API keys configured! All requests will fail unless POLLINATIONS_ENABLED=true");
   } else if (!hasFreeKeyed) {
-    console.warn("[orchestrator] WARNING: No free-tier keys configured (HF/Together/Replicate). Only premium (COMPLEX scenes) will use Agnes/Gemini. Free tier will fall back to Pollinations.");
+    console.warn("[orchestrator] WARNING: No free-tier keys configured (HF/Together/NVIDIA/Replicate). Only premium (COMPLEX scenes) will use Agnes/Gemini. Free tier will fall back to Pollinations.");
   } else {
-    console.log("[orchestrator] Zero-Cost Hydra Router: At least one free-tier provider available!");
+    console.log("[orchestrator] 5-Engine Hydra Router: At least one free-tier provider available!");
   }
 }
 
