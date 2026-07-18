@@ -2,14 +2,19 @@
  * Phase A3 — Provider-level types (Master Plan C: Adapters & Routing).
  *
  * ProviderId is the orchestrator's superset of A1's pool-backed ids:
- * the three keyed providers (agnes/gemini/hf) PLUS pollinations, the
+ * the keyed providers (agnes/gemini/hf/together/replicate) PLUS pollinations, the
  * keyless ultimate fallback (D3). Pool-backed ⊆ all is enforced at
  * compile time by KeyedProviderIdIsSubset.
+ *
+ * Zero-Cost Hydra Router Provider Map:
+ *   Layer 1 (Free Keyed): hf → together → replicate
+ *   Layer 2 (Free Keyless): pollinations (ultimate fallback)
+ *   Layer 3 (Premium): agnes → gemini
  */
 import type { ImageProviderId } from "../../shared/env/image-keys.js";
 
 /** Every image provider the orchestrator can route to. */
-export const PROVIDER_IDS = ["agnes", "gemini", "hf", "pollinations"] as const;
+export const PROVIDER_IDS = ["agnes", "gemini", "hf", "together", "replicate", "pollinations"] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 /** The pool-backed subset (providers holding keys in IMAGE_API_KEYS). */

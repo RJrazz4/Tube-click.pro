@@ -1,6 +1,11 @@
 /**
  * Phase C3 — Routing Engine: ScenePlan → RoutingDecision.
  *
+ * Zero-Cost Hydra Router Architecture:
+ *   Layer 1 (Free Keyed): HF → Together AI → Replicate
+ *   Layer 2 (Free Keyless): Pollinations (ultimate fallback)
+ *   Layer 3 (Premium): Agnes → Gemini
+ *
  * Policy (locked by tests):
  *   FREE tier users   → free providers only (premium is the upgrade wall,
  *                       and the token-saving mandate applied to monetization).
@@ -66,9 +71,17 @@ export class RoutingImpossibleError extends Error {
   }
 }
 
-/** Canonical precedence within each cost class; pollinations is NOT here — it is always tail. */
+/**
+ * Zero-Cost Hydra Router: canonical precedence within each cost class.
+ *
+ * Layer 1 (Free Keyed): HuggingFace → Together AI → Replicate
+ * Layer 2 (Free Keyless): Pollinations (always tail)
+ * Layer 3 (Premium): Agnes → Gemini
+ *
+ * Pollinations is NOT in these arrays — it is always the tail fallback.
+ */
 const PREMIUM_ORDER: ReadonlyArray<Exclude<ProviderId, "pollinations">> = ["agnes", "gemini"];
-const FREE_KEYED_ORDER: ReadonlyArray<Exclude<ProviderId, "pollinations">> = ["hf"];
+const FREE_KEYED_ORDER: ReadonlyArray<Exclude<ProviderId, "pollinations">> = ["hf", "together", "replicate"];
 const ULTIMATE: ProviderId = "pollinations";
 
 export function route(scene: ScenePlan, ctx: RouteContext): RoutingDecision {

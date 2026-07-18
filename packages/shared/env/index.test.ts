@@ -14,12 +14,12 @@ const SECRET_OR_KEY = "sk-or-v1-topsecret";
 describe("parseEnv — happy paths", () => {
   it("parses a fully-specified environment", () => {
     const env = parseEnv({
-      IMAGE_API_KEYS: `agnes:${SECRET_IMAGE_KEY},a2;gemini:g1`,
+      IMAGE_API_KEYS: `agnes:${SECRET_IMAGE_KEY},a2;gemini:g1;hf:h1;together:t1;replicate:r1`,
       OPENROUTER_API_KEYS: `${SECRET_OR_KEY}, sk-or-2`,
       POLLINATIONS_ENABLED: "false",
       TIER_LIMITS: '{"free":{"maxScenes":3}}',
     });
-    expect(env.imageKeyPools).toEqual({ agnes: [SECRET_IMAGE_KEY, "a2"], gemini: ["g1"], hf: [] });
+    expect(env.imageKeyPools).toEqual({ agnes: [SECRET_IMAGE_KEY, "a2"], gemini: ["g1"], hf: ["h1"], together: ["t1"], replicate: ["r1"] });
     expect(env.openrouterKeys).toEqual([SECRET_OR_KEY, "sk-or-2"]);
     expect(env.pollinationsEnabled).toBe(false);
     expect(env.tierLimits.free.maxScenes).toBe(3);
@@ -28,7 +28,7 @@ describe("parseEnv — happy paths", () => {
 
   it("applies all defaults when nothing is configured", () => {
     const env = parseEnv({});
-    expect(env.imageKeyPools).toEqual({ agnes: [], gemini: [], hf: [] });
+    expect(env.imageKeyPools).toEqual({ agnes: [], gemini: [], hf: [], together: [], replicate: [] });
     expect(env.openrouterKeys).toEqual([]);
     expect(env.pollinationsEnabled).toBe(true);
     expect(env.tierLimits).toEqual(defaultTierLimits());
@@ -120,7 +120,7 @@ describe("maskKey", () => {
 describe("summarizeEnv", () => {
   it("reports counts and flags only — zero key material", () => {
     const env = parseEnv({
-      IMAGE_API_KEYS: `agnes:${SECRET_IMAGE_KEY},a2;hf:h1`,
+      IMAGE_API_KEYS: `agnes:${SECRET_IMAGE_KEY},a2;hf:h1;together:t1;replicate:r1`,
       OPENROUTER_API_KEY: SECRET_OR_KEY,
       POLLINATIONS_ENABLED: "1",
     });
@@ -129,6 +129,8 @@ describe("summarizeEnv", () => {
       agnesKeys: 2,
       geminiKeys: 0,
       hfKeys: 1,
+      togetherKeys: 1,
+      replicateKeys: 1,
       openrouterKeys: 1,
       pollinationsEnabled: true,
       freeMaxScenes: 4,
