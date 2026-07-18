@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { friendlyError } from "@/lib/friendlyError";
 import { EdgeFunctionError, fetchEdgeFunctionJson } from "@/api/client/secureClient";
@@ -15,6 +14,7 @@ import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsImage } from "@/lib/export";
 import { IMAGE_MODEL_MAP, buildImageUrls, type ImageModelBrand } from "@/api/server/imageRouter";
 import { ENGINE_COPY, brandTagline } from "@/lib/brandCopy";
+import { Processing3D } from "@/components/ui/Processing3D";
 import { useQueryClient } from "@tanstack/react-query";
 import { QK } from "@/api/client/queryKeys";
 import { useTierConfig } from "@/hooks/useTierConfig";
@@ -303,10 +303,12 @@ export default function Thumbnails() {
             </Button>
 
             {isGenerating && (
-              <div className="space-y-2">
-                <Progress value={progress} className="h-2" />
-                <p className="text-xs text-center text-muted-foreground">{completedCount}/{thumbnailCount} complete • {brand}</p>
-              </div>
+              <Processing3D
+                variant="inline"
+                progress={progress}
+                brand={brand}
+                subLabel={`${completedCount}/${thumbnailCount} complete • ${brand} • ${brandTagline(brand)}`}
+              />
             )}
           </CardContent>
         </Card>
@@ -339,7 +341,7 @@ export default function Thumbnails() {
                         <button onClick={() => handleRemoveThumbnail(index)} className="close-button opacity-0 group-hover:opacity-100 z-20" aria-label="Remove"><X className="w-3.5 h-3.5" /></button>
                       )}
                       <button onClick={() => state.url && setSelectedIndex(thumbnails.indexOf(state.url))} disabled={!state.url} className={cn("w-full rounded-xl overflow-hidden border-2 transition-all bg-card/80", state.status === 'complete' && selectedIndex === thumbnails.indexOf(state.url!) ? "border-primary ring-2 ring-primary/50" : state.status === 'complete' ? "border-border/50 hover:border-primary/50" : state.status === 'error' ? "border-destructive/30" : "border-border/30")}>
-                        {state.status === 'complete' && state.url ? <img src={state.url} alt={`Thumbnail ${index + 1}`} className={cn("w-full object-cover", aspectRatio === "16:9" ? "aspect-video" : "aspect-[9/16]")} loading="lazy" /> : <div className={cn("w-full flex items-center justify-center bg-secondary/50", aspectRatio === "16:9" ? "aspect-video" : "aspect-[9/16]")}>{state.status === 'generating' ? <Loader2 className="w-6 h-6 animate-spin text-primary" /> : state.status === 'error' ? <div className="text-center"><AlertCircle className="w-6 h-6 text-destructive mx-auto" /><p className="text-xs text-destructive mt-1">Failed</p></div> : <span className="text-sm text-muted-foreground">{index + 1}</span>}</div>}
+                        {state.status === 'complete' && state.url ? <img src={state.url} alt={`Thumbnail ${index + 1}`} className={cn("w-full object-cover", aspectRatio === "16:9" ? "aspect-video" : "aspect-[9/16]")} loading="lazy" /> : <div className={cn("w-full flex items-center justify-center bg-secondary/50", aspectRatio === "16:9" ? "aspect-video" : "aspect-[9/16]")}>{state.status === 'generating' ? <Processing3D variant="tile" size="sm" brand={brand} /> : state.status === 'error' ? <div className="text-center"><AlertCircle className="w-6 h-6 text-destructive mx-auto" /><p className="text-xs text-destructive mt-1">Failed</p></div> : <span className="text-sm text-muted-foreground">{index + 1}</span>}</div>}
                       </button>
                       {state.status === 'complete' && state.url && <Button variant="secondary" size="icon" onClick={() => handleDownload(state.url!, index)} disabled={isGenerating} className="absolute bottom-2 right-2 w-8 h-8 opacity-0 group-hover:opacity-100 transition-opacity"><Download className="w-4 h-4" /></Button>}
                     </div>

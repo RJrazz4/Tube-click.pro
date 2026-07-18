@@ -23,7 +23,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { toastFriendlyError } from "@/lib/errorToast";
@@ -33,6 +32,7 @@ import { incrementStat, saveContent } from "@/lib/stats";
 import JSZip from "jszip";
 import { IMAGE_MODEL_MAP, type ImageModelBrand } from "@/api/server/imageRouter";
 import { ENGINE_COPY, brandTagline } from "@/lib/brandCopy";
+import { Processing3D } from "@/components/ui/Processing3D";
 import { useJson2Video } from "@/hooks/useJson2Video";
 import { useTierConfig } from "@/hooks/useTierConfig";
 import { TierAlertBanner } from "@/components/storyboard/TierAlertBanner";
@@ -554,13 +554,12 @@ export default function Storyboard() {
                   </Button>
 
                   {isGenerating && (
-                    <div className="space-y-2">
-                      <Progress value={progress} className="h-2" />
-                      <p className="text-xs text-center text-muted-foreground">
-                        {completedCount}/{scenes.length} scenes complete
-                        {retryingScene && ` • Retrying scene ${retryingScene}`}
-                      </p>
-                    </div>
+                    <Processing3D
+                      variant="inline"
+                      progress={progress}
+                      brand={brand}
+                      subLabel={`${completedCount}/${scenes.length} scenes complete${retryingScene ? ` • Retrying scene ${retryingScene}` : ""}`}
+                    />
                   )}
 
                   {completedCount > 0 && (
@@ -778,10 +777,7 @@ export default function Storyboard() {
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center">
                           {scene.status === 'generating' || scene.status === 'retrying' || scene.status === 'timeout' ? (
-                            <div className="text-center">
-                              <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-2" />
-                              <p className="text-xs text-muted-foreground">{getStatusText(scene)}</p>
-                            </div>
+                            <Processing3D variant="tile" size="md" brand={brand} label={getStatusText(scene)} />
                           ) : scene.status === 'error' ? (
                             <div className="text-center p-4">
                               <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
