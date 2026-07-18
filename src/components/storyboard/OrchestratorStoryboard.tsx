@@ -10,7 +10,7 @@
  * locked against the Gate 4 provider-leak rules).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Download, ImageOff, Loader2, Sparkles } from "lucide-react";
+import { AlertCircle, Download, ImageOff, Loader2, Sparkles, X, Zap } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { GenerationProgress } from "@/components/generation/GenerationProgress";
 import { TruncationBanner } from "@/components/storyboard/TruncationBanner";
+import { Processing3D } from "@/components/ui/Processing3D";
+import { AIBrain2D } from "@/components/ui/AIBrain2D";
+import { formatElapsedSeconds } from "@/lib/orchestrator/progress-view";
 import { orchestratorApi } from "@/lib/orchestrator/client";
 import { downloadZip } from "@/lib/orchestrator/download";
 import { toUiError, type UiError } from "@/lib/orchestrator/ui-error";
@@ -32,13 +35,59 @@ import type { OrchestratorStoryboardResponse } from "@/lib/orchestrator/types";
 const SCRIPT_STORAGE_KEY = "tubeclick_intelligent_storyboard_script";
 const MIN_SCRIPT_CHARS = 10;
 
+// Two-phase generation states
+type GenerationPhase = "idle" | "text" | "images" | "complete";
+
+/** Small phase indicator dot with label for the two-phase progress bar. */
+function PhaseIndicator({
+  label,
+  active,
+  completed,
+  icon: Icon,
+}: {
+  label: string;
+  active: boolean;
+  completed: boolean;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <div
+        className={cn(
+          "relative flex h-10 w-10 items-center justify-center rounded-full transition-all",
+          completed
+            ? "bg-emerald-500/20 border-2 border-emerald-500"
+            : active
+            ? "bg-primary/20 border-2 border-primary ring-4 ring-primary/20"
+            : "bg-muted/40 border-2 border-border/60",
+        )}
+      >
+        {completed ? (
+          <svg className="h-5 w-5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        ) : (
+          <span className={cn("h-5 w-5 flex items-center justify-center", completed ? "text-emerald-500" : active ? "text-primary" : "text-muted-foreground")}>
+            {Icon}
+          </span>
+        )}
+      </div>
+      <span className={cn("text-[11px] font-medium text-center max-w-[80px]", active ? "text-foreground" : "text-muted-foreground")}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export function OrchestratorStoryboard() {
   const [script, setScript] = useState("");
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<GenerationPhase>("idle");
   const [zipping, setZipping] = useState(false);
   const [error, setError] = useState<UiError | null>(null);
   const [result, setResult] = useState<OrchestratorStoryboardResponse | null>(null);
   const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  const [phaseStartedAt, setPhaseStartedAt] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Script persistence (scenes stay in-memory; data URLs never persist).
@@ -55,21 +104,46 @@ export function OrchestratorStoryboard() {
   const runGeneration = useCallback(async () => {
     setError(null);
     setBusy(true);
-    setRunStartedAt(Date.now());
+    setPhase("text");
+    const now = Date.now();
+    setRunStartedAt(now);
+    setPhaseStartedAt(now);
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const response = await orchestratorApi.storyboard(
+      // Phase 1: Text processing (simulated - backend does it all at once)
+      // We show the AI brain animation for a minimum time to let users perceive the "thinking"
+      const minTextPhaseMs = 1800; // Minimum time to show text phase
+      const textPhasePromise = new Promise<void>((resolve) => {
+        const checkPhase = () => {
+          if (Date.now() - now >= minTextPhaseMs) {
+            setPhase("images");
+            setPhaseStartedAt(Date.now());
+            resolve();
+          } else {
+            setTimeout(checkPhase, 100);
+          }
+        };
+        checkPhase();
+      });
+
+      // Start the API call in parallel
+      const apiPromise = orchestratorApi.storyboard(
         { script: script.trim() },
         controller.signal,
       );
+
+      // Wait for both minimum text phase time AND API response
+      const [, response] = await Promise.all([textPhasePromise, apiPromise]);
+      setPhase("complete");
       setResult(response);
     } catch (err) {
       if ((err as { name?: string })?.name === "AbortError") return;
       setError(toUiError(err));
     } finally {
       setBusy(false);
+      setPhase("idle");
     }
   }, [script]);
 
@@ -145,15 +219,96 @@ export function OrchestratorStoryboard() {
         </Card>
       )}
 
-      {/* Busy state (G4): honest ticking clock + abortable run */}
+      {/* Two-phase busy state: Text (AI Brain 2D) → Images (Processing3D) */}
       {busy && (
-        <GenerationProgress
-          headline="Planning & painting your storyboard"
-          note="The director plans your scenes, then paints each frame — a full storyboard takes about a minute."
-          skeletonCount={4}
-          startedAt={runStartedAt ?? Date.now()}
-          onCancel={() => abortRef.current?.abort()}
-        />
+        <div className="space-y-6">
+          {/* Phase indicator tabs */}
+          <div className="flex items-center justify-center gap-2">
+            <PhaseIndicator
+              label="Script Analysis"
+              active={phase === "text" || phase === "images" || phase === "complete"}
+              completed={phase === "images" || phase === "complete"}
+              icon={<Zap className="h-4 w-4" />}
+            />
+            <div className="w-16 h-px bg-border/60" />
+            <PhaseIndicator
+              label="Image Generation"
+              active={phase === "images" || phase === "complete"}
+              completed={phase === "complete"}
+              icon={<Sparkles className="h-4 w-4" />}
+            />
+          </div>
+
+          {/* Phase content */}
+          <div className="relative min-h-[280px]">
+            {/* Phase 1: AI Brain 2D - Text Processing */}
+            {phase === "text" && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ animation: "fadeIn 0.3s ease" }}>
+                <AIBrain2D
+                  variant="inline"
+                  brand="pro"
+                  phases={[
+                    "Reading script…",
+                    "Analyzing narrative structure…",
+                    "Identifying visual beats…",
+                    "Crafting scene prompts…",
+                    "Optimizing for generation…",
+                  ]}
+                  subLabel="The director is planning your storyboard"
+                />
+              </div>
+            )}
+
+            {/* Phase 2: Processing3D - Image Generation */}
+            {(phase === "images" || phase === "complete") && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ animation: "fadeIn 0.4s ease" }}>
+                <Processing3D
+                  variant="inline"
+                  brand="pro"
+                  size="md"
+                  stages={[
+                    "Initializing render pipeline…",
+                    "Composing frames…",
+                    "Rendering pixels…",
+                    "Polishing details…",
+                    "Finalizing output…",
+                  ]}
+                  subLabel={
+                    phase === "complete"
+                      ? "Storyboard complete!"
+                      : "The director is painting each scene"
+                  }
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Live clock + cancel */}
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>
+                {phase === "text"
+                  ? "Analyzing script…"
+                  : phase === "images"
+                  ? "Generating images…"
+                  : "Finalizing…"}
+                — {formatElapsedSeconds(Math.max(0, Math.floor((Date.now() - (runStartedAt ?? Date.now())) / 1000)))}
+              </span>
+            </div>
+            <p className="text-center text-sm text-muted-foreground">
+              {phase === "text"
+                ? "The director reads your script and plans every scene"
+                : phase === "images"
+                ? "Each frame is painted with cinematic quality"
+                : "Almost ready…"}
+            </p>
+            <Button variant="ghost" size="sm" onClick={() => abortRef.current?.abort()}>
+              <X className="h-4 w-4" />
+              Cancel
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Result */}

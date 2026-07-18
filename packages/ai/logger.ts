@@ -145,19 +145,21 @@ class StructuredLogger {
    * every log entry — useful for scoped logging (e.g. per-request).
    */
   child(defaultMeta: Record<string, unknown>): StructuredLogger {
-    const parent = this;
     return new Proxy(this, {
       get(target, prop) {
         if (prop === "child") return target.child.bind(target);
         const method = target[prop as keyof StructuredLogger];
         if (typeof method !== "function") return method;
+        // Bind the method to the target (logger instance) to preserve `this` context
+        // so that internal calls like `this.emit()` work correctly.
+        const boundMethod = method.bind(target);
         return (...args: any[]) => {
           const event = args[0] as string;
           const msg = args[1] as string;
           const meta = (args[2] as Record<string, unknown>) || {};
           // Merge default meta with caller's meta (caller wins)
           const mergedMeta = { ...defaultMeta, ...meta };
-          (method as Function)(event, msg, mergedMeta, args[3]);
+          boundMethod(event, msg, mergedMeta, args[3]);
         };
       },
     });
