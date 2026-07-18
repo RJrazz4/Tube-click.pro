@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { TruncationBanner } from "@/components/storyboard/TruncationBanner";
 import { orchestratorApi, OrchestratorApiError } from "@/lib/orchestrator/client";
 import {
   toSceneCardViews,
@@ -212,6 +213,7 @@ export function OrchestratorStoryboard() {
       {/* Result */}
       {result && !busy && summary && (
         <div className="space-y-4">
+          <TruncationBanner body={result} />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-0.5">
               <p className="font-medium">{summary.headline}</p>
