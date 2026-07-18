@@ -8,7 +8,7 @@
  *  Gate 4: provider-leak scan of user-visible .tsx strings
  *          (WARN mode until Phase G2 cleanup ships; then it becomes a hard FAIL)
  *
- * Usage:  npm run verify  |  node scripts/verify.mjs [--skip-build] [--leak-fail]
+ * Usage:  npm run verify  |  node scripts/verify.mjs [--skip-build] [--leak-warn]
  */
 import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
@@ -74,7 +74,7 @@ if (process.argv.includes('--skip-build')) {
 /* ---------------- Gate 4: provider-leak scan ---------------- */
 console.log('\n[Gate 4] Provider-leak scan (.tsx user-facing strings)');
 const BANNED = /pollinations|snapgen|fal\.ai|openrouter|gemini|deno|supabase edge|no api|api[\s-]?keys?|server maps/i;
-const ALLOWED_FILES = ['src/pages/AdminPanel.tsx', 'src/pages/Privacy.tsx']; // decision points — see PHASE plan G2
+const ALLOWED_FILES = ['src/pages/AdminPanel.tsx', 'src/pages/Privacy.tsx']; // G2 decision: AdminPanel keeps admin-only env names; Privacy lists data processors (legal requirement)
 const WL_FILE = join(ROOT, 'scripts/verify-whitelist.txt');
 const whitelist = existsSync(WL_FILE)
   ? readFileSync(WL_FILE, 'utf8').split('\n').map((s) => s.trim()).filter((s) => s && !s.startsWith('#'))
@@ -95,9 +95,9 @@ for (const f of walk(join(ROOT, 'src'), (n) => n.endsWith('.tsx'))) {
     }
   });
 }
-const leakFail = process.argv.includes('--leak-fail');
+const leakFail = !process.argv.includes('--leak-warn'); // hard FAIL by default since Phase G2
 if (hits.length) {
-  const header = `${hits.length} provider-term string(s) found ${leakFail ? '(FAIL — --leak-fail)' : '(WARN — becomes hard FAIL after Phase G2)'}`;
+  const header = `${hits.length} provider-term string(s) found ${leakFail ? '(FAIL — Gate 4 enforced since Phase G2)' : '(WARN — --leak-warn override)'}`;
   (leakFail ? bad : warn)(`${header}:\n    ${hits.slice(0, 14).join('\n    ')}`);
 } else ok('no provider terms in .tsx user-facing strings');
 

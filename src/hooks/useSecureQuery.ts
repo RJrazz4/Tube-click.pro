@@ -94,7 +94,7 @@ export function useThumbnailGeneration() {
   );
 }
 
-// Phase B1 — SEO Tag & Competitor AI via Gemini secure route
+// Phase B1 — SEO Tag & Competitor AI via managed secure route
 export function useSeoGeneration() {
   return useSecureMutation<
     { tags: string[]; seoScore: number; competition: string; searchVolume: string; optimizedTitle: string },

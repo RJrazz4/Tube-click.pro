@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsImage } from "@/lib/export";
-import { IMAGE_MODEL_MAP, type ImageModelBrand } from "@/api/server/imageRouter";
+import { IMAGE_MODEL_MAP, buildImageUrls, type ImageModelBrand } from "@/api/server/imageRouter";
+import { ENGINE_COPY, brandTagline } from "@/lib/brandCopy";
 import { useQueryClient } from "@tanstack/react-query";
 import { QK } from "@/api/client/queryKeys";
 import { useTierConfig } from "@/hooks/useTierConfig";
@@ -108,7 +109,7 @@ export default function Thumbnails() {
             incrementStat('thumbnailsCreated');
             const firstSuccess = newStates.find(s => s.url);
             if (firstSuccess?.url) saveContent({ type: 'thumbnail', title: trimmedTitle, content: firstSuccess.url });
-            if (successCount === thumbnailCount) toast.success(`All ${thumbnailCount} thumbnails via ${brand} (${IMAGE_MODEL_MAP[brand].provider})!`);
+            if (successCount === thumbnailCount) toast.success(`All ${thumbnailCount} thumbnails via ${brand}!`);
             else toast.warning(`Generated ${successCount}/${thumbnailCount} via ${brand}`);
           } else throw new Error("No thumbnails were generated");
         } else throw new Error("No thumbnails returned from API");
@@ -130,8 +131,7 @@ export default function Thumbnails() {
           setThumbnailStates(prev => prev.map((s, idx) => idx === i ? { ...s, status: 'generating' } : s));
           setProgress(((i + 0.5) / thumbnailCount) * 100);
           try {
-            const encodedPrompt = encodeURIComponent(variations[i]);
-            const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${Date.now() + i}`;
+            const { primary: imageUrl } = buildImageUrls({ brand, prompt: variations[i], width, height, falSize: aspectRatio === "9:16" ? "portrait_16_9" : "landscape_16_9", seed: Date.now() + i });
             const img = new window.Image();
             img.crossOrigin = "anonymous";
             await new Promise<void>((resolve, reject) => {
@@ -193,9 +193,9 @@ export default function Thumbnails() {
         <h1 className="font-display text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
           <ImageIcon className="w-6 h-6 md:w-7 md:h-7 text-accent" />
           Thumbnail Architect
-          <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] border border-primary/20 ml-2">{brand} • {IMAGE_MODEL_MAP[brand].provider}</span>
+          <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] border border-primary/20 ml-2">{brand} • {brandTagline(brand)}</span>
         </h1>
-        <p className="text-sm md:text-base text-muted-foreground mt-1">Generate 4 AI thumbnails at once via white-label engine — {brand} maps to {IMAGE_MODEL_MAP[brand].provider} server-side (no client keys). Cached per brand for instant revisit.</p>
+        <p className="text-sm md:text-base text-muted-foreground mt-1">Generate 4 AI thumbnails at once with our fully managed engine — {brandTagline(brand)} tier. Cached per brand for instant revisit.</p>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
@@ -284,18 +284,18 @@ export default function Thumbnails() {
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">{b}<span className={cn("px-1.5 py-0.5 rounded text-[9px] font-bold", cfg.costTier === "free" ? "bg-green-500/20 text-green-400" : "bg-amber-500/20 text-amber-400")}>{cfg.costTier.toUpperCase()}</span></p>
                         <p className="text-[11px] text-muted-foreground truncate">{cfg.description.split("—")[0]}</p>
-                        <p className="text-[10px] text-muted-foreground/70">{cfg.provider} • {cfg.quality} • {cfg.avgLatencyMs}ms</p>
+                        <p className="text-[10px] text-muted-foreground/70">{brandTagline(b)} • {cfg.quality} • ~{Math.max(1, Math.round(cfg.avgLatencyMs / 1000))}s</p>
                       </div>
                     </button>
                   );
                 })}
               </div>
-              <p className="text-[11px] text-muted-foreground/70">Server maps brand to provider — client never knows Pollinations/SnapGen/Fal. Free tier Flash/Pro (no key), Pro Cinematic (server FAL_API_KEY).</p>
+              <p className="text-[11px] text-muted-foreground/70">{ENGINE_COPY.managed} Tube.Flash for instant drafts, Tube.Pro for polished quality, Tube.Cinematic for maximum impact.</p>
             </div>
 
             <div className="flex items-center gap-2">
               <input type="checkbox" id="useAI" checked={useAI} onChange={(e) => setUseAI(e.target.checked)} disabled={isGenerating} className="rounded border-border" />
-              <Label htmlFor="useAI" className="text-xs text-muted-foreground cursor-pointer">Use AI Generation ({brand} {IMAGE_MODEL_MAP[brand].provider})</Label>
+              <Label htmlFor="useAI" className="text-xs text-muted-foreground cursor-pointer">Use AI Generation ({brand})</Label>
             </div>
 
             <Button onClick={handleGenerate} disabled={isGenerating || !title.trim() || title.trim().length < 3} className="w-full cyber-button h-11">
@@ -351,7 +351,7 @@ export default function Thumbnails() {
               <div className={cn("w-full rounded-xl border border-border bg-secondary/50 flex items-center justify-center", aspectRatio === "16:9" ? "aspect-video" : "aspect-[9/16] max-h-[400px] mx-auto")}>
                 <div className="text-center space-y-4 p-6">
                   <div className="w-14 h-14 mx-auto rounded-2xl bg-secondary flex items-center justify-center"><ImageIcon className="w-7 h-7 text-muted-foreground" /></div>
-                  <div><p className="text-foreground font-medium text-sm">No thumbnails yet — try {brand}</p><p className="text-muted-foreground text-xs">Enter title and generate 4 via {IMAGE_MODEL_MAP[brand].provider} (white-label {brand})</p></div>
+                  <div><p className="text-foreground font-medium text-sm">No thumbnails yet — try {brand}</p><p className="text-muted-foreground text-xs">Enter a title and generate 4 with {brand} — our managed engine handles the rest.</p></div>
                 </div>
               </div>
             )}

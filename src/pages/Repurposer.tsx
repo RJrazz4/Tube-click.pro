@@ -89,7 +89,7 @@ export default function Repurposer() {
 
     try {
       // Simulate intelligent multi-platform content distillation
-      // In Phase B full implementation, this would call Gemini Edge for repurposing:
+      // In Phase B full implementation, this would call the managed AI engine for repurposing:
       // fetchEdgeFunctionJson("generate-content", { topic: inputText, platform: "Multi", ... })
       // For now, local generation powered by transcript (free, no extra API cost)
       await new Promise(r => setTimeout(r, 900));
@@ -104,12 +104,12 @@ export default function Repurposer() {
         `2/ First, you need to understand the psychology behind viewer retention. If you lose them in the first 5 seconds, game over. Extracted from ${transcriptMeta ? `YT ${transcriptMeta.videoId}` : 'original script'}.`,
         `3/ Second, leverage high-contrast visual storytelling. People scroll fast — your thumbnail and hook must be undeniable.`,
         `4/ Finally, consistency combined with iterative improvement beats raw talent every single time. Start executing today!`,
-        `5/ Want the full breakdown? This repurposed thread is powered by TubeGenius Pro free transcript extraction — no API key needed! 👇`,
+        `5/ Want the full breakdown? This repurposed thread is powered by TubeGenius Pro transcript extraction! 👇`,
       ];
 
       const instagramCaption = `✨ The secret nobody tells you about ${title.substring(0, 50)}...\n\n${transcriptMeta ? `🎥 Transcript from YT: ${transcriptMeta.wordCount} words analyzed` : '📝 Original script analyzed'} — swipe to see how top creators dominate the algorithm right now. 🚀\n\n💡 Save this post for later and tag a creator who needs to see this!\n\n#YouTubeGrowth #ContentCreator #ViralSecrets #CreatorEconomy #TubeGenius`;
 
-      const linkedinPost = `🔥 The Creator Economy is shifting rapidly in 2026.\n\nWe just analyzed ${transcriptMeta ? `YouTube video ${transcriptMeta.videoId} (${transcriptMeta.wordCount} word transcript via ${transcriptMeta.source})` : `${wordCount} word script`} in the ${title.substring(0, 40)} niche and discovered a surprising trend:\n\n1. Short-form hooks drive 80% of top-of-funnel discovery.\n2. Deep-dive value builds long-term community retention.\n3. Multi-platform syndication multiplies reach 4x with zero extra video production cost — powered by free transcript extraction (youtube-transcript lib, server-only, no API key).\n\nWhat is your primary growth strategy this quarter? Let's discuss in the comments below! 👇`;
+      const linkedinPost = `🔥 The Creator Economy is shifting rapidly in 2026.\n\nWe just analyzed ${transcriptMeta ? `YouTube video ${transcriptMeta.videoId} (${transcriptMeta.wordCount} word transcript via ${transcriptMeta.source})` : `${wordCount} word script`} in the ${title.substring(0, 40)} niche and discovered a surprising trend:\n\n1. Short-form hooks drive 80% of top-of-funnel discovery.\n2. Deep-dive value builds long-term community retention.\n3. Multi-platform syndication multiplies reach 4x with zero extra video production cost — powered by built-in transcript extraction.\n\nWhat is your primary growth strategy this quarter? Let's discuss in the comments below! 👇`;
 
       setRepurposed({ youtubeDesc, twitterThread, instagramCaption, linkedinPost });
 
@@ -149,7 +149,7 @@ export default function Repurposer() {
           <span className="px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-[10px] border border-green-500/20 ml-2">Free Transcript</span>
         </h1>
         <p className="text-sm md:text-base text-muted-foreground mt-1">
-          Free value add: Paste YouTube URL → extract transcript via <span className="text-foreground font-medium">youtube-transcript (no API key, server-only)</span> → instantly repurpose to YT Description, X Thread, IG Caption & LinkedIn Post.
+          Free value add: Paste YouTube URL → extract transcript via <span className="text-foreground font-medium">built-in server-side transcript engine</span> → instantly repurpose to YT Description, X Thread, IG Caption & LinkedIn Post.
         </p>
       </div>
 
@@ -167,7 +167,7 @@ export default function Repurposer() {
             <div className="space-y-2 p-3 rounded-lg bg-secondary/50 border border-border">
               <Label className="text-xs flex items-center gap-1.5">
                 <Youtube className="w-3.5 h-3.5 text-red-400" />
-                YouTube URL (Free Value Add — No API Key)
+                YouTube URL (Free Value Add)
               </Label>
               <div className="flex gap-2">
                 <Input
@@ -200,7 +200,7 @@ export default function Repurposer() {
                 </div>
               )}
               <p className="text-[11px] text-muted-foreground/70">
-                Uses free <code>youtube-transcript</code> lib server-side — no API key, cached 10m via React Query for instant revisit.
+                Transcript extraction runs fully server-side — cached 10 min for instant revisit.
               </p>
             </div>
 
@@ -304,7 +304,7 @@ export default function Repurposer() {
                   </div>
                   <p className="text-muted-foreground text-sm font-medium">Free Value Add: YT → Transcript → 4 Platforms</p>
                   <p className="text-muted-foreground text-xs leading-relaxed">
-                    Paste YouTube URL above, extract transcript via free <code>youtube-transcript</code> lib (server-only, no API key), then repurpose instantly. Cached via React Query for instant revisit.
+                    Paste a YouTube URL above, extract the transcript with our built-in server-side engine, then repurpose instantly — cached for instant revisit.
                   </p>
                 </div>
               </div>

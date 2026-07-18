@@ -72,7 +72,7 @@ export default function SeoOptimizer() {
       });
       incrementStat("scriptsGenerated");
 
-      toast.success("SEO audit and tag bundle generated via Gemini Edge!");
+      toast.success("SEO audit and tag bundle generated!");
     } catch (err: any) {
       toastFriendlyError(err, "Failed to analyze SEO");
     }
@@ -106,10 +106,10 @@ export default function SeoOptimizer() {
         <h1 className="font-display text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
           <Search className="w-6 h-6 md:w-7 md:h-7 text-accent" />
           SEO Tag &amp; Competitor Optimizer
-          <span className="px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-[10px] border border-green-500/20 ml-2">Gemini Edge Secure</span>
+          <span className="px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-[10px] border border-green-500/20 ml-2">Server-Side Secure</span>
         </h1>
         <p className="text-sm md:text-base text-muted-foreground mt-1">
-          Generate high-CTR tags, search volume estimation via <span className="text-foreground font-medium">Gemini 2.0 Flash Edge</span> — server-only keys, no BYOK.
+          Generate high-CTR tags and search volume estimation via our <span className="text-foreground font-medium">managed AI engine</span> — fully server-side, zero setup.
         </p>
       </div>
 
@@ -166,7 +166,7 @@ export default function SeoOptimizer() {
               {seoMutation.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Analyzing via Gemini Edge...
+                  Analyzing your keyword...
                 </>
               ) : (
                 <>
@@ -178,7 +178,7 @@ export default function SeoOptimizer() {
 
             <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
               <ShieldCheck className="w-3 h-3 text-green-400" />
-              Secure: OPENROUTER_API_KEYS (rotated) live in process.env — no client exposure. React Query caches 10min for instant revisit.
+              Fully managed & server-side — requests never expose infrastructure. Cached 10 min for instant revisit.
             </p>
           </CardContent>
         </Card>
@@ -245,7 +245,7 @@ export default function SeoOptimizer() {
             ) : (
               <div className="flex flex-col items-center justify-center h-[340px] text-center">
                 <Search className="w-12 h-12 text-muted-foreground/30 mb-3" />
-                <p className="text-muted-foreground text-sm">Enter a keyword to generate optimized tags via Gemini Edge.</p>
+                <p className="text-muted-foreground text-sm">Enter a keyword to generate optimized tags with our managed AI engine.</p>
                 <p className="text-xs text-muted-foreground/70 mt-1">Secure route: /api/seo-tags + React Query 10m cache</p>
               </div>
             )}

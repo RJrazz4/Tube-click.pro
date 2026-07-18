@@ -52,7 +52,7 @@ export default function Privacy() {
             TubeGenius Pro integrates with third-party APIs to provide AI-powered features:
           </p>
           <ul className="list-disc pl-6 space-y-2">
-            <li><strong className="text-foreground">Google AI (Gemini)</strong> – For content generation and image analysis</li>
+            <li><strong className="text-foreground">OpenRouter (Google AI and other leading model providers)</strong> – For content generation and image analysis</li>
             <li><strong className="text-foreground">OpenAI</strong> – For advanced text generation capabilities</li>
             <li><strong className="text-foreground">ElevenLabs</strong> – For voice synthesis features</li>
           </ul>

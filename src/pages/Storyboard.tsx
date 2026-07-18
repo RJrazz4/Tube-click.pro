@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 import JSZip from "jszip";
 import { IMAGE_MODEL_MAP, type ImageModelBrand } from "@/api/server/imageRouter";
+import { ENGINE_COPY, brandTagline } from "@/lib/brandCopy";
 import { useJson2Video } from "@/hooks/useJson2Video";
 import { useTierConfig } from "@/hooks/useTierConfig";
 import { TierAlertBanner } from "@/components/storyboard/TierAlertBanner";
@@ -376,7 +377,7 @@ export default function Storyboard() {
                 { binary: true }
               );
             } else if (scene.imageUrl.startsWith('http')) {
-              // URL-based image (from Fal.ai)
+              // URL-based image (managed engine)
               const response = await fetch(scene.imageUrl);
               const blob = await response.blob();
               const arrayBuffer = await blob.arrayBuffer();
@@ -659,13 +660,13 @@ export default function Storyboard() {
                       <Icon className={cn("w-4 h-4", brand === b ? "text-primary" : "text-muted-foreground")} />
                       <div className="flex-1">
                         <p className="font-semibold text-foreground flex items-center gap-1">{b} <span className={cn("px-1 py-0 rounded text-[9px]", cfg.costTier === "free" ? "bg-green-500/20 text-green-400" : "bg-amber-500/20 text-amber-400")}>{cfg.costTier.toUpperCase()}</span></p>
-                        <p className="text-[10px] text-muted-foreground truncate">{cfg.provider} • {cfg.quality}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{brandTagline(b)} • {cfg.quality}</p>
                       </div>
                     </button>
                   );
                 })}
               </div>
-              <p className="text-[10px] text-muted-foreground/70">White-label: client sends brand, server maps to {IMAGE_MODEL_MAP[brand].provider} — no keys exposed.</p>
+              <p className="text-[10px] text-muted-foreground/70">{ENGINE_COPY.managed} Pick Tube.Flash, Tube.Pro or Tube.Cinematic.</p>
             </div>
 
             {/* Status summary */}
@@ -688,7 +689,7 @@ export default function Storyboard() {
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-1.5 text-center">Brand: {brand} • {IMAGE_MODEL_MAP[brand].provider} • {IMAGE_MODEL_MAP[brand].costTier}</p>
+                <p className="text-[11px] text-muted-foreground mt-1.5 text-center">Brand: {brand} • {brandTagline(brand)} • {IMAGE_MODEL_MAP[brand].costTier} tier</p>
               </div>
             )}
 
