@@ -11,4 +11,5 @@ export * from "./thumbnails-handler.js";
 export * from "./tiers-handler.js";
 export * from "./rate-limiter.js";
 export * from "./request-logging.js";
+export * from "./observability-handlers.js";
 export * from "./composition-root.js";

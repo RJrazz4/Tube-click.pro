@@ -37,6 +37,13 @@ import { TierPolicy } from "../tiers/index.js";
 import type { KeyedProviderId } from "../types/index.js";
 
 import {
+  handleHealth,
+  handleMetrics,
+  handleMetricsJson,
+} from "./observability-handlers.js";
+
+import { TierRateLimiter } from "./rate-limiter.js";
+import {
   handleStoryboard,
   type StoryboardPlanner,
 } from "./storyboard-handler.js";
@@ -71,6 +78,12 @@ export interface OrchestratorApi {
   handleStoryboard(body: unknown, auth: ApiAuth): Promise<ApiResponse>;
   handleThumbnails(body: unknown, auth: ApiAuth): Promise<ApiResponse>;
   handleTiers(): ApiResponse;
+  /** H2: Prometheus text exposition. */
+  handleMetrics(): ApiResponse;
+  /** H2: same truth as JSON. */
+  handleMetricsJson(): ApiResponse;
+  /** H2: 200 ok/degraded, 503 down. */
+  handleHealth(): ApiResponse;
   readonly policy: TierPolicy;
   readonly providers: ReadonlyArray<ImageProvider>;
   readonly breaker: CircuitBreaker;
@@ -152,12 +165,25 @@ export function createOrchestratorApi(
     ...(overrides.now !== undefined ? { now: overrides.now } : {}),
   };
 
+  // H2 read endpoints derive from the same deps as the write path.
+  const nowDeps = overrides.now !== undefined ? { now: overrides.now } : {};
+  const observability = {
+    breaker,
+    tracker,
+    metrics,
+    ...(rateLimiter instanceof TierRateLimiter ? { rateLimiter } : {}),
+    ...nowDeps,
+  };
+
   return {
     handleStoryboard: (body, auth) =>
       handleStoryboard(body, auth, { policy, planner, providers, ...handlerDeps }),
     handleThumbnails: (body, auth) =>
       handleThumbnails(body, auth, { policy, providers, ...handlerDeps }),
     handleTiers: () => handleTiers({ policy }),
+    handleMetrics: () => handleMetrics(observability),
+    handleMetricsJson: () => handleMetricsJson(observability),
+    handleHealth: () => handleHealth({ breaker, metrics, providers, ...nowDeps }),
     policy,
     providers,
     breaker,
