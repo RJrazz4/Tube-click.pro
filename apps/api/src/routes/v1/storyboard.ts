@@ -1,7 +1,7 @@
 /**
  * Phase 4 — POST /v1/storyboard
  *
- * Main storyboard generation endpoint.
+ * Main storyboard generation endpoint with Phase 6 observability.
  *
  * Flow:
  *   1. Parse & validate the request body.
@@ -9,11 +9,12 @@
  *   3. Build scene prompts from the validated input.
  *   4. Delegate to the GeneratorOrchestrator (Phase 3) for each scene.
  *   5. Shape the response (truncated fields, provider provenance).
+ *   6. Log structured metrics for observability.
  *
  * Integrates with:
  *   - Phase 3: GeneratorOrchestrator / provider adapters
  *   - Phase 4: Tier middleware, validation schemas
- *   - Existing: storyboard analysis (for script-derived scenes)
+ *   - Phase 6: Logger + Metrics collector
  */
 
 import { GeneratorOrchestrator } from "../../../../../packages/ai/generator";
@@ -23,6 +24,8 @@ import { PollinationsAdapter } from "../../../../../packages/ai/providers/pollin
 import { KeyRotator } from "../../../../../packages/ai/providers/key-rotator";
 import type { ImageProvider } from "../../../../../packages/ai/providers/types";
 import { getTierLimits } from "../../../../../packages/shared/tier";
+import { logger } from "../../../../../packages/ai/logger";
+import { metrics } from "../../../../../packages/ai/metrics";
 
 import {
   validateStoryboardRequest,
@@ -44,7 +47,6 @@ import {
 } from "../shared";
 
 // ─── Lazy singleton: providers / orchestrator ─────────────────────
-// Constructed once per cold start, reused across invocations.
 
 let _orchestrator: GeneratorOrchestrator | null = null;
 let _providers: ImageProvider[] = [];
@@ -54,18 +56,16 @@ function getProviders(): ImageProvider[] {
 
   const loaded: ImageProvider[] = [];
 
-  // Attempt to load authenticated providers (gracefully handle missing env)
   try {
     loaded.push(new AgnesFlashAdapter());
   } catch {
-    // AgnesFlash not configured — skip
-    console.info("[storyboard] AgnesFlashAdapter not configured, skipping");
+    logger.info("storyboard.providers", "AgnesFlashAdapter not configured, skipping");
   }
 
   try {
     loaded.push(new GeminiFlashAdapter());
   } catch {
-    console.info("[storyboard] GeminiFlashAdapter not configured, skipping");
+    logger.info("storyboard.providers", "GeminiFlashAdapter not configured, skipping");
   }
 
   _providers = loaded;
@@ -77,16 +77,7 @@ function getOrchestrator(): GeneratorOrchestrator {
 
   const providers = getProviders();
   const fallback = new PollinationsAdapter();
-
-  // Build key rotators for authenticated providers
   const rotators = new Map<string, KeyRotator>();
-  // Rotators are owned by the adapter instances — the orchestrator
-  // just needs a reference for the KeyRotator.get() call in its loop.
-  // We attach them manually here.
-  // NOTE: In a full DI setup this would be cleaner, but the adapters
-  // already handle rotation internally. The orchestrator's rotator map
-  // is used for the external rotation trigger. For now, we rely on the
-  // adapters' internal KeyRotator + the orchestrator's fallback logic.
 
   _orchestrator = new GeneratorOrchestrator(providers, rotators, fallback);
   return _orchestrator;
@@ -95,9 +86,15 @@ function getOrchestrator(): GeneratorOrchestrator {
 // ─── Handler ─────────────────────────────────────────────────────
 
 export async function handleStoryboardV1(req: Request): Promise<Response> {
+  const t0 = performance.now();
+  metrics.increment("api.request");
+  const rid = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const log = logger.child({ rid, endpoint: "v1/storyboard" });
+
   // CORS preflight
   if (req.method === "OPTIONS") return handleOptions();
   if (req.method !== "POST") {
+    log.warn("method.not_allowed", `Method ${req.method} not allowed`);
     return new Response("Method not allowed", {
       status: 405,
       headers: corsHeaders,
@@ -107,16 +104,26 @@ export async function handleStoryboardV1(req: Request): Promise<Response> {
   // 1. Parse body
   const raw = await parseBody(req);
   if (!raw) {
+    log.warn("body.parse", "Request body is required");
+    metrics.increment("api.error");
     return badRequest("Request body is required");
   }
 
   // 2. Validate
   const { data, errors } = validateStoryboardRequest(raw);
   if (errors) {
+    log.warn("validation.failed", "Validation errors", { fieldCount: errors.length, firstField: errors[0]?.field });
+    metrics.increment("api.error");
     return badRequest("Validation failed", errors);
   }
 
   const input: StoryboardRequest = data;
+  log.info("request.start", "Storyboard generation requested", {
+    topic: input.topic.slice(0, 80),
+    sceneCount: input.scenes.length,
+    tier: input.tier,
+    brand: input.brand,
+  });
 
   // 3. Resolve tier
   const tier = tierFromRequest(req.headers, input.tier);
@@ -125,42 +132,63 @@ export async function handleStoryboardV1(req: Request): Promise<Response> {
   // 4. Enforce tier limits
   const enforcement = enforceStoryboardTier(tier, input.scenes.length, input.brand);
 
-  // Truncate scenes if needed
   let scenes: SceneInput[];
   if (enforcement.corrections?.sceneCount !== undefined) {
     scenes = input.scenes.slice(0, enforcement.corrections.sceneCount);
+    log.info("tier.enforced", `Scenes truncated from ${input.scenes.length} to ${scenes.length}`, {
+      from: input.scenes.length,
+      to: scenes.length,
+      tier,
+    });
+    metrics.increment("tier.limit.enforced");
   } else {
     scenes = input.scenes;
   }
 
-  // Downgrade brand if needed
   const brand = enforcement.corrections?.brand || input.brand;
+  if (enforcement.corrections?.brand) {
+    log.info("tier.enforced", `Brand downgraded from ${input.brand} to ${brand}`, {
+      from: input.brand,
+      to: brand,
+      tier,
+    });
+    metrics.increment("tier.limit.enforced");
+  }
 
-  // 5. Build dimensions from aspect ratio
+  // 5. Build dimensions
   const dims = aspectRatioToDimensions(input.aspect_ratio);
+  metrics.increment("generation.started");
 
-  // 6. Generate images via orchestrator
+  // 6. Generate images
   const orchestrator = getOrchestrator();
   const seedBase = input.seed ?? Math.floor(Math.random() * 999_999);
 
-  // Generate each scene's image
   const sceneResults = await Promise.all(
-    scenes.map(async (scene, index) => {
+    scenes.map(async (scene) => {
       const prompt = scene.visual_prompt;
       const seed = seedBase + scene.scene_number;
 
       const report = await orchestrator.generate(
-        {
-          prompt,
-          width: dims.width,
-          height: dims.height,
-          seed,
-          count: 1,
-        },
+        { prompt, width: dims.width, height: dims.height, seed, count: 1 },
         { count: 1 }
       );
 
       const image = report.images[0];
+
+      // Track provider metrics
+      if (image?.provider && image.provider !== "none") {
+        if (image.fromFallback) {
+          metrics.increment("fallback.used");
+        }
+        metrics.recordProvider(
+          image.provider,
+          image.url ? "success" : "failure",
+          report.totalLatencyMs
+        );
+      }
+
+      if (report.usedFallback) metrics.increment("fallback.used");
+      if (report.degraded) metrics.increment("generation.failed");
 
       return {
         scene_number: scene.scene_number,
@@ -175,6 +203,22 @@ export async function handleStoryboardV1(req: Request): Promise<Response> {
     })
   );
 
+  const totalMs = Math.round(performance.now() - t0);
+  const successCount = sceneResults.filter((s) => s.image_url).length;
+  const failCount = sceneResults.length - successCount;
+
+  if (successCount > 0) metrics.increment("generation.completed", successCount);
+  if (failCount > 0) metrics.increment("generation.failed", failCount);
+
+  log.info("request.complete", "Storyboard generation completed", {
+    totalMs,
+    totalScenes: sceneResults.length,
+    successCount,
+    failCount,
+    usedFallback: sceneResults.some((s) => s.from_fallback),
+    degraded: sceneResults.some((s) => s.degraded),
+  });
+
   // 7. Shape response
   const responsePayload = {
     topic: input.topic,
@@ -185,9 +229,7 @@ export async function handleStoryboardV1(req: Request): Promise<Response> {
     total_scenes: sceneResults.length,
     requested_scenes: input.scenes.length,
     truncated: input.scenes.length !== sceneResults.length,
-    ...(enforcement.upgradeMessage
-      ? { upgrade_message: enforcement.upgradeMessage }
-      : {}),
+    ...(enforcement.upgradeMessage ? { upgrade_message: enforcement.upgradeMessage } : {}),
     limits: {
       max_scenes: limits.maxScenes,
       allowed_brands: limits.allowedBrands,

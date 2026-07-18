@@ -1,0 +1,506 @@
+openapi: "3.0.3"
+info:
+  title: TubeClick.Pro API — Image Generation Engine
+  version: "1.0.0"
+  description: |
+    Multi-provider image generation API with automatic failover, key rotation,
+    and subscription-tier enforcement.
+
+    - **Phase 3**: Generator Agent — provider adapters + orchestrator
+    - **Phase 4**: Business Logic — tier enforcement, Zod validation
+    - **Phase 5**: Web UI — React components consuming these endpoints
+    - **Phase 6**: Observability — structured logging, metrics, docs
+
+  contact:
+    name: TubeClick.Pro Support
+    url: https://tubeclick.pro
+  x-logo:
+    url: https://tubeclick.pro/favicon.ico
+    altText: TubeClick.Pro
+
+servers:
+  - url: https://tubeclick.pro/api/v1
+    description: Production
+  - url: http://localhost:5173/api/v1
+    description: Local development
+
+tags:
+  - name: Storyboard
+    description: Generate storyboard scene images from a script
+  - name: Thumbnail
+    description: Generate video thumbnails with tier-based limits
+  - name: Metrics
+    description: Observability and performance metrics
+  - name: Health
+    description: API health check
+
+# ─── Components ──────────────────────────────────────────────────
+
+components:
+  securitySchemes:
+    TierHeader:
+      type: apiKey
+      in: header
+      name: x-tier
+      description: |
+        Optional header to override the subscription tier for testing.
+        Values: `free`, `premium`. Defaults to `free` in production.
+
+  schemas:
+    # ── Shared ──
+    ApiError:
+      type: object
+      required: [success, error, code]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: string
+          description: Human-readable error message.
+        code:
+          type: string
+          description: Machine-readable error code.
+          enum:
+            - BAD_REQUEST
+            - UPGRADE_REQUIRED
+            - RATE_LIMITED
+            - INTERNAL_ERROR
+            - NOT_FOUND
+        fields:
+          type: array
+          description: Field-level validation errors (400 only).
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+        upgradeMessage:
+          type: string
+          description: Upgrade prompt when tier limit is hit.
+      examples:
+        - value:
+            success: false
+            error: "Free plan limited to 4 scenes. Upgrade to Premium..."
+            code: "BAD_REQUEST"
+            fields:
+              - field: scenes
+                message: "Too many scenes for free tier"
+
+    # ── Storyboard ──
+    SceneInput:
+      type: object
+      required: [scene_number, visual_prompt]
+      properties:
+        scene_number:
+          type: integer
+          minimum: 1
+          description: Sequential scene number.
+        visual_prompt:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Text prompt for image generation.
+        motion_prompt:
+          type: string
+          maxLength: 500
+          description: Camera motion instruction.
+        duration:
+          type: integer
+          minimum: 2
+          maximum: 30
+          default: 5
+        transition:
+          type: string
+          enum: [cut, fade, dissolve, slide, zoom]
+          default: cut
+        beat_type:
+          type: string
+          enum: [intro, hook, content, climax, outro]
+          default: content
+
+    SceneOutput:
+      type: object
+      properties:
+        scene_number:
+          type: integer
+        image_url:
+          type: string
+          format: uri
+          description: Public URL of the generated scene image.
+        provider:
+          type: string
+          description: Which provider served this image.
+        from_fallback:
+          type: boolean
+          description: True if served by the Pollinations fallback.
+        duration:
+          type: integer
+        transition:
+          type: string
+        beat_type:
+          type: string
+        degraded:
+          type: boolean
+          description: True if the provider experienced errors.
+
+    StoryboardRequest:
+      type: object
+      required: [topic, scenes]
+      properties:
+        topic:
+          type: string
+          minLength: 1
+          maxLength: 500
+        script:
+          type: string
+          maxLength: 10000
+        scenes:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/SceneInput"
+        tier:
+          type: string
+          enum: [free, premium]
+          default: free
+        brand:
+          type: string
+          enum: [Tube.Flash, Tube.Pro, Tube.Cinematic]
+          default: Tube.Flash
+        aspect_ratio:
+          type: string
+          enum: ["9:16", "16:9", "1:1"]
+          default: "16:9"
+        seed:
+          type: integer
+          description: Optional seed for reproducible results.
+
+    StoryboardResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            topic:
+              type: string
+            tier:
+              type: string
+            brand:
+              type: string
+            aspect_ratio:
+              type: string
+            scenes:
+              type: array
+              items:
+                $ref: "#/components/schemas/SceneOutput"
+            total_scenes:
+              type: integer
+            requested_scenes:
+              type: integer
+            truncated:
+              type: boolean
+              description: True when scenes were truncated due to tier limits.
+            upgrade_message:
+              type: string
+            limits:
+              type: object
+              properties:
+                max_scenes:
+                  type: integer
+                allowed_brands:
+                  type: array
+                  items:
+                    type: string
+
+    # ── Thumbnail ──
+    ThumbnailRequest:
+      type: object
+      required: [title, emotion, style]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+        emotion:
+          type: string
+          minLength: 1
+          maxLength: 100
+        style:
+          type: string
+          minLength: 1
+          maxLength: 200
+        aspect_ratio:
+          type: string
+          enum: ["9:16", "16:9", "1:1", "4:5"]
+          default: "16:9"
+        count:
+          type: integer
+          minimum: 1
+          maximum: 4
+          default: 4
+        tier:
+          type: string
+          enum: [free, premium]
+          default: free
+        brand:
+          type: string
+          enum: [Tube.Flash, Tube.Pro, Tube.Cinematic]
+          default: Tube.Pro
+        seed:
+          type: integer
+
+    ThumbnailOutput:
+      type: object
+      properties:
+        index:
+          type: integer
+        url:
+          type: string
+          format: uri
+        provider:
+          type: string
+        from_fallback:
+          type: boolean
+        info:
+          type: string
+
+    ThumbnailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            title:
+              type: string
+            emotion:
+              type: string
+            style:
+              type: string
+            aspect_ratio:
+              type: string
+            tier:
+              type: string
+            brand:
+              type: string
+            thumbnails:
+              type: array
+              items:
+                $ref: "#/components/schemas/ThumbnailOutput"
+            total_generated:
+              type: integer
+            requested:
+              type: integer
+            truncated:
+              type: boolean
+            upgrade_message:
+              type: string
+            degraded:
+              type: boolean
+            providers_attempted:
+              type: array
+              items:
+                type: string
+            total_latency_ms:
+              type: integer
+
+    # ── Metrics ──
+    MetricsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            timestamp:
+              type: integer
+            uptimeMs:
+              type: integer
+            counters:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  lastSeen:
+                    type: integer
+            latency:
+              type: object
+              properties:
+                p50:
+                  type: integer
+                p95:
+                  type: integer
+                p99:
+                  type: integer
+            providers:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  success:
+                    type: integer
+                  failures:
+                    type: integer
+                  keyRotations:
+                    type: integer
+                  totalLatencyMs:
+                    type: integer
+            totalGenerations:
+              type: integer
+            successfulGenerations:
+              type: integer
+            failedGenerations:
+              type: integer
+            fallbackCount:
+              type: integer
+            fallbackRate:
+              type: number
+              format: float
+
+# ─── Paths ───────────────────────────────────────────────────────
+
+paths:
+  /storyboard:
+    post:
+      tags: [Storyboard]
+      summary: Generate storyboard scene images
+      description: |
+        Accepts a topic and array of scenes. Returns generated images
+        with provider provenance. Free tier limited to 4 scenes with
+        Tube.Flash only. Premium tier supports unlimited scenes and
+        all brands.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoryboardRequest"
+            example:
+              topic: "10 React Performance Tips"
+              scenes:
+                - scene_number: 1
+                  visual_prompt: "Developer coding on a modern laptop, clean desk setup"
+                  duration: 5
+                  transition: fade
+                  beat_type: intro
+                - scene_number: 2
+                  visual_prompt: "React logo with performance metrics overlay"
+                  duration: 5
+                  transition: cut
+                  beat_type: content
+              tier: free
+              brand: Tube.Flash
+              aspect_ratio: "16:9"
+      responses:
+        "200":
+          description: Successful generation with tier enforcement applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryboardResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "402":
+          description: Upgrade required (premium-only feature)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /thumbnail:
+    post:
+      tags: [Thumbnail]
+      summary: Generate video thumbnails
+      description: |
+        Generates thumbnail images with tier-based count clamping.
+        Free: max 2 thumbnails, Tube.Flash only.
+        Premium: up to 4 thumbnails, all brands.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThumbnailRequest"
+            example:
+              title: "Best AI Tools 2026"
+              emotion: "Exciting"
+              style: "Modern"
+              aspect_ratio: "16:9"
+              count: 4
+              tier: premium
+              brand: Tube.Cinematic
+      responses:
+        "200":
+          description: Successful generation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThumbnailResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /metrics:
+    get:
+      tags: [Metrics]
+      summary: Get in-memory performance metrics
+      description: |
+        Returns counters, provider-level breakdowns, and latency
+        percentiles. Reset on every cold start (Vercel redeploy).
+        Use `?reset=1` to clear counters.
+      parameters:
+        - in: query
+          name: reset
+          schema:
+            type: string
+            enum: ["1"]
+          description: Pass `1` to reset all metrics counters.
+      responses:
+        "200":
+          description: Metrics snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetricsResponse"
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        "200":
+          description: API is healthy
+          content:
+            application/json:
+              example:
+                status: ok
+                version: "1"
+                timestamp: "2026-07-18T12:00:00.000Z"

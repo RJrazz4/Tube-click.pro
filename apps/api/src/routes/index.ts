@@ -1,25 +1,13 @@
 /**
- * Phase 4 — API Router
+ * Phase 4 — API Router (Phase 6: +metrics)
  *
  * Maps URL paths to route handlers.
  * Compatible with Vercel Edge Functions and standard Node.js runtimes.
- *
- * Usage (Vercel Edge):
- * ```ts
- * // api/v1/storyboard.ts
- * export const config = { runtime: "edge" };
- * export { handler as default } from "../../apps/api/src/routes";
- * ```
- *
- * Usage (Node.js):
- * ```ts
- * import { router } from "./apps/api/src/routes";
- * const response = await router(new Request("https://...", { method: "POST", body }));
- * ```
  */
 
 import { handleStoryboardV1 } from "./v1/storyboard";
 import { handleThumbnailV1 } from "./v1/thumbnail";
+import { handleMetricsV1 } from "./v1/metrics";
 import { corsHeaders } from "./shared";
 
 export type RouteMap = Record<string, (req: Request) => Promise<Response>>;
@@ -28,13 +16,11 @@ export type RouteMap = Record<string, (req: Request) => Promise<Response>>;
 const ROUTES: RouteMap = {
   "/v1/storyboard": handleStoryboardV1,
   "/v1/thumbnail": handleThumbnailV1,
+  "/v1/metrics": handleMetricsV1,
 };
 
 /**
  * Universal router — call from any runtime.
- *
- * @param req  Standard Fetch API Request.
- * @returns    A Response, or a 404 Response if no route matches.
  */
 export async function router(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") {
@@ -42,7 +28,7 @@ export async function router(req: Request): Promise<Response> {
   }
 
   const url = new URL(req.url);
-  const pathname = url.pathname.replace(/\/+$/, ""); // strip trailing slash
+  const pathname = url.pathname.replace(/\/+$/, "");
 
   const handler = ROUTES[pathname];
   if (handler) {
@@ -59,27 +45,13 @@ export async function router(req: Request): Promise<Response> {
 
   // 404
   return new Response(
-    JSON.stringify({
-      success: false,
-      error: `Route not found: ${pathname}`,
-      code: "NOT_FOUND",
-    }),
+    JSON.stringify({ success: false, error: `Route not found: ${pathname}`, code: "NOT_FOUND" }),
     { status: 404, headers: corsHeaders }
   );
 }
 
-/**
- * Default export for Vercel Edge Functions that use the standard
- * function-per-file convention at `api/v1/{name}.ts`:
- *
- * ```ts
- * // api/v1/storyboard.ts
- * export const config = { runtime: "edge" };
- * export default router;
- * ```
- */
 export default router;
 
-// Re-export individual handlers for direct use
 export { handleStoryboardV1 } from "./v1/storyboard";
 export { handleThumbnailV1 } from "./v1/thumbnail";
+export { handleMetricsV1 } from "./v1/metrics";
