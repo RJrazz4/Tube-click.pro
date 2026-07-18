@@ -60,7 +60,7 @@ function body(overrides: Partial<OrchestratorStoryboardResponse> = {}): Orchestr
 
 describe("storyboard view-model — card mapping", () => {
   it("maps rows to render-ready cards with brand badges", () => {
-    const views = toSceneCardViews(body());
+    const views = toSceneCardViews(body().scenes);
     expect(views).toHaveLength(2);
 
     expect(views[0]).toMatchObject({
@@ -96,12 +96,12 @@ describe("storyboard view-model — card mapping", () => {
   });
 
   it("summary strip reports rendered counts and fallback notes", () => {
-    expect(toSummaryStrip(body())).toEqual({
+    expect(toSummaryStrip(body().summary)).toEqual({
       headline: "1 of 2 scenes rendered",
       fallbackNote: "1 used the backup engine",
     });
     expect(
-      toSummaryStrip(body({ summary: { ...body().summary, fallbackTriggered: 0, total: 1, succeeded: 1 } })),
+      toSummaryStrip({ ...body().summary, fallbackTriggered: 0, total: 1, succeeded: 1 }),
     ).toEqual({ headline: "1 of 1 scene rendered", fallbackNote: null });
   });
 });
@@ -118,8 +118,8 @@ describe("storyboard view-model — tier mapping", () => {
 
 describe("Gate 4 copy safety (unit-locked)", () => {
   it("no user-facing view string can carry infrastructure terms", () => {
-    const views = toSceneCardViews(body());
-    const strip = toSummaryStrip(body());
+    const views = toSceneCardViews(body().scenes);
+    const strip = toSummaryStrip(body().summary);
     const strings: string[] = [
       ...views.flatMap((view) => [
         view.title,

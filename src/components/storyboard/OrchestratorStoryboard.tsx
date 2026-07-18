@@ -11,7 +11,6 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Download, ImageOff, Loader2, Sparkles } from "lucide-react";
-import JSZip from "jszip";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +18,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { TruncationBanner } from "@/components/storyboard/TruncationBanner";
-import { orchestratorApi, OrchestratorApiError } from "@/lib/orchestrator/client";
+import { orchestratorApi } from "@/lib/orchestrator/client";
+import { downloadZip } from "@/lib/orchestrator/download";
+import { toUiError, type UiError } from "@/lib/orchestrator/ui-error";
 import {
   toSceneCardViews,
   toSummaryStrip,
@@ -29,50 +30,6 @@ import type { OrchestratorStoryboardResponse } from "@/lib/orchestrator/types";
 
 const SCRIPT_STORAGE_KEY = "tubeclick_intelligent_storyboard_script";
 const MIN_SCRIPT_CHARS = 10;
-
-interface UiError {
-  title: string;
-  message: string;
-  retryAfterSeconds?: number;
-}
-
-function toUiError(err: unknown): UiError {
-  if (err instanceof OrchestratorApiError) {
-    if (err.status === 429) {
-      return {
-        title: "You're at your plan's request limit",
-        message: err.retryAfterSeconds !== undefined
-          ? `Try again in ${err.retryAfterSeconds}s.`
-          : "Please try again in a moment.",
-        ...(err.retryAfterSeconds !== undefined
-          ? { retryAfterSeconds: err.retryAfterSeconds }
-          : {}),
-      };
-    }
-    if (err.status === 503) {
-      return { title: "The planning brain is unavailable", message: err.message };
-    }
-    if (err.status === null) {
-      return { title: "Connection problem", message: err.message };
-    }
-    return { title: "Generation failed", message: err.message };
-  }
-  return {
-    title: "Generation failed",
-    message: err instanceof Error ? err.message : "Something went wrong — please try again.",
-  };
-}
-
-/** Best-effort blob fetch for the zip export (data URLs work too). */
-async function fetchBlob(url: string): Promise<Blob | null> {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    return await response.blob();
-  } catch {
-    return null;
-  }
-}
 
 export function OrchestratorStoryboard() {
   const [script, setScript] = useState("");
@@ -113,34 +70,25 @@ export function OrchestratorStoryboard() {
     }
   }, [script]);
 
-  const downloadZip = useCallback(async (scenes: SceneCardView[]) => {
+  const downloadScenes = useCallback(async (scenes: SceneCardView[]) => {
     setZipping(true);
     try {
-      const zip = new JSZip();
-      let added = 0;
-      for (const scene of scenes) {
-        if (scene.status !== "success" || !scene.imageUrl) continue;
-        const blob = await fetchBlob(scene.imageUrl);
-        if (blob) {
-          zip.file(`scene-${String(scene.sceneIndex + 1).padStart(2, "0")}.png`, blob);
-          added += 1;
-        }
-      }
-      if (added === 0) return;
-      const content = await zip.generateAsync({ type: "blob" });
-      const href = URL.createObjectURL(content);
-      const anchor = document.createElement("a");
-      anchor.href = href;
-      anchor.download = "storyboard-scenes.zip";
-      anchor.click();
-      URL.revokeObjectURL(href);
+      await downloadZip(
+        scenes
+          .filter((scene) => scene.status === "success" && scene.imageUrl !== undefined)
+          .map((scene) => ({
+            url: scene.imageUrl as string,
+            filename: `scene-${String(scene.sceneIndex + 1).padStart(2, "0")}.png`,
+          })),
+        "storyboard-scenes.zip",
+      );
     } finally {
       setZipping(false);
     }
   }, []);
 
-  const sceneViews = result ? toSceneCardViews(result) : [];
-  const summary = result ? toSummaryStrip(result) : null;
+  const sceneViews = result ? toSceneCardViews(result.scenes) : [];
+  const summary = result ? toSummaryStrip(result.summary) : null;
   const canRun = script.trim().length >= MIN_SCRIPT_CHARS && !busy;
 
   return (
@@ -223,7 +171,7 @@ export function OrchestratorStoryboard() {
             </div>
             <Button
               variant="outline"
-              onClick={() => void downloadZip(sceneViews)}
+              onClick={() => void downloadScenes(sceneViews)}
               disabled={zipping || summary.headline.startsWith("0 ")}
             >
               {zipping ? (

@@ -182,7 +182,7 @@
       "count": 1
     }
   },
-  "src/pages/Thumbnails.tsx": {
+  "src/pages/ThumbnailsLegacy.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     },

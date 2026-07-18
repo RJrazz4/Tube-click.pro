@@ -13,7 +13,7 @@
  */
 import type {
   EngineTier,
-  OrchestratorStoryboardResponse,
+  OrchestratorSummary,
   OrchestratorSceneRow,
 } from "./types";
 
@@ -42,8 +42,11 @@ export function latencyLabel(latencyMs: number): string {
   return latencyMs >= 1000 ? `${(latencyMs / 1000).toFixed(1)}s` : `${latencyMs}ms`;
 }
 
-export function toSceneCardViews(body: OrchestratorStoryboardResponse): SceneCardView[] {
-  return body.scenes.map((row) => {
+export function toSceneCardViews(
+  rows: readonly OrchestratorSceneRow[],
+  titleFor: (sceneIndex: number) => string = (i) => `Scene ${i + 1}`,
+): SceneCardView[] {
+  return rows.map((row) => {
     const view: SceneCardView = {
       sceneIndex: row.sceneIndex,
       title: `Scene ${row.sceneIndex + 1}`,
@@ -72,8 +75,8 @@ export interface SummaryStripView {
   fallbackNote: string | null;
 }
 
-export function toSummaryStrip(body: OrchestratorStoryboardResponse): SummaryStripView {
-  const { total, succeeded, fallbackTriggered } = body.summary;
+export function toSummaryStrip(summary: OrchestratorSummary): SummaryStripView {
+  const { total, succeeded, fallbackTriggered } = summary;
   return {
     headline: `${succeeded} of ${total} scene${total === 1 ? "" : "s"} rendered`,
     fallbackNote:
