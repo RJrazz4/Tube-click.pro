@@ -34,6 +34,8 @@ export interface AppEnv {
   imageKeyPools: ImageKeyPools;
   /** Manager-brain credential pool (Phase B); [] when unconfigured. */
   openrouterKeys: string[];
+  /** Override for the manager model ID; undefined = code-pinned default. */
+  openrouterModel?: string;
   pollinationsEnabled: boolean;
   tierLimits: ResolvedTierLimits;
 }
@@ -98,6 +100,7 @@ const booleanField = (defaultValue: boolean) =>
 const appEnvInputSchema = z.object({
   IMAGE_API_KEYS: imageKeyPoolsField,
   OPENROUTER_KEYS: openrouterKeysField,
+  OPENROUTER_MODEL: z.string().trim().min(1).optional(),
   POLLINATIONS_ENABLED: booleanField(true),
   TIER_LIMITS: tierLimitsField,
 });
@@ -113,6 +116,7 @@ export function parseEnv(source: EnvSource): AppEnv {
   const result = appEnvInputSchema.safeParse({
     IMAGE_API_KEYS: source.IMAGE_API_KEYS,
     OPENROUTER_KEYS: openrouterRaw,
+    OPENROUTER_MODEL: source.OPENROUTER_MODEL,
     POLLINATIONS_ENABLED: source.POLLINATIONS_ENABLED,
     TIER_LIMITS: source.TIER_LIMITS,
   });
@@ -128,12 +132,16 @@ export function parseEnv(source: EnvSource): AppEnv {
     );
   }
 
-  return {
+  const env: AppEnv = {
     imageKeyPools: result.data.IMAGE_API_KEYS,
     openrouterKeys: result.data.OPENROUTER_KEYS,
     pollinationsEnabled: result.data.POLLINATIONS_ENABLED,
     tierLimits: result.data.TIER_LIMITS,
   };
+  if (result.data.OPENROUTER_MODEL !== undefined) {
+    env.openrouterModel = result.data.OPENROUTER_MODEL;
+  }
+  return env;
 }
 
 /** Validate `process.env` (or an injected source) — fail-fast at boot. */

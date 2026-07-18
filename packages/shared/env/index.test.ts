@@ -38,6 +38,13 @@ describe("parseEnv — happy paths", () => {
     expect(parseEnv({ OPENROUTER_API_KEY: SECRET_OR_KEY }).openrouterKeys).toEqual([SECRET_OR_KEY]);
   });
 
+  it("exposes OPENROUTER_MODEL when set, undefined otherwise", () => {
+    expect(parseEnv({}).openrouterModel).toBeUndefined();
+    expect(parseEnv({ OPENROUTER_MODEL: "xiaomi/mimo-v2-flash:free" }).openrouterModel).toBe(
+      "xiaomi/mimo-v2-flash:free",
+    );
+  });
+
   it("prefers the pooled plural var over the singular alias", () => {
     const env = parseEnv({
       OPENROUTER_API_KEYS: "sk-or-a,sk-or-b",
