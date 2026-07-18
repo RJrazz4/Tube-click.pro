@@ -8,23 +8,23 @@
  * ```
  */
 
-export { GeneratorOrchestrator } from "./generator";
-export type { GenerationReport, ImageProvenance, GenerateOptions } from "./generator";
+export { GeneratorOrchestrator } from "./generator.js";
+export type { GenerationReport, ImageProvenance, GenerateOptions } from "./generator.js";
 
-export { logger } from "./logger";
-export type { LogEntry, LogLevel } from "./logger";
+export { logger } from "./logger.js";
+export type { LogEntry, LogLevel } from "./logger.js";
 
-export { metrics } from "./metrics";
-export type { MetricsSnapshot, ProviderMetrics, MetricEvent } from "./metrics";
+export { metrics } from "./metrics.js";
+export type { MetricsSnapshot, ProviderMetrics, MetricEvent } from "./metrics.js";
 
 // Provider adapters
-export { AgnesFlashAdapter } from "./providers/agnes-flash-adapter";
-export { GeminiFlashAdapter } from "./providers/gemini-flash-adapter";
-export { PollinationsAdapter } from "./providers/pollinations-adapter";
-export { KeyRotator } from "./providers/key-rotator";
+export { AgnesFlashAdapter } from "./providers/agnes-flash-adapter.js";
+export { GeminiFlashAdapter } from "./providers/gemini-flash-adapter.js";
+export { PollinationsAdapter } from "./providers/pollinations-adapter.js";
+export { KeyRotator } from "./providers/key-rotator.js";
 
-export type { ImageProvider } from "./providers/types";
-export type { GenerateParams, GenerateResult, ProviderMeta } from "./providers/types";
+export type { ImageProvider } from "./providers/types.js";
+export type { GenerateParams, GenerateResult, ProviderMeta } from "./providers/types.js";
 
 export {
   RateLimitError,
@@ -32,4 +32,4 @@ export {
   ProviderAuthError,
   ProviderUnavailableError,
   AllKeysExhaustedError,
-} from "./providers/types";
+} from "./providers/types.js";

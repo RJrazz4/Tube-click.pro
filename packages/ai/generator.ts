@@ -45,9 +45,9 @@ import {
   isQuotaExceededError,
   isProviderAuthError,
   isAllKeysExhaustedError,
-} from "./providers/types";
-import { KeyRotator } from "./providers/key-rotator";
-import { PollinationsAdapter } from "./providers/pollinations-adapter";
+} from "./providers/types.js";
+import { KeyRotator } from "./providers/key-rotator.js";
+import { PollinationsAdapter } from "./providers/pollinations-adapter.js";
 
 /* ------------------------------------------------------------------ *
  * Public types

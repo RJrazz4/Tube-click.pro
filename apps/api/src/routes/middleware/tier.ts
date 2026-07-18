@@ -11,8 +11,8 @@
  * Exports a pure function that can be composed in any route handler.
  */
 
-import { getTierLimits, exceedsSceneLimit, clampByTier, type SubscriptionTier } from "../../../../../packages/shared/tier";
-import type { ValidationError } from "../validation/storyboard";
+import { getTierLimits, exceedsSceneLimit, clampByTier, type SubscriptionTier } from "../../../../../packages/shared/tier.js";
+import type { ValidationError } from "../validation/storyboard.js";
 
 // ─── Public types ────────────────────────────────────────────────
 

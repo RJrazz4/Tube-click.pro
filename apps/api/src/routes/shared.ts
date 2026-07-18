@@ -43,6 +43,8 @@ export interface ApiError {
   code: string;
   /** Validation errors, if applicable. */
   fields?: Array<{ field: string; message: string }>;
+  /** Seconds the client should wait before retrying (Phase G1: TS2353 fix). */
+  retryAfter?: number;
   /** Upgrade prompt for tier-limit hits. */
   upgradeMessage?: string;
   /** Provider-level metadata from the generator. */

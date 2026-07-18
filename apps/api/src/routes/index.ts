@@ -5,10 +5,10 @@
  * Compatible with Vercel Edge Functions and standard Node.js runtimes.
  */
 
-import { handleStoryboardV1 } from "./v1/storyboard";
-import { handleThumbnailV1 } from "./v1/thumbnail";
-import { handleMetricsV1 } from "./v1/metrics";
-import { corsHeaders } from "./shared";
+import { handleStoryboardV1 } from "./v1/storyboard.js";
+import { handleThumbnailV1 } from "./v1/thumbnail.js";
+import { handleMetricsV1 } from "./v1/metrics.js";
+import { corsHeaders } from "./shared.js";
 
 export type RouteMap = Record<string, (req: Request) => Promise<Response>>;
 
@@ -52,6 +52,6 @@ export async function router(req: Request): Promise<Response> {
 
 export default router;
 
-export { handleStoryboardV1 } from "./v1/storyboard";
-export { handleThumbnailV1 } from "./v1/thumbnail";
-export { handleMetricsV1 } from "./v1/metrics";
+export { handleStoryboardV1 } from "./v1/storyboard.js";
+export { handleThumbnailV1 } from "./v1/thumbnail.js";
+export { handleMetricsV1 } from "./v1/metrics.js";

@@ -21,8 +21,8 @@ import {
   QuotaExceededError,
   ProviderAuthError,
   ProviderUnavailableError,
-} from "./types";
-import { KeyRotator } from "./key-rotator";
+} from "./types.js";
+import { KeyRotator } from "./key-rotator.js";
 
 const DEFAULT_API_URL = "https://api.agnesflash.io/v1/images/generations";
 const DEFAULT_MODEL = "agnes-flash-v2";

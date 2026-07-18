@@ -13,9 +13,9 @@
  * In production, restrict via middleware or Vercel Firewall.
  */
 
-import { metrics } from "../../../../../packages/ai/metrics";
-import { logger } from "../../../../../packages/ai/logger";
-import { corsHeaders } from "../shared";
+import { metrics } from "../../../../../packages/ai/metrics.js";
+import { logger } from "../../../../../packages/ai/logger.js";
+import { corsHeaders } from "../shared.js";
 
 export async function handleMetricsV1(req: Request): Promise<Response> {
   // CORS

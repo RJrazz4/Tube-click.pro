@@ -5,23 +5,23 @@
  * Phase 6 observability: structured logging + metrics collection.
  */
 
-import { GeneratorOrchestrator } from "../../../../../packages/ai/generator";
-import { AgnesFlashAdapter } from "../../../../../packages/ai/providers/agnes-flash-adapter";
-import { GeminiFlashAdapter } from "../../../../../packages/ai/providers/gemini-flash-adapter";
-import { PollinationsAdapter } from "../../../../../packages/ai/providers/pollinations-adapter";
-import { KeyRotator } from "../../../../../packages/ai/providers/key-rotator";
-import type { ImageProvider } from "../../../../../packages/ai/providers/types";
-import { logger } from "../../../../../packages/ai/logger";
-import { metrics } from "../../../../../packages/ai/metrics";
+import { GeneratorOrchestrator } from "../../../../../packages/ai/generator.js";
+import { AgnesFlashAdapter } from "../../../../../packages/ai/providers/agnes-flash-adapter.js";
+import { GeminiFlashAdapter } from "../../../../../packages/ai/providers/gemini-flash-adapter.js";
+import { PollinationsAdapter } from "../../../../../packages/ai/providers/pollinations-adapter.js";
+import { KeyRotator } from "../../../../../packages/ai/providers/key-rotator.js";
+import type { ImageProvider } from "../../../../../packages/ai/providers/types.js";
+import { logger } from "../../../../../packages/ai/logger.js";
+import { metrics } from "../../../../../packages/ai/metrics.js";
 
 import {
   validateThumbnailRequest,
   type ThumbnailRequest,
-} from "../validation/thumbnail";
+} from "../validation/thumbnail.js";
 import {
   enforceThumbnailTier,
   tierFromRequest,
-} from "../middleware/tier";
+} from "../middleware/tier.js";
 import {
   ok,
   badRequest,
@@ -30,7 +30,7 @@ import {
   parseBody,
   aspectRatioToDimensions,
   corsHeaders,
-} from "../shared";
+} from "../shared.js";
 
 // ─── Lazy singleton ──────────────────────────────────────────────
 

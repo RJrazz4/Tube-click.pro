@@ -5,7 +5,7 @@
  * Runtime: edge — returns JSON with counters, provider breakdown, latency percentiles.
  */
 
-import { handleMetricsV1 } from "../../apps/api/src/routes/v1/metrics";
+import { handleMetricsV1 } from "../../apps/api/src/routes/v1/metrics.js";
 
 export const config = {
   runtime: "edge",

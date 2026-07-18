@@ -19,7 +19,7 @@ import {
   GenerateResult,
   ProviderMeta,
   ProviderUnavailableError,
-} from "./types";
+} from "./types.js";
 
 const BASE_URL = "https://image.pollinations.ai/prompt";
 

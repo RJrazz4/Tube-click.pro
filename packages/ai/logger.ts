@@ -10,7 +10,7 @@
  *   - Node.js 18+
  *
  * Usage:
- *   import { logger } from "../../packages/ai/logger";
+ *   import { logger } from "../../packages/ai/logger.js";
  *
  *   logger.info("storyboard.generate", "Starting batch generation", {
  *     sceneCount: 5, tier: "free", brand: "Tube.Flash"

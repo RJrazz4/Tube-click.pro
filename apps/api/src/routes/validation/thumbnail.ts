@@ -40,7 +40,7 @@ export type ThumbnailRequest = z.infer<typeof thumbnailRequestSchema>;
 
 // ─── Validation helper ───────────────────────────────────────────
 
-import type { ValidationError } from "./storyboard";
+import type { ValidationError } from "./storyboard.js";
 
 export function validateThumbnailRequest(
   raw: unknown

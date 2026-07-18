@@ -7,7 +7,7 @@
  * `AllKeysExhaustedError` and fails over to the next provider in the chain.
  */
 
-import { AllKeysExhaustedError } from "./types";
+import { AllKeysExhaustedError } from "./types.js";
 
 export class KeyRotator {
   /** Human-readable label for diagnostics (e.g. "agnes-flash"). */

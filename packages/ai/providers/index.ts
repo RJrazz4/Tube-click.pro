@@ -10,13 +10,13 @@
  * ```
  */
 
-export { AgnesFlashAdapter } from "./agnes-flash-adapter";
-export { GeminiFlashAdapter } from "./gemini-flash-adapter";
-export { PollinationsAdapter } from "./pollinations-adapter";
-export { KeyRotator } from "./key-rotator";
+export { AgnesFlashAdapter } from "./agnes-flash-adapter.js";
+export { GeminiFlashAdapter } from "./gemini-flash-adapter.js";
+export { PollinationsAdapter } from "./pollinations-adapter.js";
+export { KeyRotator } from "./key-rotator.js";
 
-export type { ImageProvider } from "./types";
-export type { GenerateParams, GenerateResult, ProviderMeta } from "./types";
+export type { ImageProvider } from "./types.js";
+export type { GenerateParams, GenerateResult, ProviderMeta } from "./types.js";
 
 export {
   RateLimitError,
@@ -28,4 +28,4 @@ export {
   isQuotaExceededError,
   isProviderAuthError,
   isAllKeysExhaustedError,
-} from "./types";
+} from "./types.js";

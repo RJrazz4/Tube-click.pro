@@ -26,8 +26,8 @@ import {
   QuotaExceededError,
   ProviderAuthError,
   ProviderUnavailableError,
-} from "./types";
-import { KeyRotator } from "./key-rotator";
+} from "./types.js";
+import { KeyRotator } from "./key-rotator.js";
 
 const DEFAULT_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models";
