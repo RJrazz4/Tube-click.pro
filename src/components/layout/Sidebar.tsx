@@ -9,13 +9,15 @@ import {
   Film,
   Share2,
   TrendingUp,
-  Search
+  Search,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
+  { icon: Settings, label: "Settings", path: "/settings" },
   { icon: Bot, label: "TubeBot AI", path: "/chat-agent" },
   { icon: Film, label: "Storyboard", path: "/storyboard" },
   { icon: Image, label: "Thumbnails", path: "/thumbnails" },
