@@ -215,8 +215,13 @@ export async function executeWithFallback(
                 prompt: optimized.spec.rawPrompt,
                 ...(optimized.spec.negativePrompts ? { negativePrompt: optimized.spec.negativePrompts } : {}),
               };
-            } catch {
-              // Keep current prompt if optimization fails
+            } catch (e) {
+              // Stop the silent fail: log the EXACT Promptsmith error; we
+              // keep the current (pre-optimization) prompt and retry primary.
+              console.error(
+                "[fallback-executor] Promptsmith re-optimize failed on primary retry — keeping current prompt:",
+                e instanceof Error ? e.message : String(e),
+              );
             }
           }
           continue;

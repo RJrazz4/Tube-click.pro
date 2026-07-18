@@ -88,6 +88,8 @@ export function OrchestratorStoryboard() {
   const [result, setResult] = useState<OrchestratorStoryboardResponse | null>(null);
   const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
   const [phaseStartedAt, setPhaseStartedAt] = useState<number | null>(null);
+  /** Per-scene <img> onLoad flags — drives the per-card 3D loader. */
+  const [loaded, setLoaded] = useState<Record<number, boolean>>({});
   const abortRef = useRef<AbortController | null>(null);
 
   // Script persistence (scenes stay in-memory; data URLs never persist).
@@ -108,6 +110,7 @@ export function OrchestratorStoryboard() {
     const now = Date.now();
     setRunStartedAt(now);
     setPhaseStartedAt(now);
+    setLoaded({}); // reset per-card loaders for the new run
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -162,6 +165,11 @@ export function OrchestratorStoryboard() {
     } finally {
       setZipping(false);
     }
+  }, []);
+
+  /** Mark a single scene's image as loaded (its 3D loader disappears). */
+  const markLoaded = useCallback((idx: number) => {
+    setLoaded((prev) => (prev[idx] ? prev : { ...prev, [idx]: true }));
   }, []);
 
   const sceneViews = result ? toSceneCardViews(result.scenes) : [];
@@ -219,8 +227,11 @@ export function OrchestratorStoryboard() {
         </Card>
       )}
 
-      {/* Two-phase busy state: Text (AI Brain 2D) → Images (Processing3D) */}
-      {busy && (
+      {/* Two-phase busy state: Text (AI Brain 2D) → Images (Processing3D).
+          Only shown BEFORE the scene grid exists — once results arrive, the
+          loader moves INTO each card (see SceneCardView below) so it spins
+          independently per scene and clears when that scene's <img> loads. */}
+      {busy && !result && (
         <div className="space-y-6">
           {/* Phase indicator tabs */}
           <div className="flex items-center justify-center gap-2">
@@ -311,8 +322,10 @@ export function OrchestratorStoryboard() {
         </div>
       )}
 
-      {/* Result */}
-      {result && !busy && summary && (
+      {/* Result — rendered as soon as results exist (even while the final
+          client-side wiring finishes), with the 3D loader living inside
+          each individual scene card. */}
+      {result && summary && (
         <div className="space-y-4">
           <TruncationBanner body={result} />
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -339,14 +352,32 @@ export function OrchestratorStoryboard() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {sceneViews.map((scene) => (
               <Card key={scene.sceneIndex} className="overflow-hidden border-border/60">
-                <div className="relative aspect-video bg-muted/30">
+                <div className="relative aspect-video bg-muted/30 overflow-hidden">
                   {scene.status === "success" && scene.imageUrl ? (
-                    <img
-                      src={scene.imageUrl}
-                      alt={scene.title}
-                      loading="lazy"
-                      className="h-full w-full object-cover"
-                    />
+                    <>
+                      <img
+                        src={scene.imageUrl}
+                        alt={scene.title}
+                        loading="lazy"
+                        onLoad={() => markLoaded(scene.sceneIndex)}
+                        onError={() => markLoaded(scene.sceneIndex)}
+                        className={cn(
+                          "h-full w-full object-cover transition-opacity duration-300",
+                          loaded[scene.sceneIndex] ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                      {/* Per-card 3D loader — spins on top of THIS empty box
+                          and only disappears when this scene's image loads. */}
+                      {!loaded[scene.sceneIndex] && (
+                        <div className="absolute inset-0 grid place-items-center bg-muted/40">
+                          <Processing3D
+                            variant="tile"
+                            brand={result?.tier === "free" ? "free" : "pro"}
+                            label={`Painting ${scene.title}…`}
+                          />
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
                       <ImageOff className="h-6 w-6 text-muted-foreground" />
@@ -388,6 +419,9 @@ export function OrchestratorStoryboard() {
                   </div>
                   {scene.status === "failed" && scene.errorMessage && (
                     <p className="text-xs text-destructive/80 line-clamp-2">{scene.errorMessage}</p>
+                  )}
+                  {scene.status === "success" && scene.backupBadge && scene.errorMessage && (
+                    <p className="text-[11px] text-amber-300/80 line-clamp-2">Backup engine used: {scene.errorMessage}</p>
                   )}
                 </CardContent>
               </Card>

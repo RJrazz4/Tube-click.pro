@@ -92,8 +92,13 @@ export async function generateScene(
       if (optimized.spec.negativePrompts) {
         negativePromptToUse = optimized.spec.negativePrompts;
       }
-    } catch {
-      // Fallback to scene prompt if optimization fails
+    } catch (e) {
+      // Stop the silent fail: log the EXACT Promptsmith error; we still
+      // fall back to the raw scene prompt, but the failure is now visible.
+      console.error(
+        "[scene-pipeline] Promptsmith optimize failed — falling back to raw prompt:",
+        e instanceof Error ? e.message : String(e),
+      );
     }
   }
 

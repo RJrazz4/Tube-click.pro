@@ -58,14 +58,29 @@ function getProviders(): ImageProvider[] {
 
   try {
     loaded.push(new AgnesFlashAdapter());
-  } catch {
-    logger.info("storyboard.providers", "AgnesFlashAdapter not configured, skipping");
+  } catch (e) {
+    logger.warn(
+      "storyboard.providers",
+      "AgnesFlashAdapter skipped — AGNES_FLASH_API_KEYS missing or invalid; scenes will fall back to the backup engine",
+      { error: e instanceof Error ? e.message : String(e) },
+    );
   }
 
   try {
     loaded.push(new GeminiFlashAdapter());
-  } catch {
-    logger.info("storyboard.providers", "GeminiFlashAdapter not configured, skipping");
+  } catch (e) {
+    logger.warn(
+      "storyboard.providers",
+      "GeminiFlashAdapter skipped — GEMINI_API_KEY missing or invalid; scenes will fall back to the backup engine",
+      { error: e instanceof Error ? e.message : String(e) },
+    );
+  }
+
+  if (loaded.length === 0) {
+    logger.warn(
+      "storyboard.providers",
+      "No primary image providers configured — every scene will be served by the backup engine. Set AGNES_FLASH_API_KEYS and/or GEMINI_API_KEY to use the primary engine.",
+    );
   }
 
   _providers = loaded;
@@ -159,49 +174,102 @@ export async function handleStoryboardV1(req: Request): Promise<Response> {
   const dims = aspectRatioToDimensions(input.aspect_ratio);
   metrics.increment("generation.started");
 
-  // 6. Generate images
+  // 6. Generate images — ONE SCENE AT A TIME (no parallel fan-out).
+  //
+  // Fanning all scenes out with Promise.all hammered the upstream providers
+  // with N simultaneous requests, tripping API rate limits and Vercel edge
+  // timeouts — only scene 1 would come back while 2/3/4 returned broken or
+  // empty links. Serializing with a small gap between scenes keeps us inside
+  // provider quotas and the function's maxDuration budget.
   const orchestrator = getOrchestrator();
   const seedBase = input.seed ?? Math.floor(Math.random() * 999_999);
 
-  const sceneResults = await Promise.all(
-    scenes.map(async (scene) => {
-      const prompt = scene.visual_prompt;
-      const seed = seedBase + scene.scene_number;
-
-      const report = await orchestrator.generate(
-        { prompt, width: dims.width, height: dims.height, seed, count: 1 },
-        { count: 1 }
-      );
-
-      const image = report.images[0];
-
-      // Track provider metrics
-      if (image?.provider && image.provider !== "none") {
-        if (image.fromFallback) {
-          metrics.increment("fallback.used");
-        }
-        metrics.recordProvider(
-          image.provider,
-          image.url ? "success" : "failure",
-          report.totalLatencyMs
-        );
-      }
-
-      if (report.usedFallback) metrics.increment("fallback.used");
-      if (report.degraded) metrics.increment("generation.failed");
-
-      return {
-        scene_number: scene.scene_number,
-        image_url: image?.url || "",
-        provider: image?.provider || "none",
-        from_fallback: image?.fromFallback ?? true,
-        duration: scene.duration,
-        transition: scene.transition,
-        beat_type: scene.beat_type,
-        degraded: report.degraded,
-      };
-    })
+  // Gap between scenes (ms). Tune via env; 0 disables the delay entirely.
+  const SCENE_GAP_MS = Math.max(
+    0,
+    Number.parseInt(process.env.STORYBOARD_SCENE_GAP_MS ?? "500", 10) || 500,
   );
+  const sleep = (ms: number): Promise<void> =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+  const sceneResults: Array<Record<string, unknown>> = [];
+
+  for (let i = 0; i < scenes.length; i += 1) {
+    const scene = scenes[i];
+
+    // Honor an in-flight client abort between scenes.
+    if (req.signal?.aborted) {
+      logger.warn("storyboard.aborted", "Client aborted — stopping remaining scenes", {
+        completed: i,
+        total: scenes.length,
+      });
+      break;
+    }
+
+    const prompt = scene.visual_prompt;
+    const seed = seedBase + scene.scene_number;
+
+    const report = await orchestrator.generate(
+      { prompt, width: dims.width, height: dims.height, seed, count: 1 },
+      { count: 1, signal: req.signal },
+    );
+
+    const image = report.images[0];
+
+    // Track provider metrics
+    if (image?.provider && image.provider !== "none") {
+      if (image.fromFallback) metrics.increment("fallback.used");
+      metrics.recordProvider(
+        image.provider,
+        image.url ? "success" : "failure",
+        report.totalLatencyMs,
+      );
+    }
+    if (report.usedFallback) metrics.increment("fallback.used");
+    if (report.degraded) metrics.increment("generation.failed");
+
+    // Surface the EXACT failure / fallback reason instead of swallowing it.
+    // (e.g. "429 Rate Limit on agnes-flash", "Missing/invalid API Key for
+    // gemini-flash" — returned to the UI and logged below.)
+    const sceneError =
+      image?.url
+        ? image.fromFallback && image.error
+          ? image.error
+          : undefined
+        : image?.error ?? "Generation failed";
+
+    if (!image?.url) {
+      logger.error(
+        "storyboard.scene",
+        `Scene ${scene.scene_number} failed to generate`,
+        { provider: image?.provider, error: sceneError },
+      );
+    } else if (image.fromFallback && image.error) {
+      logger.warn(
+        "storyboard.scene",
+        `Scene ${scene.scene_number} served by backup engine`,
+        { reason: image.error },
+      );
+    }
+
+    sceneResults.push({
+      scene_number: scene.scene_number,
+      image_url: image?.url || "",
+      provider: image?.provider || "none",
+      from_fallback: image?.fromFallback ?? true,
+      duration: scene.duration,
+      transition: scene.transition,
+      beat_type: scene.beat_type,
+      degraded: report.degraded,
+      ...(sceneError ? { error: sceneError } : {}),
+    });
+
+    // Small gap so the next scene's request doesn't land on the same provider
+    // at the exact same instant (rate-limit guard).
+    if (i < scenes.length - 1 && SCENE_GAP_MS > 0 && !req.signal?.aborted) {
+      await sleep(SCENE_GAP_MS);
+    }
+  }
 
   const totalMs = Math.round(performance.now() - t0);
   const successCount = sceneResults.filter((s) => s.image_url).length;
