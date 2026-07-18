@@ -3,14 +3,20 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "lint": "eslint .",
+    "lint": "eslint . --suppressions-location eslint-suppressions.json",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.api.json --noEmit && tsc -p tsconfig.app.json --noEmit",
+    "typecheck": "tsc -p tsconfig.api.json --noEmit && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.packages.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "verify": "node scripts/verify.mjs",
+    "ci": "npm run lint && npm run typecheck && npm run test && npm run verify",
     "test:v1-contract": "esbuild scripts/test-v1-contract.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/test-v1.mjs && node node_modules/.cache/test-v1.mjs"
   },
   "dependencies": {
@@ -84,6 +90,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
-    "vite": "^5.4.19"
+    "vite": "^5.4.19",
+    "vitest": "^4.1.10"
   }
 }
