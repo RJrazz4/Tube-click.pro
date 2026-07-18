@@ -311,3 +311,35 @@ describe("E1 × E2 — storyboard batch composition", () => {
     expect(failed.error).toContain("programmer typo");
   });
 });
+
+describe("Phase 2 — Scene Pipeline Promptsmith & Router Integration", () => {
+  it("optimizes raw scene prompts through Promptsmith before sending to image provider", async () => {
+    const hf = stubProvider("hf", "free", [endpoint("hf")]);
+    const promptsmith = {
+      async optimize(req: { rawInput: string }) {
+        return {
+          spec: {
+            subject: `Optimized: ${req.rawInput}`,
+            style: "Cinematic photorealistic 8k",
+            camera: "Wide angle shot",
+            negativePrompts: "blurry, lowres",
+            rawPrompt: `Optimized: ${req.rawInput}, Cinematic photorealistic 8k, Wide angle shot`,
+          },
+          model: "test-model",
+          attempts: 1,
+          latencyMs: 5,
+        };
+      },
+    };
+
+    const result = await generateScene(
+      makeScene({ prompt: "ek sundar mountain view" }),
+      ctx("free", [hf], { promptsmith: promptsmith as any }),
+    );
+
+    expect(result.status).toBe("success");
+    expect(hf.requests).toHaveLength(1);
+    expect(hf.requests[0]?.prompt).toContain("Optimized: ek sundar mountain view");
+    expect(hf.requests[0]?.negativePrompt).toBe("blurry, lowres");
+  });
+});

@@ -397,3 +397,47 @@ describe("executeWithFallback — chain hygiene", () => {
     expect(streamed).toHaveLength(2);
   });
 });
+
+describe("executeWithFallback — Phase 1 Primary Retry & Promptsmith Resilience", () => {
+  it("retries primary provider on transient failure with promptsmith optimization before falling back", async () => {
+    const hf = stubProvider("hf", "free", [
+      new NormalizedProviderError("hf", "rate_limit", "429 rate limit"),
+      ok("hf"),
+    ]);
+    const pollinations = stubProvider("pollinations", "free", [ok("pollinations")]);
+
+    let optimizedPromptReceived = "";
+    const promptsmith = {
+      async optimize(req: { rawInput: string }) {
+        optimizedPromptReceived = req.rawInput;
+        return {
+          spec: {
+            subject: "optimized subject",
+            style: "cinematic",
+            camera: "wide",
+            negativePrompts: "blurry",
+            rawPrompt: "optimized subject, cinematic, wide",
+          },
+          model: "test-model",
+          attempts: 1,
+          latencyMs: 5,
+        };
+      },
+    };
+
+    const exec = await executeWithFallback(decision("hf", ["pollinations"]), REQUEST, {
+      providers: { hf, pollinations },
+      maxPrimaryRetries: 1,
+      promptsmith,
+    });
+
+    expect(exec.result.status).toBe("success");
+    expect(exec.result.provider).toBe("hf");
+    expect(exec.result.isFallback).toBe(false);
+    expect(hf.calls).toBe(2);
+    expect(pollinations.calls).toBe(0);
+    expect(exec.hops).toHaveLength(2); // failure on primary, success on retry primary
+    expect(exec.hops[0]?.outcome).toBe("failure");
+    expect(exec.hops[1]?.outcome).toBe("success");
+  });
+});
