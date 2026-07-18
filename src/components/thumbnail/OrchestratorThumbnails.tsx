@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { GenerationProgress } from "@/components/generation/GenerationProgress";
 import { useTierConfig } from "@/hooks/useTierConfig";
 import { orchestratorApi } from "@/lib/orchestrator/client";
 import { downloadImage } from "@/lib/orchestrator/download";
@@ -64,6 +65,7 @@ export function OrchestratorThumbnails() {
   const [error, setError] = useState<UiError | null>(null);
   const [result, setResult] = useState<OrchestratorThumbnailsResponse | null>(null);
   const [downloading, setDownloading] = useState<number | null>(null);
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Tier catalog: authoritative options when reachable, plan defaults otherwise.
@@ -100,6 +102,7 @@ export function OrchestratorThumbnails() {
   const runGeneration = useCallback(async () => {
     setError(null);
     setBusy(true);
+    setRunStartedAt(Date.now());
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -215,19 +218,14 @@ export function OrchestratorThumbnails() {
         </Card>
       )}
 
-      {/* Busy skeleton — one slot per requested option */}
+      {/* Busy state (G4): one slot per requested option + abortable run */}
       {busy && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {Array.from({ length: count }, (_, slot) => (
-            <div
-              key={slot}
-              className="aspect-video animate-pulse rounded-lg border border-border/60 bg-muted/40"
-            />
-          ))}
-          <p className="col-span-full text-center text-sm text-muted-foreground">
-            Painting {count} thumbnail option{count === 1 ? "" : "s"}…
-          </p>
-        </div>
+        <GenerationProgress
+          headline={`Painting ${count} thumbnail option${count === 1 ? "" : "s"}`}
+          skeletonCount={count}
+          startedAt={runStartedAt ?? Date.now()}
+          onCancel={() => abortRef.current?.abort()}
+        />
       )}
 
       {/* Result */}

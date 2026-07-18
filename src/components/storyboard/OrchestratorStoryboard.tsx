@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { GenerationProgress } from "@/components/generation/GenerationProgress";
 import { TruncationBanner } from "@/components/storyboard/TruncationBanner";
 import { orchestratorApi } from "@/lib/orchestrator/client";
 import { downloadZip } from "@/lib/orchestrator/download";
@@ -37,6 +38,7 @@ export function OrchestratorStoryboard() {
   const [zipping, setZipping] = useState(false);
   const [error, setError] = useState<UiError | null>(null);
   const [result, setResult] = useState<OrchestratorStoryboardResponse | null>(null);
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Script persistence (scenes stay in-memory; data URLs never persist).
@@ -53,6 +55,7 @@ export function OrchestratorStoryboard() {
   const runGeneration = useCallback(async () => {
     setError(null);
     setBusy(true);
+    setRunStartedAt(Date.now());
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -142,20 +145,15 @@ export function OrchestratorStoryboard() {
         </Card>
       )}
 
-      {/* Busy skeleton */}
+      {/* Busy state (G4): honest ticking clock + abortable run */}
       {busy && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[0, 1, 2].map((slot) => (
-            <div
-              key={slot}
-              className="aspect-video animate-pulse rounded-lg border border-border/60 bg-muted/40"
-            />
-          ))}
-          <p className="col-span-full text-center text-sm text-muted-foreground">
-            The director is planning your scenes and painting each frame — a full
-            storyboard takes about a minute.
-          </p>
-        </div>
+        <GenerationProgress
+          headline="Planning & painting your storyboard"
+          note="The director plans your scenes, then paints each frame — a full storyboard takes about a minute."
+          skeletonCount={4}
+          startedAt={runStartedAt ?? Date.now()}
+          onCancel={() => abortRef.current?.abort()}
+        />
       )}
 
       {/* Result */}
