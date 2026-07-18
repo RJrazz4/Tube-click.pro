@@ -1,0 +1,247 @@
+{
+  "api/_shared.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 20
+    },
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "api/analyze-storyboard.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "api/generate-text.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "api/generate-thumbnail.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "api/json2video.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "api/seo-tags.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "api/transcript.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    },
+    "no-empty": {
+      "count": 3
+    },
+    "no-useless-escape": {
+      "count": 4
+    }
+  },
+  "apps/api/src/routes/middleware/tier.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "packages/ai/logger.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-this-alias": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unsafe-function-type": {
+      "count": 1
+    }
+  },
+  "packages/ai/providers/agnes-flash-adapter.ts": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 2
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "packages/ai/providers/gemini-flash-adapter.ts": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 2
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    }
+  },
+  "src/api/client/secureClient.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 8
+    }
+  },
+  "src/api/server/imageRouter.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/api/server/json2VideoPayload.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/api/server/transcriptUtil.ts": {
+    "no-useless-escape": {
+      "count": 4
+    }
+  },
+  "src/components/ui/LazyImage.tsx": {
+    "@next/next/no-img-element": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/components/ui/command.tsx": {
+    "@typescript-eslint/no-empty-object-type": {
+      "count": 1
+    }
+  },
+  "src/components/ui/textarea.tsx": {
+    "@typescript-eslint/no-empty-object-type": {
+      "count": 1
+    }
+  },
+  "src/hooks/useJson2Video.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/hooks/useSecureQuery.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/lib/export.ts": {
+    "no-case-declarations": {
+      "count": 1
+    }
+  },
+  "src/lib/friendlyError.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "src/lib/monetization/locker.ts": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "src/lib/scriptCleaner.ts": {
+    "no-useless-escape": {
+      "count": 11
+    },
+    "prefer-const": {
+      "count": 2
+    }
+  },
+  "src/lib/stats.ts": {
+    "no-empty": {
+      "count": 2
+    }
+  },
+  "src/pages/AdminPanel.tsx": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "src/pages/Dashboard.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/pages/Repurposer.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "src/pages/SeoOptimizer.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "src/pages/Storyboard.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "src/pages/Thumbnails.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "src/stores/useContentStore.ts": {
+    "no-empty": {
+      "count": 1
+    }
+  },
+  "supabase/functions/analyze-storyboard/index.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "supabase/functions/generate-content/index.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "supabase/functions/generate-seo/index.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "supabase/functions/generate-storyboard-image/index.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "no-empty": {
+      "count": 3
+    }
+  },
+  "supabase/functions/generate-thumbnail/index.ts": {
+    "no-empty": {
+      "count": 2
+    }
+  },
+  "supabase/functions/transcript/index.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
+    "no-empty": {
+      "count": 1
+    },
+    "no-useless-escape": {
+      "count": 4
+    }
+  },
+  "supabase/functions/vision-guide/index.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "tailwind.config.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    }
+  }
+}

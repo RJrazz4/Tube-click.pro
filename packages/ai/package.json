@@ -1,0 +1,7 @@
+{
+  "name": "@tubeclick/ai",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Image-generation provider adapters and orchestration primitives (internal workspace package)."
+}

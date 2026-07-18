@@ -1,0 +1,7 @@
+{
+  "name": "@tubeclick/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared contracts: tier definitions now, env schema and orchestrator types land here per Master Plan Phase A."
+}
