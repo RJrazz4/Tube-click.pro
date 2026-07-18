@@ -53,7 +53,7 @@ describe("createOrchestratorApi — zero-config assembly", () => {
   it("exposes shared state + sane lane defaults for H2", () => {
     const api = createOrchestratorApi(makeEnv());
     expect(api.policy.maxScenes("free")).toBe(4);
-    expect(api.providers.map((p) => p.id)).toEqual(["agnes", "gemini", "hf", "pollinations"]);
+    expect(api.providers.map((p) => p.id)).toEqual(["agnes", "gemini", "hf", "together", "replicate", "pollinations"]);
     expect(DEFAULT_LANE_LIMITS).toEqual({ concurrency: 2, maxQueue: 100 });
     expect(api.breaker).toBeDefined();
     expect(api.tracker).toBeDefined();

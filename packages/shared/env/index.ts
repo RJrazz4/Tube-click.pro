@@ -161,6 +161,8 @@ export function summarizeEnv(env: AppEnv): Record<string, number | boolean | str
     agnesKeys: env.imageKeyPools.agnes.length,
     geminiKeys: env.imageKeyPools.gemini.length,
     hfKeys: env.imageKeyPools.hf.length,
+    togetherKeys: env.imageKeyPools.together.length,
+    replicateKeys: env.imageKeyPools.replicate.length,
     openrouterKeys: env.openrouterKeys.length,
     pollinationsEnabled: env.pollinationsEnabled,
     freeMaxScenes: env.tierLimits.free.maxScenes ?? "unlimited",

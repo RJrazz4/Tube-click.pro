@@ -6,7 +6,7 @@ import { AllKeysExhaustedError, ProviderNotConfiguredError } from "./errors.js";
 import { KeyPool } from "./key-pool.js";
 import { KeyPoolManager } from "./key-pool-manager.js";
 
-const POOLS: ImageKeyPools = { agnes: ["a1", "a2"], gemini: [], hf: ["h1"] };
+const POOLS: ImageKeyPools = { agnes: ["a1", "a2"], gemini: [], hf: ["h1"], together: [], replicate: [] };
 
 describe("KeyPoolManager", () => {
   it("builds pools only for configured providers, in canonical order", () => {
@@ -32,7 +32,7 @@ describe("KeyPoolManager", () => {
   it("propagates the injected clock into every pool", () => {
     let t = 1_000;
     const m = new KeyPoolManager(
-      { agnes: ["a1"], gemini: [], hf: ["h1"] },
+      { agnes: ["a1"], gemini: [], hf: ["h1"], together: [], replicate: [] },
       { now: () => t },
     );
     m.pool("agnes").recordFailure("a1", { cooldownMs: 500 });
@@ -56,17 +56,21 @@ describe("KeyPoolManager", () => {
       agnes: ["sk-agnes-001-secret"],
       gemini: [],
       hf: ["hf-key-002-secret"],
+      together: ["together-key-003-secret"],
+      replicate: [],
     });
     const snap = m.snapshotAll();
-    expect(Object.keys(snap)).toEqual(["agnes", "hf"]);
+    expect(Object.keys(snap)).toEqual(["agnes", "hf", "together"]);
     expect(snap.agnes).toHaveLength(1);
+    expect(snap.together).toHaveLength(1);
     const json = JSON.stringify(snap);
     expect(json).not.toContain("sk-agnes-001-secret");
     expect(json).not.toContain("hf-key-002-secret");
+    expect(json).not.toContain("together-key-003-secret");
   });
 
   it("handles a zero-key environment (Pollinations-only deployments)", () => {
-    const m = new KeyPoolManager({ agnes: [], gemini: [], hf: [] });
+    const m = new KeyPoolManager({ agnes: [], gemini: [], hf: [], together: [], replicate: [] });
     expect(m.configuredProviders()).toEqual([]);
     expect(m.snapshotAll()).toEqual({});
     expect(() => m.pool("hf")).toThrow(ProviderNotConfiguredError);

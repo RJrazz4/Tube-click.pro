@@ -11,3 +11,5 @@ export * from "./pollinations-adapter.js";
 export * from "./agnes-flash-adapter.js";
 export * from "./gemini-flash-adapter.js";
 export * from "./huggingface-adapter.js";
+export * from "./together-ai-adapter.js";
+export * from "./replicate-adapter.js";

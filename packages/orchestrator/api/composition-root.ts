@@ -21,6 +21,7 @@
  * H2 can mount /metrics and /health without re-plumbing.
  */
 import type { AppEnv } from "../../shared/env/index.js";
+import { parseImageKeyPoolsWithReport } from "../../shared/env/image-keys.js";
 import { CostTracker } from "../cost/index.js";
 import { GeneratorAgent, GeneratorMetrics } from "../generator/index.js";
 import { ManagerService, OpenRouterClient } from "../manager/index.js";
@@ -28,6 +29,8 @@ import {
   AgnesFlashAdapter,
   GeminiFlashAdapter,
   HuggingFaceAdapter,
+  TogetherAIAdapter,
+  ReplicateAdapter,
   PollinationsAdapter,
   RequestQueue,
   type ImageProvider,
@@ -92,7 +95,9 @@ export interface OrchestratorApi {
   readonly rateLimiter: RateLimitGate | undefined;
 }
 
-/** B4 planner, or a loud placeholder when the manager brain has no keys. */
+/**
+ * B4 planner, or a loud placeholder when the manager brain has no keys.
+ */
 function defaultPlanner(
   env: AppEnv,
   overrides: OrchestratorApiOverrides,
@@ -115,7 +120,15 @@ function defaultPlanner(
   });
 }
 
-/** The C2 adapter set from A1's pools; keyed lanes share C1 queue limits. */
+/**
+ * The C2 adapter set from A1's pools; keyed lanes share C1 queue limits.
+ * Now includes explicit logging for key configuration diagnostics.
+ *
+ * Zero-Cost Hydra Router Adapter Order:
+ *   Layer 1 (Free Keyed): HF → Together AI → Replicate
+ *   Layer 2 (Free Keyless): Pollinations (ultimate fallback)
+ *   Layer 3 (Premium): Agnes → Gemini
+ */
 function defaultProviders(
   env: AppEnv,
   overrides: OrchestratorApiOverrides,
@@ -126,18 +139,113 @@ function defaultProviders(
     ...(overrides.fetchImpl !== undefined ? { fetchImpl: overrides.fetchImpl } : {}),
     ...(overrides.now !== undefined ? { now: overrides.now } : {}),
   };
-  return [
-    new AgnesFlashAdapter({ keys: env.imageKeyPools.agnes, queue: lane("agnes"), ...shared }),
-    new GeminiFlashAdapter({ keys: env.imageKeyPools.gemini, queue: lane("gemini"), ...shared }),
-    new HuggingFaceAdapter({ keys: env.imageKeyPools.hf, queue: lane("hf"), ...shared }),
-    new PollinationsAdapter({ enabled: env.pollinationsEnabled, ...shared }),
-  ];
+
+  const adapters: ImageProvider[] = [];
+
+  // Agnes (premium - Layer 3)
+  const agnesKeys = env.imageKeyPools.agnes;
+  adapters.push(new AgnesFlashAdapter({ keys: agnesKeys, queue: lane("agnes"), ...shared }));
+  if (agnesKeys.length === 0) {
+    console.warn("[orchestrator] Agnes adapter initialized with 0 keys - provider will be unavailable");
+  } else {
+    console.log(`[orchestrator] Agnes adapter initialized with ${agnesKeys.length} key(s)`);
+  }
+
+  // Gemini (premium - Layer 3)
+  const geminiKeys = env.imageKeyPools.gemini;
+  adapters.push(new GeminiFlashAdapter({ keys: geminiKeys, queue: lane("gemini"), ...shared }));
+  if (geminiKeys.length === 0) {
+    console.warn("[orchestrator] Gemini adapter initialized with 0 keys - provider will be unavailable");
+  } else {
+    console.log(`[orchestrator] Gemini adapter initialized with ${geminiKeys.length} key(s)`);
+  }
+
+  // HuggingFace (free - Zero-Cost Hydra Layer 1 Primary)
+  const hfKeys = env.imageKeyPools.hf;
+  adapters.push(new HuggingFaceAdapter({ keys: hfKeys, queue: lane("hf"), ...shared }));
+  if (hfKeys.length === 0) {
+    console.warn("[orchestrator] HuggingFace adapter initialized with 0 keys - provider will be unavailable (HYDRA LAYER 1 UNAVAILABLE)");
+  } else {
+    console.log(`[orchestrator] HuggingFace adapter initialized with ${hfKeys.length} key(s) - HYDRA LAYER 1 ACTIVE`);
+  }
+
+  // Together AI (free - Zero-Cost Hydra Layer 1 Secondary)
+  const togetherKeys = env.imageKeyPools.together;
+  adapters.push(new TogetherAIAdapter({ keys: togetherKeys, queue: lane("together"), ...shared }));
+  if (togetherKeys.length === 0) {
+    console.warn("[orchestrator] Together AI adapter initialized with 0 keys - provider will be unavailable (HYDRA LAYER 1 UNAVAILABLE)");
+  } else {
+    console.log(`[orchestrator] Together AI adapter initialized with ${togetherKeys.length} key(s) - HYDRA LAYER 1 ACTIVE`);
+  }
+
+  // Replicate (free - Zero-Cost Hydra Layer 1 Tertiary)
+  const replicateKeys = env.imageKeyPools.replicate;
+  adapters.push(new ReplicateAdapter({ keys: replicateKeys, queue: lane("replicate"), ...shared }));
+  if (replicateKeys.length === 0) {
+    console.warn("[orchestrator] Replicate adapter initialized with 0 keys - provider will be unavailable (HYDRA LAYER 1 UNAVAILABLE)");
+  } else {
+    console.log(`[orchestrator] Replicate adapter initialized with ${replicateKeys.length} key(s) - HYDRA LAYER 1 ACTIVE`);
+  }
+
+  // Pollinations (free - Zero-Cost Hydra Layer 2 Ultimate Fallback)
+  adapters.push(new PollinationsAdapter({ enabled: env.pollinationsEnabled, ...shared }));
+  if (env.pollinationsEnabled) {
+    console.log("[orchestrator] Pollinations adapter enabled (HYDRA LAYER 2 ULTIMATE FALLBACK)");
+  } else {
+    console.error("[orchestrator] Pollinations adapter DISABLED - NO FALLBACK AVAILABLE!");
+  }
+
+  return adapters;
+}
+
+/**
+ * Log detailed key parsing diagnostics at startup.
+ * This helps debug IMAGE_API_KEYS configuration issues in production.
+ */
+export function logKeyDiagnostics(env: AppEnv, rawImageKeys: string | undefined): void {
+  const report = parseImageKeyPoolsWithReport(rawImageKeys);
+
+  console.log("[orchestrator] IMAGE_API_KEYS Zero-Cost Hydra Router diagnostic report:");
+  console.log(`  - Raw value length: ${report.rawLength} chars`);
+  console.log(`  - Groups found: ${report.groupsFound}`);
+  console.log(`  - Layer 1 (Free Keyed):`);
+  console.log(`    - HF keys: ${report.parsed.hf.length}`);
+  console.log(`    - Together AI keys: ${report.parsed.together.length}`);
+  console.log(`    - Replicate keys: ${report.parsed.replicate.length}`);
+  console.log(`  - Layer 2 (Premium):`);
+  console.log(`    - Agnes keys: ${report.parsed.agnes.length}`);
+  console.log(`    - Gemini keys: ${report.parsed.gemini.length}`);
+
+  if (report.warnings.length > 0) {
+    console.warn("[orchestrator] IMAGE_API_KEYS warnings:");
+    report.warnings.forEach((w) => console.warn(`  - ${w}`));
+  }
+
+  if (report.errors.length > 0) {
+    console.error("[orchestrator] IMAGE_API_KEYS parse errors:");
+    report.errors.forEach((e) => console.error(`  - ${e}`));
+  }
+
+  const hasFreeKeyed = report.parsed.hf.length > 0 || report.parsed.together.length > 0 || report.parsed.replicate.length > 0;
+  const hasPremium = report.parsed.agnes.length > 0 || report.parsed.gemini.length > 0;
+
+  if (!hasFreeKeyed && !hasPremium) {
+    console.error("[orchestrator] CRITICAL: No API keys configured! All requests will fail unless POLLINATIONS_ENABLED=true");
+  } else if (!hasFreeKeyed) {
+    console.warn("[orchestrator] WARNING: No free-tier keys configured (HF/Together/Replicate). Only premium (COMPLEX scenes) will use Agnes/Gemini. Free tier will fall back to Pollinations.");
+  } else {
+    console.log("[orchestrator] Zero-Cost Hydra Router: At least one free-tier provider available!");
+  }
 }
 
 export function createOrchestratorApi(
   env: AppEnv,
   overrides: OrchestratorApiOverrides = {},
+  rawImageKeys?: string,
 ): OrchestratorApi {
+  // Log diagnostics at startup
+  logKeyDiagnostics(env, rawImageKeys);
+
   const policy = TierPolicy.fromEnv(env);
   const breaker = overrides.breaker ?? new CircuitBreaker(
     overrides.now !== undefined ? { now: overrides.now } : {},
