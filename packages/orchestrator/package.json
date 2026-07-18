@@ -1,0 +1,10 @@
+{
+  "name": "@tubeclick/orchestrator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Intelligent orchestrator for image generation: key pools (A2), manager agent (B), routing (C), rotation/fallback (D), generator (E).",
+  "dependencies": {
+    "@tubeclick/shared": "*"
+  }
+}

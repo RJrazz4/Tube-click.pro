@@ -1,16 +1,30 @@
 openapi: "3.0.3"
 info:
-  title: TubeClick.Pro API — Image Generation Engine
+  title: TubeClick.Pro Orchestrator API — Intelligent Image Generation
   version: "1.0.0"
   description: |
-    Multi-provider image generation API with automatic failover, key rotation,
-    and subscription-tier enforcement.
+    The intelligent orchestrator for YouTube storyboard and thumbnail
+    image generation (Master Plan phases A–H).
 
-    - **Phase 3**: Generator Agent — provider adapters + orchestrator
-    - **Phase 4**: Business Logic — tier enforcement, Zod validation
-    - **Phase 5**: Web UI — React components consuming these endpoints
-    - **Phase 6**: Observability — structured logging, metrics, docs
+    **What the server guarantees**
 
+    - **Tier enforcement (F).** Scene caps and thumbnail-count choices are
+      resolved server-side from the caller's tier — a storyboard response
+      echoes `truncated` / `remainingScenes` so clients can upsell honestly.
+    - **Never hangs, never 500s on provider failure (C/D).** Every scene
+      routes free-first (token-saving mandate), cascades across providers on
+      normalized failures, and falls back to a URL-only ultimate lane that
+      costs the server zero fetches. Failed scenes arrive as failed *rows*
+      inside a 200 — the batch status does not change.
+    - **Rate limiting (F4).** Per-tier token buckets checked before any
+      expensive work; denials are 429 with `Retry-After`.
+    - **Observability (H).** Prometheus exposition at `/metrics`
+      (label values only ever from internal enums — never user text),
+      machine rollup at `/health`.
+
+    **Auth.** The server resolves tier + identity from the session token
+    (Supabase JWT). Clients must **never** self-declare a tier — any tier
+    claim in a request body is rejected by strict validation.
   contact:
     name: TubeClick.Pro Support
     url: https://tubeclick.pro
@@ -26,347 +40,16 @@ servers:
 
 tags:
   - name: Storyboard
-    description: Generate storyboard scene images from a script
-  - name: Thumbnail
-    description: Generate video thumbnails with tier-based limits
-  - name: Metrics
-    description: Observability and performance metrics
-  - name: Health
-    description: API health check
+    description: Script → tier-capped storyboard scene images
+  - name: Thumbnails
+    description: Tier-allowed thumbnail option sets
+  - name: Tiers
+    description: Public tier catalog (drives honest UI selectors)
+  - name: Observability
+    description: Prometheus metrics, JSON snapshot, health rollup
 
-# ─── Components ──────────────────────────────────────────────────
-
-components:
-  securitySchemes:
-    TierHeader:
-      type: apiKey
-      in: header
-      name: x-tier
-      description: |
-        Optional header to override the subscription tier for testing.
-        Values: `free`, `premium`. Defaults to `free` in production.
-
-  schemas:
-    # ── Shared ──
-    ApiError:
-      type: object
-      required: [success, error, code]
-      properties:
-        success:
-          type: boolean
-          enum: [false]
-        error:
-          type: string
-          description: Human-readable error message.
-        code:
-          type: string
-          description: Machine-readable error code.
-          enum:
-            - BAD_REQUEST
-            - UPGRADE_REQUIRED
-            - RATE_LIMITED
-            - INTERNAL_ERROR
-            - NOT_FOUND
-        fields:
-          type: array
-          description: Field-level validation errors (400 only).
-          items:
-            type: object
-            properties:
-              field:
-                type: string
-              message:
-                type: string
-        upgradeMessage:
-          type: string
-          description: Upgrade prompt when tier limit is hit.
-      examples:
-        - value:
-            success: false
-            error: "Free plan limited to 4 scenes. Upgrade to Premium..."
-            code: "BAD_REQUEST"
-            fields:
-              - field: scenes
-                message: "Too many scenes for free tier"
-
-    # ── Storyboard ──
-    SceneInput:
-      type: object
-      required: [scene_number, visual_prompt]
-      properties:
-        scene_number:
-          type: integer
-          minimum: 1
-          description: Sequential scene number.
-        visual_prompt:
-          type: string
-          minLength: 1
-          maxLength: 2000
-          description: Text prompt for image generation.
-        motion_prompt:
-          type: string
-          maxLength: 500
-          description: Camera motion instruction.
-        duration:
-          type: integer
-          minimum: 2
-          maximum: 30
-          default: 5
-        transition:
-          type: string
-          enum: [cut, fade, dissolve, slide, zoom]
-          default: cut
-        beat_type:
-          type: string
-          enum: [intro, hook, content, climax, outro]
-          default: content
-
-    SceneOutput:
-      type: object
-      properties:
-        scene_number:
-          type: integer
-        image_url:
-          type: string
-          format: uri
-          description: Public URL of the generated scene image.
-        provider:
-          type: string
-          description: Which provider served this image.
-        from_fallback:
-          type: boolean
-          description: True if served by the Pollinations fallback.
-        duration:
-          type: integer
-        transition:
-          type: string
-        beat_type:
-          type: string
-        degraded:
-          type: boolean
-          description: True if the provider experienced errors.
-
-    StoryboardRequest:
-      type: object
-      required: [topic, scenes]
-      properties:
-        topic:
-          type: string
-          minLength: 1
-          maxLength: 500
-        script:
-          type: string
-          maxLength: 10000
-        scenes:
-          type: array
-          minItems: 1
-          maxItems: 100
-          items:
-            $ref: "#/components/schemas/SceneInput"
-        tier:
-          type: string
-          enum: [free, premium]
-          default: free
-        brand:
-          type: string
-          enum: [Tube.Flash, Tube.Pro, Tube.Cinematic]
-          default: Tube.Flash
-        aspect_ratio:
-          type: string
-          enum: ["9:16", "16:9", "1:1"]
-          default: "16:9"
-        seed:
-          type: integer
-          description: Optional seed for reproducible results.
-
-    StoryboardResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          type: object
-          properties:
-            topic:
-              type: string
-            tier:
-              type: string
-            brand:
-              type: string
-            aspect_ratio:
-              type: string
-            scenes:
-              type: array
-              items:
-                $ref: "#/components/schemas/SceneOutput"
-            total_scenes:
-              type: integer
-            requested_scenes:
-              type: integer
-            truncated:
-              type: boolean
-              description: True when scenes were truncated due to tier limits.
-            upgrade_message:
-              type: string
-            limits:
-              type: object
-              properties:
-                max_scenes:
-                  type: integer
-                allowed_brands:
-                  type: array
-                  items:
-                    type: string
-
-    # ── Thumbnail ──
-    ThumbnailRequest:
-      type: object
-      required: [title, emotion, style]
-      properties:
-        title:
-          type: string
-          minLength: 1
-          maxLength: 300
-        emotion:
-          type: string
-          minLength: 1
-          maxLength: 100
-        style:
-          type: string
-          minLength: 1
-          maxLength: 200
-        aspect_ratio:
-          type: string
-          enum: ["9:16", "16:9", "1:1", "4:5"]
-          default: "16:9"
-        count:
-          type: integer
-          minimum: 1
-          maximum: 4
-          default: 4
-        tier:
-          type: string
-          enum: [free, premium]
-          default: free
-        brand:
-          type: string
-          enum: [Tube.Flash, Tube.Pro, Tube.Cinematic]
-          default: Tube.Pro
-        seed:
-          type: integer
-
-    ThumbnailOutput:
-      type: object
-      properties:
-        index:
-          type: integer
-        url:
-          type: string
-          format: uri
-        provider:
-          type: string
-        from_fallback:
-          type: boolean
-        info:
-          type: string
-
-    ThumbnailResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-        data:
-          type: object
-          properties:
-            title:
-              type: string
-            emotion:
-              type: string
-            style:
-              type: string
-            aspect_ratio:
-              type: string
-            tier:
-              type: string
-            brand:
-              type: string
-            thumbnails:
-              type: array
-              items:
-                $ref: "#/components/schemas/ThumbnailOutput"
-            total_generated:
-              type: integer
-            requested:
-              type: integer
-            truncated:
-              type: boolean
-            upgrade_message:
-              type: string
-            degraded:
-              type: boolean
-            providers_attempted:
-              type: array
-              items:
-                type: string
-            total_latency_ms:
-              type: integer
-
-    # ── Metrics ──
-    MetricsResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-        data:
-          type: object
-          properties:
-            timestamp:
-              type: integer
-            uptimeMs:
-              type: integer
-            counters:
-              type: object
-              additionalProperties:
-                type: object
-                properties:
-                  count:
-                    type: integer
-                  lastSeen:
-                    type: integer
-            latency:
-              type: object
-              properties:
-                p50:
-                  type: integer
-                p95:
-                  type: integer
-                p99:
-                  type: integer
-            providers:
-              type: object
-              additionalProperties:
-                type: object
-                properties:
-                  success:
-                    type: integer
-                  failures:
-                    type: integer
-                  keyRotations:
-                    type: integer
-                  totalLatencyMs:
-                    type: integer
-            totalGenerations:
-              type: integer
-            successfulGenerations:
-              type: integer
-            failedGenerations:
-              type: integer
-            fallbackCount:
-              type: integer
-            fallbackRate:
-              type: number
-              format: float
+security:
+  - bearerAuth: []
 
 # ─── Paths ───────────────────────────────────────────────────────
 
@@ -374,133 +57,524 @@ paths:
   /storyboard:
     post:
       tags: [Storyboard]
-      summary: Generate storyboard scene images
+      summary: Generate a storyboard from a video script
       description: |
-        Accepts a topic and array of scenes. Returns generated images
-        with provider provenance. Free tier limited to 4 scenes with
-        Tube.Flash only. Premium tier supports unlimited scenes and
-        all brands.
+        Full assembly: rate-limit gate → Zod validation → manager planning
+        (LLM) → tier scene cap → per-scene routing + generation →
+        aggregation. Failed scenes are rows with `error`, never thrown
+        exceptions; the endpoint itself only returns non-200 for request,
+        planner, or rate-limit failures.
+      operationId: generateStoryboard
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/StoryboardRequest"
-            example:
-              topic: "10 React Performance Tips"
-              scenes:
-                - scene_number: 1
-                  visual_prompt: "Developer coding on a modern laptop, clean desk setup"
-                  duration: 5
-                  transition: fade
-                  beat_type: intro
-                - scene_number: 2
-                  visual_prompt: "React logo with performance metrics overlay"
-                  duration: 5
-                  transition: cut
-                  beat_type: content
-              tier: free
-              brand: Tube.Flash
-              aspect_ratio: "16:9"
       responses:
         "200":
-          description: Successful generation with tier enforcement applied
+          description: Storyboard generated (check per-scene `status`).
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/XRateLimitLimit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/XRateLimitRemaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/XRateLimitReset"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/StoryboardResponse"
         "400":
-          description: Validation error
+          description: Validation failed (`invalid_request`).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiError"
-        "402":
-          description: Upgrade required (premium-only feature)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
+                $ref: "#/components/schemas/Error"
         "429":
-          description: Rate limited
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: Manager planner unavailable (`planner_unavailable`).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiError"
-        "500":
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
+                $ref: "#/components/schemas/Error"
 
-  /thumbnail:
+  /thumbnails:
     post:
-      tags: [Thumbnail]
-      summary: Generate video thumbnails
+      tags: [Thumbnails]
+      summary: Generate a tier-allowed set of thumbnail options
       description: |
-        Generates thumbnail images with tier-based count clamping.
-        Free: max 2 thumbnails, Tube.Flash only.
-        Premium: up to 4 thumbnails, all brands.
+        No planner call — direct art-directed prompts (zero manager-brain
+        tokens). `count` must be one of the caller tier's
+        `thumbnailOptions` (see `/tiers`); anything else is a 400, not a
+        silent clamp.
+      operationId: generateThumbnails
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ThumbnailRequest"
-            example:
-              title: "Best AI Tools 2026"
-              emotion: "Exciting"
-              style: "Modern"
-              aspect_ratio: "16:9"
-              count: 4
-              tier: premium
-              brand: Tube.Cinematic
+              $ref: "#/components/schemas/ThumbnailsRequest"
       responses:
         "200":
-          description: Successful generation
+          description: Thumbnail options generated.
+          headers:
+            X-RateLimit-Limit:
+              $ref: "#/components/headers/XRateLimitLimit"
+            X-RateLimit-Remaining:
+              $ref: "#/components/headers/XRateLimitRemaining"
+            X-RateLimit-Reset:
+              $ref: "#/components/headers/XRateLimitReset"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ThumbnailResponse"
+                $ref: "#/components/schemas/ThumbnailsResponse"
         "400":
-          $ref: "#/components/responses/ValidationError"
+          description: |
+            Validation failed (`invalid_request`) or the requested count is
+            not in the tier's allowed options (`thumbnail_count_not_allowed`,
+            with `details.allowed` for UI correction).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "429":
           $ref: "#/components/responses/RateLimited"
 
-  /metrics:
+  /tiers:
     get:
-      tags: [Metrics]
-      summary: Get in-memory performance metrics
+      tags: [Tiers]
+      summary: Public tier catalog
       description: |
-        Returns counters, provider-level breakdowns, and latency
-        percentiles. Reset on every cold start (Vercel redeploy).
-        Use `?reset=1` to clear counters.
-      parameters:
-        - in: query
-          name: reset
-          schema:
-            type: string
-            enum: ["1"]
-          description: Pass `1` to reset all metrics counters.
+        Anonymous-friendly: this is the exact source UI selectors read so
+        they can HIDE disallowed options instead of erroring after the
+        fact. Values come from server policy (`TIER_LIMITS` env overlays
+        included).
+      operationId: getTiers
+      security: []
       responses:
         "200":
-          description: Metrics snapshot
+          description: Tier catalog in canonical order (free, pro, cinematic).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MetricsResponse"
+                $ref: "#/components/schemas/TiersResponse"
+
+  /metrics:
+    get:
+      tags: [Observability]
+      summary: Prometheus text exposition (v0.0.4)
+      description: |
+        Counters/gauges only; label values come exclusively from internal
+        enums (providers, tiers, routing reasons) — user text can never
+        become a label. `tubeclick_breaker_state` semantics:
+        0 = closed, 1 = half-open, 2 = open.
+      operationId: getMetrics
+      security: []
+      responses:
+        "200":
+          description: Prometheus exposition format.
+          content:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+                example: |
+                  # HELP tubeclick_images_generated_total Successful scene generations.
+                  # TYPE tubeclick_images_generated_total counter
+                  tubeclick_images_generated_total 4
+                  tubeclick_breaker_state{provider="agnes"} 2
+
+  /metrics.json:
+    get:
+      tags: [Observability]
+      summary: Same observability truth as JSON
+      operationId: getMetricsJson
+      security: []
+      responses:
+        "200":
+          description: Structured observability snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ObservabilitySnapshot"
 
   /health:
     get:
-      tags: [Health]
-      summary: Health check
+      tags: [Observability]
+      summary: Health rollup for orchestrators/uptime checks
+      description: |
+        `ok` when every provider lane flows; `degraded` when any lane is
+        down but the URL-only ultimate lane still serves; `down` (503)
+        only when nothing can serve images.
+      operationId: getHealth
+      security: []
       responses:
         "200":
-          description: API is healthy
+          description: "`ok` or `degraded` — images are being produced."
           content:
             application/json:
-              example:
-                status: ok
-                version: "1"
-                timestamp: "2026-07-18T12:00:00.000Z"
+              schema:
+                $ref: "#/components/schemas/HealthReport"
+        "503":
+          description: "`down` — no lane can produce images."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthReport"
+
+# ─── Components ──────────────────────────────────────────────────
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase session access token; the server maps it to tier + identity.
+
+  headers:
+    XRateLimitLimit:
+      description: Bucket capacity for this tier's rule.
+      schema: { type: integer, example: 10 }
+    XRateLimitRemaining:
+      description: Tokens remaining after this request.
+      schema: { type: integer, example: 9 }
+    XRateLimitReset:
+      description: Epoch seconds when the bucket is full again.
+      schema: { type: integer, example: 1800000060 }
+    RetryAfter:
+      description: Seconds until the next token (present on denials).
+      schema: { type: integer, example: 6 }
+
+  responses:
+    RateLimited:
+      description: |
+        Tier rate limit exceeded (`rate_limit_exceeded`). Fire before any
+        expensive work — no planner tokens or provider calls were consumed.
+      headers:
+        X-RateLimit-Limit:
+          $ref: "#/components/headers/XRateLimitLimit"
+        X-RateLimit-Remaining:
+          $ref: "#/components/headers/XRateLimitRemaining"
+        X-RateLimit-Reset:
+          $ref: "#/components/headers/XRateLimitReset"
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    # —— Requests ————————————————————————————————————————
+    StoryboardRequest:
+      type: object
+      additionalProperties: false
+      required: [script]
+      properties:
+        script:
+          type: string
+          minLength: 10
+          maxLength: 50000
+          description: Full video script the manager plans scenes from.
+        seed:
+          type: integer
+          minimum: 0
+          description: Base reproducibility seed; per-scene seeds derive from it.
+
+    ThumbnailsRequest:
+      type: object
+      additionalProperties: false
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+          minLength: 3
+          maxLength: 2000
+          description: Thumbnail concept prompt (art-directed by the caller).
+        negativePrompt:
+          type: string
+          maxLength: 2000
+        seed:
+          type: integer
+          minimum: 0
+        count:
+          type: integer
+          minimum: 1
+          maximum: 4
+          description: Must be one of the tier's `thumbnailOptions` (see /tiers).
+
+    # —— Shared domain ———————————————————————————————————
+    UserTier:
+      type: string
+      enum: [free, pro, cinematic]
+
+    ProviderId:
+      type: string
+      enum: [agnes, gemini, hf, pollinations]
+      description: Internal provider identifiers (never shown to end users).
+
+    ProviderTier:
+      type: string
+      enum: [free, premium]
+
+    SceneStatus:
+      type: string
+      enum: [success, failed]
+
+    StoryboardScene:
+      type: object
+      required: [sceneIndex, status, isFallback, attempts, latencyMs]
+      properties:
+        sceneIndex:
+          type: integer
+        status:
+          $ref: "#/components/schemas/SceneStatus"
+        imageUrl:
+          type: string
+          description: Present on success; may be a pass-through URL never fetched server-side.
+        provider:
+          $ref: "#/components/schemas/ProviderId"
+        costTier:
+          $ref: "#/components/schemas/ProviderTier"
+        isFallback:
+          type: boolean
+          description: True when the result arrived via the fallback cascade.
+        attempts:
+          type: integer
+          description: Provider generate() calls consumed (0 when routing was impossible).
+        latencyMs:
+          type: number
+        error:
+          type: string
+          description: Sanitized failure detail (key material is scrubbed server-side).
+
+    StoryboardSummary:
+      type: object
+      required: [total, succeeded, failed, fallbackTriggered, premiumScenes, totalKeyRotations, avgLatencyMs]
+      properties:
+        total: { type: integer }
+        succeeded: { type: integer }
+        failed: { type: integer }
+        fallbackTriggered:
+          type: integer
+          description: Scenes where any fallback fired.
+        premiumScenes:
+          type: integer
+          description: Scenes produced by a premium provider (margin watch).
+        totalKeyRotations: { type: integer }
+        avgLatencyMs: { type: number }
+
+    CharacterProfile:
+      type: object
+      required: [name, description, styleGuide, negativePrompt]
+      properties:
+        name: { type: string }
+        description:
+          type: string
+          description: Canonical visual description reused in every scene prompt.
+        styleGuide: { type: string }
+        negativePrompt: { type: string }
+
+    AnalyzeMeta:
+      type: object
+      required: [model, attempts, complexityOverrides, llmLatencyMs]
+      properties:
+        model: { type: string }
+        attempts:
+          type: integer
+          description: LLM calls consumed (1 = clean first pass).
+        complexityOverrides:
+          type: integer
+          description: Server overrides applied to LLM complexity tags.
+        llmLatencyMs: { type: number }
+
+    # —— Responses ———————————————————————————————————————
+    StoryboardResponse:
+      type: object
+      required: [tier, plannedScenes, generatedScenes, truncated, remainingScenes, characterProfile, scenes, summary, meta]
+      properties:
+        tier:
+          $ref: "#/components/schemas/UserTier"
+        plannedScenes:
+          type: integer
+          description: Scenes the manager planned (pre-cap).
+        generatedScenes:
+          type: integer
+          description: Scenes actually attempted (post tier cap).
+        truncated:
+          type: boolean
+          description: True when the tier cap clipped planned scenes.
+        remainingScenes:
+          type: integer
+          description: Scenes withheld by the cap (UI upsell driver).
+        characterProfile:
+          anyOf:
+            - $ref: "#/components/schemas/CharacterProfile"
+            - type: "null"
+        scenes:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoryboardScene"
+        summary:
+          $ref: "#/components/schemas/StoryboardSummary"
+        meta:
+          $ref: "#/components/schemas/AnalyzeMeta"
+
+    ThumbnailsResponse:
+      type: object
+      required: [tier, count, thumbnails, summary]
+      properties:
+        tier:
+          $ref: "#/components/schemas/UserTier"
+        count:
+          type: integer
+          description: Options actually generated (the policy-resolved count).
+        thumbnails:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoryboardScene"
+        summary:
+          $ref: "#/components/schemas/StoryboardSummary"
+
+    TierCatalogEntry:
+      type: object
+      required: [tier, maxScenes, unlimitedScenes, thumbnailOptions]
+      properties:
+        tier:
+          $ref: "#/components/schemas/UserTier"
+        maxScenes:
+          type: integer
+          nullable: true
+          description: Scene cap for storyboards; null = unlimited.
+        unlimitedScenes:
+          type: boolean
+        thumbnailOptions:
+          type: array
+          items: { type: integer, enum: [1, 2, 4] }
+          description: Counts this tier may request at POST /thumbnails.
+      example:
+        tier: free
+        maxScenes: 4
+        unlimitedScenes: false
+        thumbnailOptions: [1, 2]
+
+    TiersResponse:
+      type: object
+      required: [tiers]
+      properties:
+        tiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TierCatalogEntry"
+          description: Canonical order — free, pro, cinematic.
+
+    ErrorCode:
+      type: string
+      enum: [invalid_request, thumbnail_count_not_allowed, planner_unavailable, rate_limit_exceeded, internal_error]
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              $ref: "#/components/schemas/ErrorCode"
+            message:
+              type: string
+            details:
+              description: Optional machine-usable context (e.g. issues for 400, allowed counts).
+      example:
+        error:
+          code: thumbnail_count_not_allowed
+          message: 'tier "free" allows thumbnail counts [1, 2] — requested 4'
+          details: { requested: 4, allowed: [1, 2] }
+
+    # —— Observability ———————————————————————————————————
+    HealthProviderState:
+      type: object
+      required: [provider, state, source]
+      properties:
+        provider:
+          $ref: "#/components/schemas/ProviderId"
+        state:
+          type: string
+          enum: [up, degraded, down]
+        source:
+          type: string
+          enum: [breaker, config]
+          description: Why — live circuit read, or static configuration.
+
+    HealthReport:
+      type: object
+      required: [status, providers, breakersOpen, images, ts]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/HealthProviderState"
+        breakersOpen:
+          type: integer
+        images:
+          type: object
+          required: [generated, failed]
+          properties:
+            generated: { type: integer }
+            failed: { type: integer }
+        ts:
+          type: integer
+          description: Snapshot time (epoch ms).
+
+    ObservabilitySnapshot:
+      type: object
+      required: [ts, generator, routing, outcomes, breakers]
+      properties:
+        ts:
+          type: integer
+        generator:
+          type: object
+          description: Generator metrics (scenes/images/fallbacks/rotations/latency percentiles).
+        routing:
+          type: object
+          description: Routing decision ledger (totals, premium vs free, reasons).
+        outcomes:
+          type: object
+          description: Recorded per-scene outcomes.
+        breakers:
+          type: array
+          items:
+            type: object
+            required: [provider, state, consecutiveFailures, totalTrips, totalSuccesses]
+            properties:
+              provider:
+                $ref: "#/components/schemas/ProviderId"
+              state:
+                type: string
+                enum: [closed, half-open, open]
+              consecutiveFailures: { type: integer }
+              totalTrips: { type: integer }
+              totalSuccesses: { type: integer }
+              lastFailureKind: { type: string }
+        rateLimiter:
+          type: object
+          description: Present when a tier rate limiter is mounted.
+          properties:
+            buckets: { type: integer }
+            rules:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  capacity: { type: integer }
+                  refillPerMinute: { type: integer }
