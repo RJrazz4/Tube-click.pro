@@ -7,6 +7,7 @@
  *   execute (D3)   decision chain → cascade with breaker as observer+gate
  *   breaker (D4)   healthMap feeds routing; blame/credit per verdict
  *   tracker (C4)   decision sink (route() emits it)
+ *   promptsmith (Phase 1) Ingest raw Hinglish/notes → strict English prompt
  *
  * A3's contract holds absolutely here: ONE RESULT PER SCENE, ALWAYS.
  * Success carries imageUrl; failure carries a sanitized error. Even
@@ -29,6 +30,7 @@ import type {
   ScenePlan,
   UserTier,
 } from "../types/index.js";
+import type { PromptsmithService } from "../promptsmith/index.js";
 
 export interface ScenePipelineContext {
   /** Business identity for this request's tier enforcement (F1). */
@@ -39,6 +41,10 @@ export interface ScenePipelineContext {
   breaker?: CircuitBreaker;
   /** C4 sink for routing decisions. */
   tracker?: DecisionRecorder;
+  /** Optional Promptsmith service for optimizing scene prompts before image generation. */
+  promptsmith?: PromptsmithService;
+  /** Max retries for primary provider with optimized prompt before falling back; default 1 when promptsmith present. */
+  maxPrimaryRetries?: number;
   /**
    * Base reproducibility seed. Per-scene seed = seed + scene.index, so a
    * storyboard stays deterministic while scenes don't share one image.
@@ -77,9 +83,29 @@ export async function generateScene(
   const startedAt = now();
   const breaker = ctx.breaker;
 
+  let promptToUse = scene.prompt;
+  let negativePromptToUse = scene.negativePrompt;
+  if (ctx.promptsmith !== undefined) {
+    try {
+      const optimized = await ctx.promptsmith.optimize({ rawInput: scene.prompt });
+      promptToUse = optimized.spec.rawPrompt;
+      if (optimized.spec.negativePrompts) {
+        negativePromptToUse = optimized.spec.negativePrompts;
+      }
+    } catch {
+      // Fallback to scene prompt if optimization fails
+    }
+  }
+
+  const optimizedScene: ScenePlan = {
+    ...scene,
+    prompt: promptToUse,
+    negativePrompt: negativePromptToUse,
+  };
+
   let decision: RoutingDecision;
   try {
-    decision = route(scene, {
+    decision = route(optimizedScene, {
       tier: ctx.tier,
       providers: ctx.providers,
       ...(breaker !== undefined ? { health: breaker.healthMap() } : {}),
@@ -103,7 +129,7 @@ export async function generateScene(
     ctx.providers.map((provider) => [provider.id, provider]),
   );
 
-  const execution = await executeWithFallback(decision, sceneToRequest(scene, ctx), {
+  const execution = await executeWithFallback(decision, sceneToRequest(optimizedScene, ctx), {
     providers: registry,
     ...(breaker !== undefined
       ? {
@@ -111,6 +137,10 @@ export async function generateScene(
           isAllowed: (provider: ProviderId) => breaker.isRequestAllowed(provider),
         }
       : {}),
+    ...(ctx.promptsmith !== undefined ? { promptsmith: ctx.promptsmith } : {}),
+    ...(ctx.maxPrimaryRetries !== undefined
+      ? { maxPrimaryRetries: ctx.maxPrimaryRetries }
+      : { maxPrimaryRetries: ctx.promptsmith !== undefined ? 1 : 0 }),
     now,
   });
   return execution.result;
