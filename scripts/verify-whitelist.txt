@@ -1,0 +1,3 @@
+# Gate 4 whitelist — lines allowed to mention backend internals (privacy/legal or admin config)
+# Format: <path-from-repo-root>:<line>   (one per line, # = comment)
+# Managed by Phase G2+ — keep EMPTY for public product surfaces.
