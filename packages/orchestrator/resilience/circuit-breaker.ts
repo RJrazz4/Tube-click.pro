@@ -38,6 +38,22 @@ export interface CircuitBreakerOptions {
   /** Base open → half-open window; Retry-After wins when longer. */
   cooldownMs?: number;
   now?: () => number;
+  /**
+   * H1 observability hook: fired on REAL state transitions (closed→open,
+   * half-open→closed recovery, half-open→open re-trip). Re-trips while
+   * already open and threshold path-tics do not fire. Observer errors are
+   * swallowed — telemetry must never break the breaker.
+   */
+  onStateChange?: (change: BreakerStateChange) => void;
+}
+
+/** Payload for the D4 → H1 state-change hook. */
+export interface BreakerStateChange {
+  provider: ProviderId;
+  from: BreakerState;
+  to: BreakerState;
+  totalTrips: number;
+  lastFailureKind?: ProviderErrorKind;
 }
 
 export interface BreakerSnapshotEntry {
@@ -65,12 +81,14 @@ export class CircuitBreaker {
   private readonly failureThreshold: number;
   private readonly cooldownMs: number;
   private readonly now: () => number;
+  private readonly onStateChange?: (change: BreakerStateChange) => void;
   private readonly circuits = new Map<ProviderId, ProviderCircuit>();
 
   constructor(options: CircuitBreakerOptions = {}) {
     this.failureThreshold = Math.max(1, options.failureThreshold ?? DEFAULT_FAILURE_THRESHOLD);
     this.cooldownMs = Math.max(0, options.cooldownMs ?? DEFAULT_PROVIDER_COOLDOWN_MS);
     this.now = options.now ?? Date.now;
+    if (options.onStateChange !== undefined) this.onStateChange = options.onStateChange;
   }
 
   /**
@@ -90,11 +108,13 @@ export class CircuitBreaker {
 
   /** D3 hook — a generation succeeded through this provider. Auto-recovery. */
   recordSuccess(provider: ProviderId): void {
+    const before = this.state(provider);
     const circuit = this.circuitFor(provider);
     circuit.totalSuccesses += 1;
     circuit.consecutiveFailures = 0;
     circuit.openedAt = undefined;
     circuit.openUntil = undefined;
+    this.fireStateChange(provider, before, circuit);
   }
 
   /**
@@ -104,15 +124,16 @@ export class CircuitBreaker {
    */
   recordFailure(provider: ProviderId, detection?: Detection): void {
     if (detection !== undefined && !isProviderRetryable(detection.kind)) return;
+    const before = this.state(provider);
     const circuit = this.circuitFor(provider);
     circuit.consecutiveFailures += 1;
     if (detection !== undefined) circuit.lastFailureKind = detection.kind;
 
     // A failed half-open probe re-opens immediately regardless of count.
-    const was = this.state(provider);
-    if (was === "half-open" || circuit.consecutiveFailures >= this.failureThreshold) {
+    if (before === "half-open" || circuit.consecutiveFailures >= this.failureThreshold) {
       this.trip(circuit, detection?.retryAfterMs);
     }
+    this.fireStateChange(provider, before, circuit);
   }
 
   /**
@@ -169,5 +190,27 @@ export class CircuitBreaker {
     circuit.openedAt = now;
     circuit.openUntil = now + Math.max(this.cooldownMs, retryAfterMs ?? 0);
     circuit.totalTrips += 1;
+  }
+
+  /** H1 hook: fire only on real state transitions; observer never breaks. */
+  private fireStateChange(
+    provider: ProviderId,
+    from: BreakerState,
+    circuit: ProviderCircuit,
+  ): void {
+    const to = this.state(provider);
+    if (from === to || this.onStateChange === undefined) return;
+    const change: BreakerStateChange = {
+      provider,
+      from,
+      to,
+      totalTrips: circuit.totalTrips,
+    };
+    if (circuit.lastFailureKind !== undefined) change.lastFailureKind = circuit.lastFailureKind;
+    try {
+      this.onStateChange(change);
+    } catch {
+      // telemetry must never break the breaker
+    }
   }
 }
