@@ -11,7 +11,8 @@
  * lib/orchestrator/progress-view.
  */
 import { useEffect, useState } from "react";
-import { Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
+import { Processing3D } from "@/components/ui/Processing3D";
 
 import { Button } from "@/components/ui/button";
 import { formatElapsedSeconds } from "@/lib/orchestrator/progress-view";
@@ -54,13 +55,15 @@ export function GenerationProgress({
         {Array.from({ length: slots }, (_, slot) => (
           <div
             key={slot}
-            className="aspect-video animate-pulse rounded-lg border border-border/60 bg-muted/40"
-          />
+            className="aspect-video animate-pulse rounded-lg border border-border/60 bg-muted/40 grid place-items-center"
+          >
+            <Processing3D variant="tile" size="sm" />
+          </div>
         ))}
       </div>
       <div className="flex flex-col items-center gap-2">
         <div className="flex items-center gap-2 text-sm font-medium">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Processing3D variant="tile" size="sm" />
           <span>
             {headline} — {formatElapsedSeconds(elapsedSeconds)}
           </span>
