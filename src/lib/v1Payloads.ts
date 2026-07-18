@@ -15,7 +15,7 @@
 // ─── Envelope ────────────────────────────────────────────────────
 
 export interface V1Envelope<T> {
-  success: boolean;
+  success?: boolean;
   data?: T;
 }
 
@@ -119,24 +119,43 @@ export interface BuildV1StoryboardArgs {
   script?: string;
 }
 
+export interface V1StoryboardSceneInput {
+  sceneNumber: number;
+  prompt: string;
+  motionPrompt?: string;
+}
+
+export interface BuildV1StoryboardScenesArgs {
+  topic: string;
+  scenes: V1StoryboardSceneInput[];
+  brand: string;
+  rawTier: string;
+  aspectRatio: string;
+  /** Optional full script (≤10000 chars, gives the server scene context). */
+  script?: string;
+}
+
 /**
- * Builds a single-scene v1 storyboard request. The per-scene pattern keeps
- * the UI's individual scene progress/retry/timeout logic intact while every
- * request passes the strict Zod scene schema (invalid enum fields like the
- * analysis beat_type labels "Opening Hook" are simply omitted — server
- * defaults apply).
+ * Batch variant — POST /api/v1/storyboard accepts 1..100 scenes per call.
+ * Used by the orchestrator client to generate every planned scene in one
+ * request. Analysis fields that violate the Zod scene enums (e.g. beat_type
+ * labels like "Opening Hook") are simply omitted — server defaults apply.
  */
-export function buildV1StoryboardBody(a: BuildV1StoryboardArgs): V1StoryboardBody {
-  const scene: V1StoryboardScene = {
-    scene_number: clampInt(a.sceneNumber, 1, 999, 1),
-    visual_prompt: nonEmpty(a.prompt, "Cinematic scene, professional lighting", 2000),
-  };
-  const motion = (a.motionPrompt ?? "").trim();
-  if (motion) scene.motion_prompt = motion.slice(0, 500);
+export function buildV1StoryboardScenesBody(a: BuildV1StoryboardScenesArgs): V1StoryboardBody {
+  const rawScenes = a.scenes.length > 0 ? a.scenes : [{ sceneNumber: 1, prompt: "" }];
+  const scenes: V1StoryboardScene[] = rawScenes.slice(0, 100).map((s, i) => {
+    const scene: V1StoryboardScene = {
+      scene_number: clampInt(s.sceneNumber, 1, 999, i + 1),
+      visual_prompt: nonEmpty(s.prompt, "Cinematic scene, professional lighting", 2000),
+    };
+    const motion = (s.motionPrompt ?? "").trim();
+    if (motion) scene.motion_prompt = motion.slice(0, 500);
+    return scene;
+  });
 
   const body: V1StoryboardBody = {
     topic: nonEmpty(a.topic, "Untitled video", 500),
-    scenes: [scene],
+    scenes,
     tier: toV1Tier(a.rawTier),
     brand: (BRAND_SET.has(a.brand) ? a.brand : "Tube.Flash") as V1ImageBrand,
     aspect_ratio: (SB_ASPECT_SET.has(a.aspectRatio) ? a.aspectRatio : "16:9") as V1StoryboardBody["aspect_ratio"],
@@ -144,4 +163,26 @@ export function buildV1StoryboardBody(a: BuildV1StoryboardArgs): V1StoryboardBod
   const script = (a.script ?? "").trim();
   if (script) body.script = script.slice(0, 10000);
   return body;
+}
+
+/**
+ * Builds a single-scene v1 storyboard request. The per-scene pattern keeps
+ * the UI's individual scene progress/retry/timeout logic intact while every
+ * request passes the strict Zod scene schema.
+ */
+export function buildV1StoryboardBody(a: BuildV1StoryboardArgs): V1StoryboardBody {
+  return buildV1StoryboardScenesBody({
+    topic: a.topic,
+    brand: a.brand,
+    rawTier: a.rawTier,
+    aspectRatio: a.aspectRatio,
+    ...(a.script !== undefined ? { script: a.script } : {}),
+    scenes: [
+      {
+        sceneNumber: a.sceneNumber,
+        prompt: a.prompt,
+        ...(a.motionPrompt !== undefined ? { motionPrompt: a.motionPrompt } : {}),
+      },
+    ],
+  });
 }

@@ -9,7 +9,11 @@
 
 import { validateThumbnailRequest } from "../apps/api/src/routes/validation/thumbnail";
 import { validateStoryboardRequest } from "../apps/api/src/routes/validation/storyboard";
-import { buildV1ThumbnailBody, buildV1StoryboardBody } from "../src/lib/v1Payloads";
+import {
+  buildV1ThumbnailBody,
+  buildV1StoryboardBody,
+  buildV1StoryboardScenesBody,
+} from "../src/lib/v1Payloads";
 
 let pass = 0, fail = 0;
 const check = (name: string, ok: boolean, detail?: unknown) => {
@@ -43,6 +47,20 @@ const sbCases: Array<[string, ReturnType<typeof buildV1StoryboardBody>]> = [
   ["scene_number 0 → clamped ≥1", buildV1StoryboardBody({ topic: "t", prompt: "ok", sceneNumber: 0, brand: "Tube.Flash", rawTier: "free", aspectRatio: "16:9" })],
 ];
 for (const [name, body] of sbCases) {
+  const r = validateStoryboardRequest(body);
+  check(name, !r.errors, r.errors);
+}
+
+console.log("\n[2b] Orchestrator client BATCH payloads → storyboardRequestSchema");
+const batchBase = { brand: "Tube.Flash", rawTier: "free", aspectRatio: "16:9" };
+const batchCases: Array<[string, ReturnType<typeof buildV1StoryboardScenesBody>]> = [
+  ["10 analyzed scenes → batch valid", buildV1StoryboardScenesBody({ topic: "Pasta masterclass script", scenes: Array.from({ length: 10 }, (_, i) => ({ sceneNumber: i + 1, prompt: `scene ${i + 1} visual`, ...(i % 2 ? {} : { motionPrompt: "slow zoom" }) })), script: "s".repeat(500), ...batchBase })],
+  ["empty scenes[] → 1 safe fallback scene (min 1)", buildV1StoryboardScenesBody({ topic: "t", scenes: [], ...batchBase })],
+  ["150 scenes → sliced to 100 (max)", buildV1StoryboardScenesBody({ topic: "t", scenes: Array.from({ length: 150 }, (_, i) => ({ sceneNumber: i + 1, prompt: "p" })), ...batchBase })],
+  ["scene_number 0/NaN → clamped ≥1", buildV1StoryboardScenesBody({ topic: "t", scenes: [{ sceneNumber: 0, prompt: "p" }, { sceneNumber: Number.NaN, prompt: "q" }], ...batchBase })],
+  ["pro tier + Tube.Pro brand passthrough", buildV1StoryboardScenesBody({ topic: "t", scenes: [{ sceneNumber: 1, prompt: "p" }], brand: "Tube.Pro", rawTier: "pro", aspectRatio: "9:16" })],
+];
+for (const [name, body] of batchCases) {
   const r = validateStoryboardRequest(body);
   check(name, !r.errors, r.errors);
 }
