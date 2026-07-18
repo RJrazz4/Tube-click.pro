@@ -14,13 +14,13 @@
  *                              Pollinations is exactly this path
  *   abort                    → stop the cascade; nothing downstream helps
  *
+ * PLUS Phase 1 Router Stability:
+ *   - Primary pre-fallback retries (`maxPrimaryRetries`) with Promptsmith
+ *     optimized prompt integration before cascading to backup engines.
+ *
  * The executor NEVER throws: every path resolves into a GenerationResult
  * (success or failed) plus per-hop telemetry. Downstream phases consume:
  *   E2/E3 → the GenerationResult   E4/H2 → hops   C4 → recordOutcome(result)
- *
- * Scalability invariants: no internal state, no timers, no sleeps — safe
- * to run thousands of cascades concurrently; all waiting policy lives in
- * the C1 queues and the D4 breaker.
  */
 import { detect, sanitizeMessage, type Detection, type DetectorAction } from "./detector.js";
 import type {
@@ -34,6 +34,7 @@ import type {
   ProviderId,
   RoutingDecision,
 } from "../types/index.js";
+import type { PromptsmithRequest, PromptsmithResult } from "../promptsmith/types.js";
 
 /** One generate() call inside the cascade (key rotations repeat a provider). */
 export interface FallbackHop {
@@ -80,6 +81,12 @@ export interface FallbackExecutorOptions {
   detect?: DetectionFn;
   /** Same-provider retries on rotate-key/exhaust-key verdicts; default 1. */
   maxKeyRotations?: number;
+  /** Max retries for primary provider with optimized prompt before falling back; default 0. */
+  maxPrimaryRetries?: number;
+  /** Optional Promptsmith service to re-optimize prompt on primary retry. */
+  promptsmith?: {
+    optimize(req: PromptsmithRequest): Promise<PromptsmithResult>;
+  };
   now?: () => number;
 }
 
@@ -98,6 +105,7 @@ export async function executeWithFallback(
   const attemptFn: AttemptFn = options.attempt ?? ((provider, req) => provider.generate(req));
   const detectFn: DetectionFn = options.detect ?? detect;
   const maxKeyRotations = Math.max(0, options.maxKeyRotations ?? 1);
+  const maxPrimaryRetries = Math.max(0, options.maxPrimaryRetries ?? 0);
 
   const registry = options.providers;
   const resolve = (id: ProviderId): ImageProvider | undefined => {
@@ -107,11 +115,13 @@ export async function executeWithFallback(
 
   const chain: ProviderId[] = [decision.providerId, ...decision.fallbacks];
   const hops: FallbackHop[] = [];
-  /** generate() calls actually made; hops marked "skipped" never counted. */
   let attempts = 0;
   let keyRotations = 0;
   let lastFailure: { provider: ImageProvider; detection: Detection } | undefined;
   let result: GenerationResult | undefined;
+
+  let currentRequest: ImageGenerateRequest = { ...request };
+  let primaryRetriesDone = 0;
 
   const emit = (hop: FallbackHop): void => {
     hops.push(hop);
@@ -159,7 +169,7 @@ export async function executeWithFallback(
       const hopStartedAt = now();
       attempts += 1;
       try {
-        const generated = await attemptFn(provider, request);
+        const generated = await attemptFn(provider, currentRequest);
         options.observer?.recordSuccess(providerId);
         keyRotations += generated.keyRotations;
         emit({
@@ -186,9 +196,33 @@ export async function executeWithFallback(
         const retrySameProvider =
           (detection.action === "rotate-key" || detection.action === "exhaust-key") &&
           rotations < maxKeyRotations;
+
+        // Phase 1 Router Stability: Check if primary provider can retry with optimized prompt before fallback
+        const canRetryPrimary =
+          position === 0 &&
+          primaryRetriesDone < maxPrimaryRetries &&
+          detection.action !== "abort" &&
+          detection.kind !== "invalid_request";
+
+        if (canRetryPrimary) {
+          primaryRetriesDone += 1;
+          emitFailure(providerId, position, detection, now() - hopStartedAt);
+          if (options.promptsmith !== undefined) {
+            try {
+              const optimized = await options.promptsmith.optimize({ rawInput: currentRequest.prompt });
+              currentRequest = {
+                ...currentRequest,
+                prompt: optimized.spec.rawPrompt,
+                ...(optimized.spec.negativePrompts ? { negativePrompt: optimized.spec.negativePrompts } : {}),
+              };
+            } catch {
+              // Keep current prompt if optimization fails
+            }
+          }
+          continue;
+        }
+
         if (retrySameProvider) {
-          // Key-level problem, NOT provider health — the lane's next lease
-          // uses a fresh key; the breaker stays unblamed.
           rotations += 1;
           keyRotations += 1;
         } else if (detection.action === "cooldown-provider") {
