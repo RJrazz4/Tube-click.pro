@@ -391,6 +391,7 @@ function AccountSection() {
 function DashboardSection() {
   const { tier, setTier } = useAppStore();
   const features = useFeatures();
+  const dailyUsage = useDailyUsage();
 
   return (
     <div className="space-y-6">

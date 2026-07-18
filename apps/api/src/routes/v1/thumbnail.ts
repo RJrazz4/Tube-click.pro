@@ -43,10 +43,29 @@ function getProviders(): ImageProvider[] {
   const loaded: ImageProvider[] = [];
 
   try { loaded.push(new AgnesFlashAdapter()); }
-  catch { logger.info("thumbnail.providers", "AgnesFlashAdapter not configured, skipping"); }
+  catch (e) {
+    logger.warn(
+      "thumbnail.providers",
+      "AgnesFlashAdapter skipped — AGNES_FLASH_API_KEYS missing or invalid; thumbnails will fall back to the backup engine",
+      { error: e instanceof Error ? e.message : String(e) },
+    );
+  }
 
   try { loaded.push(new GeminiFlashAdapter()); }
-  catch { logger.info("thumbnail.providers", "GeminiFlashAdapter not configured, skipping"); }
+  catch (e) {
+    logger.warn(
+      "thumbnail.providers",
+      "GeminiFlashAdapter skipped — GEMINI_API_KEY missing or invalid; thumbnails will fall back to the backup engine",
+      { error: e instanceof Error ? e.message : String(e) },
+    );
+  }
+
+  if (loaded.length === 0) {
+    logger.warn(
+      "thumbnail.providers",
+      "No primary image providers configured — every thumbnail will be served by the backup engine. Set AGNES_FLASH_API_KEYS and/or GEMINI_API_KEY to use the primary engine.",
+    );
+  }
 
   _providers = loaded;
   return _providers;
@@ -141,8 +160,19 @@ export async function handleThumbnailV1(req: Request): Promise<Response> {
       metrics.recordProvider(
         img.provider,
         img.url ? "success" : "failure",
-        report.totalLatencyMs
+        report.totalLatencyMs,
       );
+    }
+    // Surface the EXACT failure / fallback reason instead of swallowing it.
+    if (!img.url) {
+      logger.error("thumbnail.scene", "Thumbnail failed to generate", {
+        provider: img.provider,
+        error: img.error ?? "Generation failed",
+      });
+    } else if (img.fromFallback && img.error) {
+      logger.warn("thumbnail.scene", "Thumbnail served by backup engine", {
+        reason: img.error,
+      });
     }
   }
   if (report.usedFallback) metrics.increment("fallback.used");
@@ -169,6 +199,7 @@ export async function handleThumbnailV1(req: Request): Promise<Response> {
     url: img.url,
     provider: img.provider,
     from_fallback: img.fromFallback,
+    ...(img.error ? { error: img.error } : {}),
     ...(img.meta?.info ? { info: img.meta.info } : {}),
   }));
 

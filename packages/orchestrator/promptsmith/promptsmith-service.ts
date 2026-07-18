@@ -71,9 +71,14 @@ export class PromptsmithService {
             };
           }
         }
-      } catch {
-        // Continue to retry or fallback
-      }
+    } catch (e) {
+      // Stop the silent fail: surface the EXACT LLM error so the operator
+      // can see WHY Promptsmith degraded to the rule-based fallback.
+      console.error(
+        "[promptsmith] optimize attempt failed:",
+        e instanceof Error ? e.message : String(e),
+      );
+    }
     }
 
     const spec = fallbackOptimizePrompt(raw, req.styleHint);

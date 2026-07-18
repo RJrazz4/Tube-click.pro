@@ -96,6 +96,8 @@ interface V1StoryboardSceneRow {
   provider?: string;
   from_fallback?: boolean;
   degraded?: boolean;
+  /** Exact failure / fallback reason from the engine (e.g. "429 Rate Limit"). */
+  error?: string;
 }
 
 interface V1StoryboardData {
@@ -112,6 +114,8 @@ interface V1ThumbnailRow {
   url?: string | null;
   provider?: string;
   from_fallback?: boolean;
+  /** Exact failure / fallback reason from the engine (e.g. "429 Rate Limit"). */
+  error?: string;
 }
 
 interface V1ThumbnailData {
@@ -320,7 +324,7 @@ export function createOrchestratorClient(options: OrchestratorClientOptions = {}
           latencyMs: 0, // run-level latency isn't reported per scene by the live API
         };
         if (url !== undefined) sceneRow.imageUrl = url;
-        else sceneRow.error = "Generation failed";
+        else sceneRow.error = row.error ?? "Generation failed";
         if (row.provider !== undefined) sceneRow.provider = row.provider;
         sceneRow.costTier = costTier;
         return sceneRow;
@@ -386,7 +390,7 @@ export function createOrchestratorClient(options: OrchestratorClientOptions = {}
           latencyMs: Math.max(0, Math.round(data?.total_latency_ms ?? 0)),
         };
         if (url !== undefined) sceneRow.imageUrl = url;
-        else sceneRow.error = "Generation failed";
+        else sceneRow.error = row.error ?? "Generation failed";
         if (row.provider !== undefined) sceneRow.provider = row.provider;
         sceneRow.costTier = costTier;
         return sceneRow;
