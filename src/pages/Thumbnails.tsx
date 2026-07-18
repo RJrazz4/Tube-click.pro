@@ -18,6 +18,8 @@ import { Processing3D } from "@/components/ui/Processing3D";
 import { useQueryClient } from "@tanstack/react-query";
 import { QK } from "@/api/client/queryKeys";
 import { useTierConfig } from "@/hooks/useTierConfig";
+import { buildV1ThumbnailBody, unwrapV1, type V1Envelope } from "@/lib/v1Payloads";
+import type { ThumbnailResponseData } from "@/hooks/useTierAwareApi";
 import { ThumbnailCountRadioGroup } from "@/components/thumbnail/ThumbnailCountRadioGroup";
 
 type AspectRatio = "16:9" | "9:16";
@@ -85,14 +87,15 @@ export default function Thumbnails() {
       }
 
       if (useAI) {
-        const data = await fetchEdgeFunctionJson<{ thumbnails: Array<string | null>; brand: string; providerMap: any }>("generate-thumbnail", {
-          title: trimmedTitle,
-          emotion,
-          style,
-          aspectRatio,
-          count: thumbnailCount,
-          brand,
-        });
+        const v1Res = await fetchEdgeFunctionJson<V1Envelope<ThumbnailResponseData>>("v1/thumbnail", buildV1ThumbnailBody({
+          title: trimmedTitle, emotion, style, aspectRatio, count: thumbnailCount, brand, rawTier,
+        }));
+        const payload = unwrapV1(v1Res);
+        if (payload?.truncated && payload.upgrade_message) toast.warning(payload.upgrade_message);
+        const data = {
+          thumbnails: (payload?.thumbnails ?? []).map((t) => t?.url ?? null),
+          brand: payload?.brand ?? brand,
+        };
 
         if (data.thumbnails && Array.isArray(data.thumbnails) && data.thumbnails.length > 0) {
           const newStates: ThumbnailState[] = data.thumbnails.map((url: string | null) => ({

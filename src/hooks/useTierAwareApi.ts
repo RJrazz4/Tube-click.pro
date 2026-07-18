@@ -18,6 +18,7 @@ import { useMutation } from "@tanstack/react-query";
 import { fetchEdgeFunctionJson, EdgeFunctionError } from "@/api/client/secureClient";
 import { QK } from "@/api/client/queryKeys";
 import { useTierConfig, type AppTier } from "./useTierConfig";
+import { unwrapV1, type V1Envelope } from "@/lib/v1Payloads";
 import { useAppStore } from "@/stores/useAppStore";
 import { toast } from "sonner";
 
@@ -123,10 +124,10 @@ export function useStoryboardGeneration() {
       };
 
       // Route to the Phase 4 Vercel Edge endpoint
-      const data = await fetchEdgeFunctionJson<StoryboardResponseData>(
-        "v1/storyboard",
-        body
+      const data = unwrapV1(
+        await fetchEdgeFunctionJson<V1Envelope<StoryboardResponseData>>("v1/storyboard", body)
       );
+      if (!data) throw new EdgeFunctionError("Empty response from server", 500);
 
       // Surface upgrade messages / truncation warnings
       if (data.truncated && data.upgrade_message) {
@@ -171,10 +172,10 @@ export function useThumbnailGenerationV1() {
         count: tierInfo.clampValue(variables.count ?? 4, "maxThumbnailsPerGeneration"),
       };
 
-      const data = await fetchEdgeFunctionJson<ThumbnailResponseData>(
-        "v1/thumbnail",
-        body
+      const data = unwrapV1(
+        await fetchEdgeFunctionJson<V1Envelope<ThumbnailResponseData>>("v1/thumbnail", body)
       );
+      if (!data) throw new EdgeFunctionError("Empty response from server", 500);
 
       if (data.truncated && data.upgrade_message) {
         toast.warning(data.upgrade_message);

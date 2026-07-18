@@ -35,6 +35,8 @@ import { ENGINE_COPY, brandTagline } from "@/lib/brandCopy";
 import { Processing3D } from "@/components/ui/Processing3D";
 import { useJson2Video } from "@/hooks/useJson2Video";
 import { useTierConfig } from "@/hooks/useTierConfig";
+import { buildV1StoryboardBody, unwrapV1, type V1Envelope } from "@/lib/v1Payloads";
+import type { StoryboardResponseData } from "@/hooks/useTierAwareApi";
 import { TierAlertBanner } from "@/components/storyboard/TierAlertBanner";
 import { FileJson } from "lucide-react";
 
@@ -200,24 +202,30 @@ export default function Storyboard() {
         abortControllerRef.current?.abort();
       }, SCENE_TIMEOUT);
 
-      const data = await fetchEdgeFunctionJson<{ imageUrl: string }>(
-        "generate-storyboard-image",
-        {
+      const v1Res = await fetchEdgeFunctionJson<V1Envelope<StoryboardResponseData>>(
+        "v1/storyboard",
+        buildV1StoryboardBody({
+          topic: script,
           prompt: promptToUse,
           sceneNumber: scene.scene_number,
+          motionPrompt: scene.motion_prompt,
           brand,
-        },
+          rawTier,
+          aspectRatio: aspectRatioJ2V,
+          script,
+        }),
         abortControllerRef.current.signal,
       );
+      const imageUrl = unwrapV1(v1Res)?.scenes?.[0]?.image_url || "";
 
       clearTimeout(timeoutId);
       
-      if (!data.imageUrl) {
+      if (!imageUrl) {
         throw new Error('No image returned from API');
       }
       
       setScenes(prev => prev.map((s, i) => 
-        i === sceneIndex ? { ...s, imageUrl: data.imageUrl, status: 'complete', retryCount: 0 } : s
+        i === sceneIndex ? { ...s, imageUrl, status: 'complete', retryCount: 0 } : s
       ));
       setRetryingScene(null);
 

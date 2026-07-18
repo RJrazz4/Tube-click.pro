@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.api.json --noEmit && tsc -p tsconfig.app.json --noEmit",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "test:v1-contract": "esbuild scripts/test-v1-contract.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/test-v1.mjs && node node_modules/.cache/test-v1.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
