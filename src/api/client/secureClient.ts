@@ -68,6 +68,9 @@ const VERCEL_ROUTE_MAP: Record<string, string> = {
   "vectorengine-tts": "/api/vectorengine-tts",
   "vision-guide": "/api/vision-guide",
   "transcript": "/api/transcript",
+  // Phase 4 — V1 API routes
+  "v1/storyboard": "/api/v1/storyboard",
+  "v1/thumbnail": "/api/v1/thumbnail",
 };
 
 function getApiEndpoint(functionName: string): { url: string; headers: Record<string, string>; isVercel: boolean } {

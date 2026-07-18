@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { 
    Film,
    X,
@@ -33,6 +33,8 @@ import { incrementStat, saveContent } from "@/lib/stats";
 import JSZip from "jszip";
 import { IMAGE_MODEL_MAP, type ImageModelBrand } from "@/api/server/imageRouter";
 import { useJson2Video } from "@/hooks/useJson2Video";
+import { useTierConfig } from "@/hooks/useTierConfig";
+import { TierAlertBanner } from "@/components/storyboard/TierAlertBanner";
 import { FileJson } from "lucide-react";
 
 interface Scene {
@@ -77,6 +79,7 @@ export default function Storyboard() {
   const [aspectRatioJ2V, setAspectRatioJ2V] = useState<"9:16" | "16:9">("9:16");
   const { isBuilding: isBuildingJ2V, buildPayload: buildJ2VPayload, downloadJson: downloadJ2VJson, sendToJson2Video: sendJ2V } = useJson2Video();
   const abortControllerRef = useRef<AbortController | null>(null);
+  const { rawTier, isPremium, maxScenes, exceedsSceneLimit } = useTierConfig();
 
   // Load saved storyboard from localStorage
   useEffect(() => {
@@ -438,9 +441,16 @@ export default function Storyboard() {
      toast.success("Scene removed");
    };
  
-   const completedCount = scenes.filter(s => s.status === 'complete').length;
-   const errorCount = scenes.filter(s => s.status === 'error').length;
-   const pendingCount = scenes.filter(s => s.status === 'pending').length;
+  const completedCount = scenes.filter(s => s.status === 'complete').length;
+  const errorCount = scenes.filter(s => s.status === 'error').length;
+  const pendingCount = scenes.filter(s => s.status === 'pending').length;
+
+  // Tier banner variant — Phase 5
+  const bannerVariant = useMemo(() => {
+    if (isPremium) return "premium" as const;
+    if (scenes.length > maxScenes) return "limit" as const;
+    return "free" as const;
+  }, [isPremium, scenes.length, maxScenes]);
 
   const getStatusText = (scene: Scene): string => {
     if (scene.status === 'timeout') {
@@ -466,6 +476,16 @@ export default function Storyboard() {
           Generate 4-10 cinematic frames with auto-retry &amp; timeout recovery
         </p>
       </div>
+
+      {/* Phase 5 — Tier alert banner */}
+      <TierAlertBanner
+        variant={bannerVariant}
+        sceneCount={scenes.length}
+        maxScenes={maxScenes}
+        onUpgrade={() => {
+          toast.info("Upgrade flow — redirect to pricing page");
+        }}
+      />
 
       <div className="grid lg:grid-cols-5 gap-4 md:gap-6">
         {/* Script Input */}

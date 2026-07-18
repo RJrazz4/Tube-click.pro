@@ -16,6 +16,8 @@ import { downloadAsImage } from "@/lib/export";
 import { IMAGE_MODEL_MAP, type ImageModelBrand } from "@/api/server/imageRouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { QK } from "@/api/client/queryKeys";
+import { useTierConfig } from "@/hooks/useTierConfig";
+import { ThumbnailCountRadioGroup } from "@/components/thumbnail/ThumbnailCountRadioGroup";
 
 type AspectRatio = "16:9" | "9:16";
 
@@ -37,7 +39,9 @@ export default function Thumbnails() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [useAI, setUseAI] = useState(true);
   const [progress, setProgress] = useState(0);
+  const [thumbnailCount, setThumbnailCount] = useState(4);
   const queryClient = useQueryClient();
+  const { isPremium, maxThumbnails, rawTier } = useTierConfig();
 
   useEffect(() => {
     const titleFromParams = searchParams.get('title');
@@ -56,12 +60,14 @@ export default function Thumbnails() {
 
     setIsGenerating(true);
     setProgress(0);
-    setThumbnailStates([
+    const initialStates: ThumbnailState[] = [
       { url: null, status: 'generating' },
-      { url: null, status: 'pending' },
-      { url: null, status: 'pending' },
-      { url: null, status: 'pending' },
-    ]);
+      ...Array.from({ length: Math.max(0, thumbnailCount - 1) }, () => ({
+        url: null as string | null,
+        status: 'pending' as const,
+      })),
+    ];
+    setThumbnailStates(initialStates);
 
     try {
       const cacheKey = QK.thumbnail(trimmedTitle, emotion, style, aspectRatio, brand);
@@ -83,7 +89,7 @@ export default function Thumbnails() {
           emotion,
           style,
           aspectRatio,
-          count: 4,
+          count: thumbnailCount,
           brand,
         });
 
@@ -93,7 +99,7 @@ export default function Thumbnails() {
             status: url ? 'complete' as const : 'error' as const,
             error: url ? undefined : 'Failed to generate'
           }));
-          while (newStates.length < 4) newStates.push({ url: null, status: 'error', error: 'Not generated' });
+          while (newStates.length < thumbnailCount) newStates.push({ url: null, status: 'error', error: 'Not generated' });
           setThumbnailStates(newStates);
           setProgress(100);
           queryClient.setQueryData(cacheKey, { thumbnails: data.thumbnails });
@@ -102,22 +108,27 @@ export default function Thumbnails() {
             incrementStat('thumbnailsCreated');
             const firstSuccess = newStates.find(s => s.url);
             if (firstSuccess?.url) saveContent({ type: 'thumbnail', title: trimmedTitle, content: firstSuccess.url });
-            if (successCount === 4) toast.success(`All 4 thumbnails via ${brand} (${IMAGE_MODEL_MAP[brand].provider})!`);
-            else toast.warning(`Generated ${successCount}/4 via ${brand}`);
+            if (successCount === thumbnailCount) toast.success(`All ${thumbnailCount} thumbnails via ${brand} (${IMAGE_MODEL_MAP[brand].provider})!`);
+            else toast.warning(`Generated ${successCount}/${thumbnailCount} via ${brand}`);
           } else throw new Error("No thumbnails were generated");
         } else throw new Error("No thumbnails returned from API");
       } else {
         const { width, height } = getDimensions(aspectRatio);
-        const variations = [
-          `${trimmedTitle}, ${emotion}, ${style}, YouTube thumbnail, professional, vibrant, eye-catching`,
-          `${trimmedTitle}, dramatic lighting, ${style}, thumbnail design, high quality`,
-          `${trimmedTitle}, ${emotion}, bold colors, viral thumbnail, engaging`,
-          `${trimmedTitle}, cinematic, ${style}, social media, attention grabbing`
-        ];
+        const variations = Array.from({ length: thumbnailCount }, (_, i) => {
+          const prompts = [
+            `${trimmedTitle}, ${emotion}, ${style}, YouTube thumbnail, professional, vibrant, eye-catching`,
+            `${trimmedTitle}, dramatic lighting, ${style}, thumbnail design, high quality`,
+            `${trimmedTitle}, ${emotion}, bold colors, viral thumbnail, engaging`,
+            `${trimmedTitle}, cinematic, ${style}, social media, attention grabbing`,
+            `${trimmedTitle}, ${emotion}, modern design, thumbnail, 4k, detailed`,
+            `${trimmedTitle}, ${style}, minimalist, clean, professional thumbnail`,
+          ];
+          return prompts[i % prompts.length];
+        });
         const results: ThumbnailState[] = [];
         for (let i = 0; i < variations.length; i++) {
           setThumbnailStates(prev => prev.map((s, idx) => idx === i ? { ...s, status: 'generating' } : s));
-          setProgress(((i + 0.5) / 4) * 100);
+          setProgress(((i + 0.5) / thumbnailCount) * 100);
           try {
             const encodedPrompt = encodeURIComponent(variations[i]);
             const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${Date.now() + i}`;
@@ -135,10 +146,10 @@ export default function Thumbnails() {
             results.push({ url: null, status: 'error', error: 'Failed to load' });
             setThumbnailStates(prev => prev.map((s, idx) => idx === i ? { url: null, status: 'error', error: 'Failed to load' } : s));
           }
-          setProgress(((i + 1) / 4) * 100);
+          setProgress(((i + 1) / thumbnailCount) * 100);
         }
         const successCount = results.filter(r => r.status === 'complete').length;
-        if (successCount > 0) { incrementStat('thumbnailsCreated'); toast.success(`Generated ${successCount}/4 thumbnails!`); }
+        if (successCount > 0) { incrementStat('thumbnailsCreated'); toast.success(`Generated ${successCount}/${thumbnailCount} thumbnails!`); }
         else throw new Error("All thumbnails failed to generate");
       }
     } catch (error: unknown) {
@@ -246,6 +257,18 @@ export default function Thumbnails() {
               </div>
             </div>
 
+            {/* Phase 5 — Thumbnail count radio group */}
+            <ThumbnailCountRadioGroup
+              value={thumbnailCount}
+              onChange={(count) => {
+                setThumbnailCount(count);
+                // Reset states when count changes
+                setThumbnailStates([]);
+                setSelectedIndex(0);
+              }}
+              disabled={isGenerating}
+            />
+
             {/* Brand Selector — Phase C1/C2 */}
             <div className="space-y-2">
               <Label className="text-sm text-foreground flex items-center gap-1.5"><Crown className="w-3.5 h-3.5 text-amber-400" />Visual Engine (White-Label)</Label>
@@ -276,13 +299,13 @@ export default function Thumbnails() {
             </div>
 
             <Button onClick={handleGenerate} disabled={isGenerating || !title.trim() || title.trim().length < 3} className="w-full cyber-button h-11">
-              {isGenerating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating via {brand}...</> : <><Grid3X3 className="w-4 h-4 mr-2" />Generate 4 via {brand}</>}
+              {isGenerating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating via {brand}...</> : <><Grid3X3 className="w-4 h-4 mr-2" />Generate {thumbnailCount} via {brand}</>}
             </Button>
 
             {isGenerating && (
               <div className="space-y-2">
                 <Progress value={progress} className="h-2" />
-                <p className="text-xs text-center text-muted-foreground">{completedCount}/4 complete • {brand}</p>
+                <p className="text-xs text-center text-muted-foreground">{completedCount}/{thumbnailCount} complete • {brand}</p>
               </div>
             )}
           </CardContent>
@@ -291,7 +314,7 @@ export default function Thumbnails() {
         <Card className="cyber-card border-border lg:col-span-2">
           <CardHeader className="pb-3 md:pb-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <CardTitle className="font-display text-base md:text-lg text-foreground">Thumbnails {thumbnailStates.length > 0 && <span className="ml-2 text-sm font-normal text-muted-foreground">({completedCount}/4 ready • {brand})</span>}</CardTitle>
+              <CardTitle className="font-display text-base md:text-lg text-foreground">Thumbnails {thumbnailStates.length > 0 && <span className="ml-2 text-sm font-normal text-muted-foreground">({completedCount}/{thumbnailCount} ready • {brand})</span>}</CardTitle>
               {thumbnails.length > 0 && (
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={handleClearThumbnails} disabled={isGenerating} className="gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 h-9 px-3 text-xs"><Trash2 className="w-4 h-4" /><span className="hidden sm:inline">Clear</span></Button>
