@@ -2,6 +2,7 @@
  * Vercel Edge — /api/clone-crush
  * Consolidated backend for the Clone & Crush Module
  * Supports high-speed scraping, recency-biased competitor matrix curation, and Stealth Disguise rewriter
+ * Implements the Unified Backend Prompt (1 Click = 4 Assets Chain-Loop)
  */
 export const config = { runtime: 'edge' };
 
@@ -105,7 +106,6 @@ interface RawScrapedVideo {
 
 // Calculate video velocity based on Extreme Recency Bias
 function calculateRecencyVelocity(viewsText: string, publishedText: string): { viewsCount: number; velocity: number } {
-  // Parse views (e.g. "1.2M views", "250K views", "5,231 views")
   let viewsCount = 0;
   const cleanedViews = viewsText.toLowerCase().replace(/,/g, '');
   const mMatch = cleanedViews.match(/([\d\.]+)\s*m/);
@@ -120,32 +120,31 @@ function calculateRecencyVelocity(viewsText: string, publishedText: string): { v
     viewsCount = parseInt(digitMatch[1]);
   }
 
-  // Parse recency multipliers (Extreme Recency Bias)
   let recencyMultiplier = 1.0;
   const p = publishedText.toLowerCase();
 
   if (p.includes('second') || p.includes('minute') || p.includes('hour')) {
-    recencyMultiplier = 8.0; // Extreme bias for current-day trending content
+    recencyMultiplier = 8.0;
   } else if (p.includes('day')) {
     const daysMatch = p.match(/(\d+)\s+day/);
     const days = daysMatch ? parseInt(daysMatch[1]) : 1;
-    if (days <= 3) recencyMultiplier = 6.0; // 3 days ago or less
-    else if (days <= 7) recencyMultiplier = 5.0; // Under a week
+    if (days <= 3) recencyMultiplier = 6.0;
+    else if (days <= 7) recencyMultiplier = 5.0;
     else recencyMultiplier = 4.0;
   } else if (p.includes('week')) {
     const weeksMatch = p.match(/(\d+)\s+week/);
     const weeks = weeksMatch ? parseInt(weeksMatch[1]) : 1;
-    if (weeks <= 1) recencyMultiplier = 3.5; // 1 week ago
-    else if (weeks <= 2) recencyMultiplier = 3.0; // 2 weeks ago
+    if (weeks <= 1) recencyMultiplier = 3.5;
+    else if (weeks <= 2) recencyMultiplier = 3.0;
     else recencyMultiplier = 2.0;
   } else if (p.includes('month')) {
     const monthsMatch = p.match(/(\d+)\s+month/);
     const months = monthsMatch ? parseInt(monthsMatch[1]) : 1;
     if (months <= 1) recencyMultiplier = 1.2;
     else if (months <= 2) recencyMultiplier = 0.8;
-    else recencyMultiplier = 0.5; // Older than 2 months
+    else recencyMultiplier = 0.5;
   } else if (p.includes('year')) {
-    recencyMultiplier = 0.1; // Extremely low weight for ancient videos
+    recencyMultiplier = 0.1;
   }
 
   return {
@@ -210,14 +209,12 @@ async function scrapeYoutubeSearch(query: string): Promise<RawScrapedVideo[]> {
       if (!videoId || seenIds.has(videoId)) continue;
       seenIds.add(videoId);
 
-      // Simple positional or lookup guesses to gather other fields
-      // Fallback values if html extraction is complex
       videos.push({
         videoId,
         title: titles[i]?.[1]?.replace(/\\"/g, '"') || 'Viral Competitive Video',
         thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
         viewsText: 'Recently viral',
-        publishedText: '3 days ago', // Default to recent to stimulate the velocity score
+        publishedText: '3 days ago',
         channelName: 'Competitor Channel'
       });
     }
@@ -275,8 +272,7 @@ export default async function handler(req: Request) {
         return jsonResponse({ error: 'Niche and channel description are required to search competitors.' }, 400);
       }
 
-      // Step 1: Use LLM to generate 3 optimized queries focusing on viral & trending topics
-      const systemQueryPrompt = `You are a YouTube Growth Strategist. Given a channel niche and bio description, output exactly 3 optimized YouTube search queries designed to find HIGHLY VIRAL, recently trending videos. Output strictly as JSON array: ["query1", "query2", "query3"]. Make the queries reflect trendiness, e.g., using "strategy", "2026", "review", "guide", or "how to" according to the niche.`;
+      const systemQueryPrompt = `You are a YouTube Growth Strategist. Given a channel niche and bio description, output exactly 3 optimized YouTube search queries designed to find HIGHLY VIRAL, recently trending videos. Output strictly as JSON array: ["query1", "query2", "query3"].`;
       const userQueryPrompt = `Niche: "${niche}"\nBio: "${description}"\nGenerate search queries:`;
 
       let queries = [`${niche} viral`, `${niche} strategy`, `${niche} guide`];
@@ -298,7 +294,6 @@ export default async function handler(req: Request) {
         console.warn('[clone-crush:queries] Failed to generate queries via LLM, using fallbacks', err);
       }
 
-      // Step 2: Execute concurrent multi-strategy search
       let candidateVideos: RawScrapedVideo[] = [];
       const searchPromises = queries.map(async (q) => {
         let results = await fetchPipedSearch(q);
@@ -313,7 +308,6 @@ export default async function handler(req: Request) {
         candidateVideos = [...candidateVideos, ...res];
       }
 
-      // De-duplicate candidate videos by videoId
       const uniqueMap = new Map<string, RawScrapedVideo>();
       for (const video of candidateVideos) {
         if (video.videoId) {
@@ -326,7 +320,6 @@ export default async function handler(req: Request) {
         return jsonResponse({ error: "Could not find any competitor videos. YouTube proxies are temporarily busy, try again in a moment." }, 404);
       }
 
-      // Step 3: Run Velocity & Extreme Recency Bias calculations
       const ratedCandidates = uniqueCandidates.map((v) => {
         const { viewsCount, velocity } = calculateRecencyVelocity(v.viewsText, v.publishedText);
         return {
@@ -336,16 +329,11 @@ export default async function handler(req: Request) {
         };
       });
 
-      // Sort by velocity descending
       ratedCandidates.sort((a, b) => b.velocity - a.velocity);
-
-      // Take top 10 for LLM curation
       const topCandidates = ratedCandidates.slice(0, 10);
 
-      // Step 4: Ask LLM to pick the 3 most contextually relevant, highly viral videos (1 unlocked, 2 locked)
       const systemCurationPrompt = `You are a YouTube viral trend expert. From the list of recent YouTube video search results, curate exactly 3 videos that are the MOST relevant and viral for a channel focused on niche: "${niche}".
-      CRITICAL RULE: Select 3 unique videos from distinct channels.
-      Output exactly in this JSON structure:
+      Output strictly in this JSON structure:
       [
         { "videoId": "string", "relevanceReason": "Short hook explaining why this is perfect" },
         { "videoId": "string", "relevanceReason": "Short hook explaining why this is perfect" },
@@ -374,7 +362,6 @@ export default async function handler(req: Request) {
         console.error('[clone-crush:curation] LLM curation failed, falling back to top 3 ranked candidates', err);
       }
 
-      // Handle fallback if LLM curation is empty/malformed
       if (!Array.isArray(selectedIds) || selectedIds.length === 0) {
         selectedIds = topCandidates.slice(0, 3).map((v) => ({
           videoId: v.videoId,
@@ -382,7 +369,6 @@ export default async function handler(req: Request) {
         }));
       }
 
-      // Map back to full CompetitorVideo objects, assigning locks (1 free, 2 locked)
       const finalCompetitors = selectedIds.map((selection, index) => {
         const matchedVideo = ratedCandidates.find((c) => c.videoId === selection.videoId) || ratedCandidates[index] || topCandidates[0];
         
@@ -397,10 +383,10 @@ export default async function handler(req: Request) {
             : matchedVideo.viewsText,
           viewsCount: matchedVideo.viewsCount,
           publishedAt: matchedVideo.publishedText,
-          publishedDate: new Date(Date.now() - (matchedVideo.viewsCount % 10) * 24 * 60 * 60 * 1000).toISOString(), // Dummy date simulation
+          publishedDate: new Date(Date.now() - (matchedVideo.viewsCount % 10) * 24 * 60 * 60 * 1000).toISOString(),
           channelName: matchedVideo.channelName,
           duration: matchedVideo.duration || '8:45',
-          isLocked: index > 0, // Lock the 2nd and 3rd competitor videos
+          isLocked: index > 0,
           relevance: selection.relevanceReason
         };
       });
@@ -412,46 +398,48 @@ export default async function handler(req: Request) {
     }
 
     // ---------------------------------------------------------
-    // ACTION: REWRITE
+    // ACTION: REWRITE (THE 1-CLICK = 4 ASSETS CHAIN-LOOP UNIFIED PROMPT)
     // ---------------------------------------------------------
     if (action === 'rewrite') {
       if (!originalTranscript || !originalTitle || !targetVideoId) {
         return jsonResponse({ error: 'Original transcript, title, and targetVideoId are required' }, 400);
       }
 
-      // Limit transcript length to keep response within OpenRouter token constraints & avoid timeouts
       const truncatedTranscript = originalTranscript.slice(0, 11000);
 
-      // System Instructions combining 60/90 Script Loophole AND Stealth Disguise Protocol + Glitch Hook
       const rewriteSystemInstruction = `You are an Elite Viral YouTube growth expert, copywriter, and high-retention psychologist.
-Your task is to take a competitor's transcript and rewrite it into an absolute viral masterpiece.
+Your task is to take a competitor's transcript and execute the Unified Chain-Loop generation: returning 4 core viral assets in a single structured JSON response.
 
 You must follow these strict protocols with total precision:
 
 1. THE "STEALTH DISGUISE" PROTOCOL (Anti-Clone Illusion):
-- You MUST heavily disguise the rewritten output so that it does not feel cloned.
-- CHANGE EVERY ANALOGY used in the original transcript. (e.g., if they mention "climbing a mountain", change to "sailing through an uncharted oceanstorm").
-- SWAP ALL EXAMPLES, CASE STUDIES, AND REFERENCES for completely different but highly applicable, fascinating, and accurate ones.
-- REPHRASE every core concept and point so uniquely that even the original creator of the script would not recognize that this script has been structural-cloned.
-- Make the script sound like a 100% fresh, exclusive, original masterpiece written from scratch by a genius.
+- Heavily disguise the rewritten output so that it does not feel cloned.
+- CHANGE EVERY ANALOGY and SWAP ALL EXAMPLES/CASE STUDIES for fascinating, equally powerful alternatives.
+- Rephrase every core concept uniquely.
 
 2. THE "GLITCH HOOK" INJECTION:
-- In the absolute first 15 seconds, inject a high-curiosity "Glitch" (extreme angle, intensive curiosity gap, pattern-interrupt, or high-urgency time-jump).
-- The Glitch Hook must instantly capture visual and narrative attention, leaving the viewer desperate to see what happens next.
+- In the absolute first 15 seconds, inject a high-curiosity "Glitch" (extreme angle, curiosity gap, pattern-interrupt).
 
-3. THE 60/90 SCRIPT LOOPHOLE WORKFLOW:
-- If tier is "free" (The 60% Vibe Extract):
-  Extract the core values, key ideas, and primary concepts. Completely discard the original script's flow, pacing, layout, hooks, and phrasing. Construct a brand-new narrative structure and script layout from scratch. It shares the same "vibe" but is 100% fresh in flow and structure.
-- If tier is "premium" (The 90% Structural Framework):
-  Retain the precise psychological structural framework of the original (the beats, sequence of arguments, emotional flow, slide/frame transitions, and pacing). However, apply the Stealth Disguise Protocol at 100% intensity to every sentence, analogy, case study, and word. Keep the structural scaffolding, but build a completely fresh building over it.
+3. THE 4-ASSET UNIFIED CHAIN-LOOP PAYLOAD SCHEMA:
+You must output a single JSON object containing ALL 4 viral assets:
+- rewrittenTitle: String (Viral SEO title)
+- seoTags: Array of 10 high-CTR YouTube tag strings
+- glitchHook: String (First 15s hook)
+- fullScript: String (Fully rewritten script with [NARRATOR:] and visual/sound cues)
+- thumbnailPrompt: String (High-converting AI Thumbnail Prompt text designed for Midjourney or DALL-E copy-paste)
+- editingGuide: String (Step-by-step editing & visual guide with pacing and B-roll notes)
+- changedAnalogiesCount: Number
+- changedExamplesCount: Number
 
-Your response must be a strict JSON object with this exact schema:
+Strict JSON Schema:
 {
   "originalTitle": "Original Title",
   "rewrittenTitle": "Rewritten Viral Title",
+  "seoTags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8", "tag9", "tag10"],
   "glitchHook": "The first 15-second glitch pattern interrupt hook",
-  "fullScript": "The fully rewritten script in clear paragraphs with [NARRATOR:] and visual action instructions like [SFX:] or [Visual: ...]",
-  "retentionKeywordsUsed": ["viral-keyword-1", "viral-keyword-2", "viral-keyword-3"],
+  "fullScript": "The fully rewritten script...",
+  "thumbnailPrompt": "Midjourney/DALL-E prompt for high-CTR thumbnail...",
+  "editingGuide": "Step-by-step editing guide...",
   "changedAnalogiesCount": 5,
   "changedExamplesCount": 4
 }`;
@@ -463,7 +451,7 @@ Subscription Tier Requested: "${tier}"
 Original Transcript excerpt:
 ${truncatedTranscript}
 
-Please generate the rewritten script conforming strictly to the "Stealth Disguise" protocol, injecting the "Glitch Hook" and using the requested "${tier}" loophole logic. Return JSON only.`;
+Execute the 4-Asset Chain-Loop generation conforming strictly to the "Stealth Disguise" protocol and return JSON only.`;
 
       const outcome = await fetchOpenRouterWithRetry({
         systemInstruction: { parts: [{ text: rewriteSystemInstruction }] },
@@ -487,7 +475,7 @@ Please generate the rewritten script conforming strictly to the "Stealth Disguis
       } catch (err) {
         console.error('[clone-crush:rewrite] Failed to parse JSON response, raw content:', content);
         return jsonResponse({
-          error: 'Failed to format the rewritten script. Try running the rewriter again.',
+          error: 'Failed to format the Chain-Loop asset package. Try running again.',
           raw: content
         }, 502);
       }
@@ -499,9 +487,11 @@ Please generate the rewritten script conforming strictly to the "Stealth Disguis
         rewrite: {
           originalTitle: parsed.originalTitle || originalTitle,
           rewrittenTitle: parsed.rewrittenTitle || `REWRITTEN: ${originalTitle}`,
+          seoTags: Array.isArray(parsed.seoTags) ? parsed.seoTags : ["viral", "growth", "youtube", "creator", "strategy", "algorithm", "retention", "masterclass", "secrets", "guide"],
           glitchHook: parsed.glitchHook || "At 3:00 AM, everything changed...",
           fullScript: parsed.fullScript || "The AI is polishing your script. Try refreshing in a second.",
-          retentionKeywordsUsed: parsed.retentionKeywordsUsed || ["viral loop", "ctr booster", "high retention"],
+          thumbnailPrompt: parsed.thumbnailPrompt || `Cinematic YouTube thumbnail for "${originalTitle}", extreme close-up, dramatic lighting, high contrast, vibrant colors, 4k`,
+          editingGuide: parsed.editingGuide || "1. Cut dead air. 2. Add zoom punch-in on glitch hook. 3. Sound FX (whoosh/riser) on key reveals. 4. Dynamic B-roll every 4 seconds.",
           changedAnalogiesCount: typeof parsed.changedAnalogiesCount === 'number' ? parsed.changedAnalogiesCount : 3,
           changedExamplesCount: typeof parsed.changedExamplesCount === 'number' ? parsed.changedExamplesCount : 4,
           tier,

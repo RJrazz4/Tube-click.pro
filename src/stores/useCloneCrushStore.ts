@@ -36,6 +36,9 @@ export interface ScriptRewriteResult {
   glitchHook: string; // High-curiosity "Glitch" in first 15 seconds
   fullScript: string;
   retentionKeywordsUsed: string[];
+  seoTags: string[];
+  thumbnailPrompt: string;
+  editingGuide: string;
   tier: "free" | "premium";
   isStealthDisguised: boolean; // Tracks enforcement of the "Stealth Disguise Protocol"
   changedAnalogiesCount: number;

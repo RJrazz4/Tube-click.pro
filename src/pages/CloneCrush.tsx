@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { 
   Zap, 
   Sparkles, 
@@ -20,7 +21,11 @@ import {
   ExternalLink,
   ChevronRight,
   PlusCircle,
-  XCircle
+  XCircle,
+  Mic,
+  Image,
+  Search,
+  Film
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +39,8 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { useTranscriptExtraction, useCloneCrushMutation } from "@/hooks/useSecureQuery";
 
 export default function CloneCrush() {
+  const navigate = useNavigate();
+
   // Zustand State Stores
   const { 
     profile, 
@@ -180,7 +187,7 @@ export default function CloneCrush() {
     }
   };
 
-  // 3. Double-Loop Loophole Rewriter Execution
+  // 3. Double-Loop Loophole Rewriter Execution (Unified Chain-Loop: 1 Click = 4 Assets)
   const handleCloneAndCrush = async () => {
     if (!selectedVideo) {
       toast.error("Please select a competitor video from the matrix");
@@ -200,7 +207,7 @@ export default function CloneCrush() {
       { label: "Mapping Narrative Pacing & Pacing Beats...", status: "pending" },
       { label: "Enforcing Anti-Clone 'Stealth Disguise' Protocol...", status: "pending" },
       { label: "Formulating High-Curiosity First-15s Glitch Hook...", status: "pending" },
-      { label: "Rendering 100% Unique Virally-Structured Script...", status: "pending" }
+      { label: "Compiling Unified Chain-Loop (4 Viral Assets Package)...", status: "pending" }
     ];
     setLogSteps(steps);
 
@@ -251,6 +258,9 @@ export default function CloneCrush() {
           glitchHook: rw.glitchHook,
           fullScript: rw.fullScript,
           retentionKeywordsUsed: rw.retentionKeywordsUsed,
+          seoTags: rw.seoTags,
+          thumbnailPrompt: rw.thumbnailPrompt,
+          editingGuide: rw.editingGuide,
           tier: selectedTier,
           isStealthDisguised: true,
           changedAnalogiesCount: rw.changedAnalogiesCount,
@@ -259,26 +269,54 @@ export default function CloneCrush() {
 
         saveContent({
           type: "script",
-          title: `Cloned Script: ${rw.rewrittenTitle.substring(0, 40)}...`,
-          content: `⚡️ [15s GLITCH HOOK]:\n${rw.glitchHook}\n\n⚡️ [FULL MASTERPIECE SCRIPT]:\n${rw.fullScript}`,
-          metadata: { platform: "YouTube", style: selectedTier === "premium" ? "90% Framework Clone" : "60% Vibe Rewrite" }
+          title: `Chain-Loop Asset Package: ${rw.rewrittenTitle.substring(0, 35)}...`,
+          content: `⚡️ [TITLE & SEO TAGS]:\n${rw.rewrittenTitle}\nTags: ${rw.seoTags.join(', ')}\n\n⚡️ [15s GLITCH HOOK]:\n${rw.glitchHook}\n\n⚡️ [FULL SCRIPT]:\n${rw.fullScript}\n\n⚡️ [THUMBNAIL PROMPT]:\n${rw.thumbnailPrompt}\n\n⚡️ [EDITING GUIDE]:\n${rw.editingGuide}`,
+          metadata: { platform: "YouTube", style: selectedTier === "premium" ? "90% Chain-Loop Clone" : "60% Chain-Loop Vibe" }
         });
         incrementStat("scriptsGenerated");
 
         steps[4].status = "success";
         setLogSteps([...steps]);
-        toast.success("Stealth Masterpiece Script Compiled Successfully!");
+        toast.success("🚀 Chain-Loop Complete! 4 Viral Assets Generated Instantly.");
       } else {
-        throw new Error(rewriteRes.error || "Failed to compile rewritten script");
+        throw new Error(rewriteRes.error || "Failed to compile Chain-Loop asset package");
       }
 
     } catch (err: any) {
       console.error(err);
       const failedSteps = steps.map(s => s.status === "processing" ? { ...s, status: "error" as const } : s);
       setLogSteps(failedSteps);
-      toast.error(err.message || "Rewrite failed. Try selecting another video.");
+      toast.error(err.message || "Chain-Loop execution failed. Try selecting another video.");
     } finally {
       setIsRewriting(false);
+    }
+  };
+
+  const handleSendToVoiceover = () => {
+    if (!activeRewrite) return;
+    sessionStorage.setItem('tubegenius_pending_voice_script', activeRewrite.fullScript);
+    toast.success("Script loaded into Voiceover Studio!");
+    navigate("/voice");
+  };
+
+  const handleCopyThumbnailPrompt = async () => {
+    if (!activeRewrite) return;
+    try {
+      await navigator.clipboard.writeText(activeRewrite.thumbnailPrompt || "Cinematic YouTube thumbnail");
+      toast.success("AI Thumbnail Prompt copied to clipboard! (Ready for Midjourney/DALL-E)");
+    } catch {
+      toast.error("Failed to copy");
+    }
+  };
+
+  const handleCopySeoTags = async () => {
+    if (!activeRewrite) return;
+    try {
+      const tagsStr = (activeRewrite.seoTags || []).join(", ");
+      await navigator.clipboard.writeText(tagsStr);
+      toast.success("SEO Tags copied to clipboard!");
+    } catch {
+      toast.error("Failed to copy");
     }
   };
 
@@ -312,11 +350,11 @@ export default function CloneCrush() {
             <Zap className="w-7 h-7 md:w-8 md:h-8 text-primary animate-pulse" />
             Clone &amp; Crush AI
             <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] border border-primary/20 font-display font-medium tracking-wide">
-              Zero-Friction Showdown Matrix
+              Viral Chain-Loop (1 Click = 4 Assets)
             </span>
           </h1>
           <p className="text-sm md:text-base text-muted-foreground mt-1 max-w-3xl">
-            Auto-profile your channel, engage our Versus Showdown live velocity competitor audit, and deploy our proprietary <span className="text-foreground font-semibold">Stealth Disguise Protocol</span>.
+            Auto-profile your channel, engage our Versus Showdown live velocity competitor audit, and deploy our proprietary <span className="text-foreground font-semibold">Stealth Disguise Protocol</span> with instant No-Click Handoff.
           </p>
         </div>
 
@@ -510,14 +548,14 @@ export default function CloneCrush() {
 
           {/* STEP 3: Rewrite Customizer & Terminal Logs */}
           {selectedVideo && (
-            <Card className="cyber-card border-border animate-fade-in">
+            <Card className="cyber-card border-border">
               <CardHeader className="pb-3 md:pb-4">
                 <CardTitle className="font-display text-base md:text-lg text-foreground flex items-center gap-2">
                   <Zap className="w-5 h-5 text-primary" />
-                  3. The 60/90 Loophole Configurator
+                  3. The Chain-Loop Loophole Configurator (1 Click = 4 Assets)
                 </CardTitle>
                 <CardDescription className="text-xs md:text-sm text-muted-foreground">
-                  Choose your loophole copy intensity. Standard is 100% fresh re-conception. Pro keeps structural hooks but completely disguises them.
+                  Choose your loophole copy intensity. Generates script, SEO tags, AI thumbnail prompt, and editing guide simultaneously.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -601,12 +639,12 @@ export default function CloneCrush() {
                   {isRewriting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Crushing Target Script...
+                      Executing Chain-Loop (4 Assets)...
                     </>
                   ) : (
                     <>
                       <Zap className="w-4 h-4 fill-primary-foreground" />
-                      Execute Clone &amp; Crush Script Loophole
+                      Execute Chain-Loop (1 Click = 4 Viral Assets)
                     </>
                   )}
                 </Button>
@@ -615,7 +653,7 @@ export default function CloneCrush() {
                 {logSteps.length > 0 && (
                   <div className="font-mono bg-black rounded-xl border border-border/80 p-4 text-xs space-y-2 max-h-[220px] overflow-y-auto">
                     <p className="text-primary font-bold border-b border-border/50 pb-1.5 flex items-center justify-between">
-                      <span>⚡️ COMPILER CONSOLE LOGS:</span>
+                      <span>⚡️ CHAIN-LOOP CONSOLE LOGS:</span>
                       <span className="text-[9px] bg-primary/20 px-2 py-0.5 rounded text-primary animate-pulse">Running</span>
                     </p>
                     {logSteps.map((step, idx) => (
@@ -646,14 +684,14 @@ export default function CloneCrush() {
         {/* RIGHT COLUMN: REWRITE HISTORY & OUTPUT (4 columns on LG) */}
         <div className="lg:col-span-4 space-y-6">
           
-          {/* SCRIPT RESULTS CARD */}
+          {/* SCRIPT RESULTS & CHAIN-LOOP ACTION HUB */}
           {activeRewrite ? (
             <Card className="cyber-card border-primary/40 shadow-neon-glow animate-fade-in">
               <CardHeader className="pb-3 md:pb-4 border-b border-border/40">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[9px] font-mono tracking-widest uppercase">
-                      Rewritten Outline
+                      Chain-Loop Master Package
                     </span>
                     <CardTitle className="font-display text-base md:text-lg text-foreground mt-2 line-clamp-2">
                       {activeRewrite.rewrittenTitle}
@@ -675,6 +713,48 @@ export default function CloneCrush() {
               </CardHeader>
               <CardContent className="pt-5 space-y-5">
                 
+                {/* ADDICTIVE UX: NO-CLICK HANDOFF PROTOCOL ACTION HUB */}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-primary/15 via-secondary/60 to-accent/15 border border-primary/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-display font-bold text-foreground flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+                      Chain-Loop Complete: 4 Assets Ready
+                    </p>
+                    <span className="text-[10px] bg-primary text-primary-foreground font-mono font-bold px-2 py-0.5 rounded-full uppercase">
+                      No-Click Handoff
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <Button 
+                      onClick={handleSendToVoiceover} 
+                      size="sm" 
+                      className="cyber-button text-xs h-9 font-display gap-1.5 justify-start px-3"
+                    >
+                      <Mic className="w-3.5 h-3.5 text-primary-foreground shrink-0" />
+                      <span>Send to Voiceover</span>
+                    </Button>
+                    <Button 
+                      onClick={handleCopyThumbnailPrompt} 
+                      size="sm" 
+                      variant="outline" 
+                      className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"
+                    >
+                      <Image className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <span>Copy Thumbnail Prompt</span>
+                    </Button>
+                    <Button 
+                      onClick={handleCopySeoTags} 
+                      size="sm" 
+                      variant="outline" 
+                      className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"
+                    >
+                      <Search className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <span>Copy SEO Tags</span>
+                    </Button>
+                  </div>
+                </div>
+
                 {/* HIGH-CURIOSITY GLITCH HOOK HAZARD CARD */}
                 <div className="relative rounded-xl border border-destructive/30 bg-destructive/5 p-4 overflow-hidden shadow-sm animate-pulse-subtle">
                   <div className="absolute top-0 right-0 w-20 h-20 bg-destructive/10 rounded-full blur-xl" />
@@ -692,72 +772,54 @@ export default function CloneCrush() {
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                  <TabsList className="grid grid-cols-3 bg-secondary/60 border border-border h-9 rounded-lg">
-                    <TabsTrigger value="script" className="text-xs font-semibold rounded-md">Script</TabsTrigger>
-                    <TabsTrigger value="disguise" className="text-xs font-semibold rounded-md">Disguise</TabsTrigger>
-                    <TabsTrigger value="meta" className="text-xs font-semibold rounded-md">Original</TabsTrigger>
+                  <TabsList className="grid grid-cols-4 bg-secondary/60 border border-border h-9 rounded-lg">
+                    <TabsTrigger value="script" className="text-[11px] font-semibold rounded-md">Script</TabsTrigger>
+                    <TabsTrigger value="thumbnail" className="text-[11px] font-semibold rounded-md">Thumbnail</TabsTrigger>
+                    <TabsTrigger value="tags" className="text-[11px] font-semibold rounded-md">Tags</TabsTrigger>
+                    <TabsTrigger value="guide" className="text-[11px] font-semibold rounded-md">Guide</TabsTrigger>
                   </TabsList>
 
                   {/* SCRIPT CONTENT */}
                   <TabsContent value="script" className="pt-3">
-                    <div className="rounded-xl border border-border/80 bg-secondary/30 p-4 h-[350px] overflow-y-auto font-sans text-xs md:text-sm text-foreground leading-relaxed whitespace-pre-wrap select-text scrollbar-thin">
+                    <div className="rounded-xl border border-border/80 bg-secondary/30 p-4 h-[300px] overflow-y-auto font-sans text-xs md:text-sm text-foreground leading-relaxed whitespace-pre-wrap select-text scrollbar-thin">
                       {activeRewrite.fullScript}
                     </div>
                   </TabsContent>
 
-                  {/* STEALTH DISGUISE AUDIT METRICS */}
-                  <TabsContent value="disguise" className="pt-3 space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 bg-secondary/40 rounded-xl border border-border/50 text-center">
-                        <p className="text-[10px] text-muted-foreground uppercase font-semibold">Analogies Transformed</p>
-                        <p className="text-xl font-display font-bold text-primary mt-1">
-                          {activeRewrite.changedAnalogiesCount}
-                        </p>
-                      </div>
-                      <div className="p-3 bg-secondary/40 rounded-xl border border-border/50 text-center">
-                        <p className="text-[10px] text-muted-foreground uppercase font-semibold">Examples Replaced</p>
-                        <p className="text-xl font-display font-bold text-accent mt-1">
-                          {activeRewrite.changedExamplesCount}
-                        </p>
-                      </div>
+                  {/* THUMBNAIL PROMPT CONTENT */}
+                  <TabsContent value="thumbnail" className="pt-3 space-y-3">
+                    <div className="p-3 bg-secondary/40 rounded-xl border border-border/60">
+                      <p className="text-xs font-bold text-foreground mb-1">AI Thumbnail Prompt (Midjourney / DALL-E Ready):</p>
+                      <p className="text-xs font-mono text-primary bg-secondary/80 p-3 rounded-lg border border-primary/20 select-all leading-relaxed">
+                        {activeRewrite.thumbnailPrompt}
+                      </p>
                     </div>
+                    <Button onClick={handleCopyThumbnailPrompt} size="sm" className="w-full cyber-button text-xs h-9">
+                      <Copy className="w-3.5 h-3.5 mr-2" /> Copy Prompt for Midjourney
+                    </Button>
+                  </TabsContent>
 
-                    <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                      <span className="text-[11px] font-semibold text-green-400">Anti-Clone Illusion Level: 100% Secure</span>
-                    </div>
-
-                    <div className="space-y-2">
-                      <p className="text-xs font-bold text-foreground">Injected High-Retention Viral Keywords:</p>
+                  {/* SEO TAGS CONTENT */}
+                  <TabsContent value="tags" className="pt-3 space-y-3">
+                    <div className="p-3 bg-secondary/40 rounded-xl border border-border/60">
+                      <p className="text-xs font-bold text-foreground mb-2">High-CTR SEO Tags:</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {activeRewrite.retentionKeywordsUsed.map((kw, i) => (
-                          <span key={i} className="text-[10px] font-medium bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full">
-                            #{kw}
+                        {(activeRewrite.seoTags || []).map((tag, i) => (
+                          <span key={i} className="text-[10px] font-mono bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded-md">
+                            #{tag}
                           </span>
                         ))}
                       </div>
                     </div>
+                    <Button onClick={handleCopySeoTags} size="sm" className="w-full cyber-button text-xs h-9">
+                      <Copy className="w-3.5 h-3.5 mr-2" /> Copy All SEO Tags
+                    </Button>
                   </TabsContent>
 
-                  {/* ORIGINAL VIDEO METADATA */}
-                  <TabsContent value="meta" className="pt-3 space-y-3">
-                    <div className="p-4 rounded-xl border border-border/60 bg-secondary/20 space-y-2">
-                      <div className="flex justify-between border-b border-border/20 pb-2">
-                        <span className="text-xs text-muted-foreground">Original Video ID:</span>
-                        <span className="text-xs font-bold text-foreground font-mono">{activeRewrite.targetVideoId}</span>
-                      </div>
-                      <div className="flex justify-between border-b border-border/20 pb-2">
-                        <span className="text-xs text-muted-foreground">Cloning Strategy:</span>
-                        <span className="text-xs font-bold text-foreground uppercase tracking-wider text-primary">
-                          {activeRewrite.tier === "premium" ? "90% Framework Clone" : "60% Vibe Rewrite"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between border-b border-border/20 pb-2">
-                        <span className="text-xs text-muted-foreground">Compiled At:</span>
-                        <span className="text-xs text-foreground font-medium">
-                          {new Date(activeRewrite.createdAt).toLocaleString()}
-                        </span>
-                      </div>
+                  {/* EDITING & VISUAL GUIDE CONTENT */}
+                  <TabsContent value="guide" className="pt-3">
+                    <div className="rounded-xl border border-border/80 bg-secondary/30 p-4 h-[300px] overflow-y-auto font-sans text-xs text-foreground leading-relaxed whitespace-pre-wrap select-text scrollbar-thin">
+                      {activeRewrite.editingGuide}
                     </div>
                   </TabsContent>
                 </Tabs>
@@ -769,9 +831,9 @@ export default function CloneCrush() {
               <div className="w-16 h-16 rounded-2xl bg-secondary/60 flex items-center justify-center mb-4 border border-border">
                 <FileText className="w-8 h-8 text-muted-foreground" />
               </div>
-              <p className="text-base text-foreground font-bold">No Active Rewrite Drafted</p>
+              <p className="text-base text-foreground font-bold">No Active Chain-Loop Package</p>
               <p className="text-xs text-muted-foreground max-w-[250px] mt-2 leading-relaxed">
-                Profile your channel, select a video from the Showdown Matrix, and hit <strong className="text-foreground">Clone &amp; Crush</strong>.
+                Profile your channel, select a video from the Showdown Matrix, and hit <strong className="text-foreground">Execute Chain-Loop</strong>.
               </p>
             </Card>
           )}
@@ -781,7 +843,7 @@ export default function CloneCrush() {
             <CardHeader className="pb-2">
               <CardTitle className="font-display text-sm font-semibold text-foreground flex items-center gap-2">
                 <History className="w-4 h-4 text-primary" />
-                Historic Script Rewrites ({rewrites.length})
+                Historic Chain-Loop Packages ({rewrites.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="px-3 pb-3">
@@ -809,7 +871,7 @@ export default function CloneCrush() {
                           onClick={(e) => {
                             e.stopPropagation();
                             deleteRewrite(r.id);
-                            toast.success("Rewrite draft removed");
+                            toast.success("Chain-Loop package removed");
                           }}
                           className="absolute right-2 opacity-0 group-hover:opacity-100 hover:text-destructive text-muted-foreground transition-all duration-200"
                         >
@@ -821,7 +883,7 @@ export default function CloneCrush() {
                 </div>
               ) : (
                 <div className="text-center py-6 text-muted-foreground/60 text-xs">
-                  Your script clones history will appear here.
+                  Your generated Chain-Loop packages will appear here.
                 </div>
               )}
             </CardContent>
