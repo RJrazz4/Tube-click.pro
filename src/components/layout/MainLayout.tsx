@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { Footer } from "./Footer";
+import { SmartGeoPaymentModal } from "@/components/SmartGeoPaymentModal";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -20,6 +21,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       <div className="ml-20">
         <Footer />
       </div>
+      <SmartGeoPaymentModal />
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   Share2,
   TrendingUp,
   Search,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,8 +27,17 @@ import { useContentStats, useContentActions } from "@/hooks/useContentStats";
 import type { SavedContent } from "@/stores/useContentStore";
 import { exportAllAsZip } from "@/lib/export";
 import { VerificationModal } from "@/components/VerificationModal";
+import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
 
 const tools = [
+  {
+    title: "Clone & Crush AI",
+    description: "Ethically clone competitor viral scripts with Stealth Disguise",
+    icon: Zap,
+    path: "/clone-crush",
+    gradient: "from-purple-600 via-indigo-600 to-cyan-500",
+    glow: "neon-glow-purple",
+  },
   {
     title: "TubeBot AI Agent",
     description: "Generate viral titles, hooks & scripts",
@@ -150,6 +160,7 @@ export default function Dashboard() {
   // Phase A2: Zustand selectors — NO polling, reactive subscription, memoized via selectors
   const { stats, recentContent, totalContent } = useContentStats();
   const { deleteContent, clearAll } = useContentActions();
+  const profile = useCloneCrushStore((s) => s.profile);
 
   const [isExporting, setIsExporting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -231,30 +242,92 @@ export default function Dashboard() {
       <VerificationModal open={verificationOpen} onOpenChange={setVerificationOpen} onVerified={doExport} />
 
       {/* Welcome Section — eager load, no lazy */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/20 via-card to-accent/20 p-5 md:p-8 border border-border gradient-border">
-        <div className="relative z-10">
-          <h1 className="font-display text-2xl md:text-3xl lg:text-4xl font-bold text-foreground mb-2 md:mb-3">
-            Hello Creator! <span className="animate-pulse">👋</span>
-          </h1>
-          <p className="text-base md:text-lg text-muted-foreground max-w-xl leading-relaxed">
-            Ready to make a <span className="text-primary text-glow-purple font-semibold">viral video</span>? Tap a button below to start.
-          </p>
-          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            Zustand state + React Query caching — 0 polling, instant updates (Phase A2)
-          </p>
-          {totalContent > 0 && (
-            <div className="mt-4 flex gap-3">
-              <Button variant="outline" size="sm" onClick={handleClearAll} disabled={isExporting || isClearing} className="border-destructive/40 text-destructive hover:bg-destructive/10 h-10 px-4 text-sm">
-                {isClearing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                Clear All ({totalContent})
-              </Button>
-            </div>
+      {profile ? (
+        <div 
+          className="relative overflow-hidden rounded-2xl border border-border bg-cover bg-center min-h-[160px] md:min-h-[200px]"
+          style={{ 
+            backgroundImage: profile.banner && profile.banner !== 'PLACEHOLDER_GRADIENT' 
+              ? `linear-gradient(to right, rgba(10, 10, 12, 0.95) 40%, rgba(10, 10, 12, 0.4)), url(${profile.banner})`
+              : `linear-gradient(135deg, rgba(88, 28, 135, 0.2) 0%, rgba(9, 9, 11, 0.9) 70%)`
+          }}
+        >
+          {/* Cyberpunk grid overlay on placeholder gradient */}
+          {(!profile.banner || profile.banner === 'PLACEHOLDER_GRADIENT') && (
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:20px_20px]" />
           )}
+
+          <div className="relative z-10 p-5 md:p-8 flex flex-col md:flex-row items-start md:items-center gap-5 h-full">
+            <div className="relative group shrink-0">
+              <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-neon-purple to-neon-cyan opacity-75 blur-sm animate-pulse" />
+              <img 
+                src={profile.avatar} 
+                alt={profile.name} 
+                className="relative w-16 h-16 md:w-20 md:h-20 rounded-full border-2 border-background object-cover bg-card"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=60";
+                }}
+              />
+            </div>
+
+            <div className="space-y-1.5 md:space-y-2 flex-1 min-w-0">
+              <div className="flex items-center flex-wrap gap-2">
+                <h1 className="font-display text-xl md:text-2xl lg:text-3xl font-bold text-foreground truncate">
+                  {profile.name}
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 font-display text-[10px] uppercase tracking-wider font-semibold">
+                  Profiled Creator
+                </span>
+              </div>
+              <p className="text-xs md:text-sm text-primary font-medium tracking-wide">
+                {profile.handle}
+              </p>
+              <p className="text-xs md:text-sm text-muted-foreground max-w-2xl line-clamp-2 md:line-clamp-3 leading-relaxed">
+                {profile.description}
+              </p>
+              <p className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                Live Matrix active • Profiled on {new Date(profile.profiledAt).toLocaleDateString()}
+              </p>
+            </div>
+            
+            <div className="self-end md:self-center shrink-0">
+              <Link to="/clone-crush">
+                <Button size="sm" className="cyber-button text-xs gap-1.5 font-display">
+                  <Zap className="w-3.5 h-3.5 text-primary-foreground fill-primary-foreground" />
+                  Clone &amp; Crush Hub
+                </Button>
+              </Link>
+            </div>
+          </div>
+          <div className="absolute -right-10 -top-10 w-40 h-40 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -right-20 -bottom-10 w-60 h-60 bg-accent/10 rounded-full blur-3xl pointer-events-none" />
         </div>
-        <div className="absolute -right-10 -top-10 w-40 h-40 bg-primary/30 rounded-full blur-3xl" />
-        <div className="absolute -right-20 -bottom-10 w-60 h-60 bg-accent/20 rounded-full blur-3xl" />
-      </div>
+      ) : (
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/20 via-card to-accent/20 p-5 md:p-8 border border-border gradient-border">
+          <div className="relative z-10">
+            <h1 className="font-display text-2xl md:text-3xl lg:text-4xl font-bold mb-2 md:mb-3 text-glow-purple text-primary">
+              Algorithm Hijack: System Ready. ⚡️
+            </h1>
+            <p className="text-base md:text-lg text-muted-foreground max-w-xl leading-relaxed">
+              Your competitors are sleeping. Drop a viral link below and let the <span className="text-primary text-glow-purple font-semibold">Neural Engine</span> steal their formula.
+            </p>
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              Zustand state + React Query caching — 0 polling, instant updates (Phase A2)
+            </p>
+            {totalContent > 0 && (
+              <div className="mt-4 flex gap-3">
+                <Button variant="outline" size="sm" onClick={handleClearAll} disabled={isExporting || isClearing} className="border-destructive/40 text-destructive hover:bg-destructive/10 h-10 px-4 text-sm">
+                  {isClearing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                  Clear All ({totalContent})
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="absolute -right-10 -top-10 w-40 h-40 bg-primary/30 rounded-full blur-3xl" />
+          <div className="absolute -right-20 -bottom-10 w-60 h-60 bg-accent/20 rounded-full blur-3xl" />
+        </div>
+      )}
 
       {/* Stats Grid — memoized cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">

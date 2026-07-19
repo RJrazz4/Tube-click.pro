@@ -82,17 +82,21 @@ interface AuthState {
   license: LicenseInfo;
   user: UserProfile | null;
   isAuthenticated: boolean;
+  upgradeModalOpen: boolean;
   
   // Daily usage tracking
   dailyUsage: {
     date: string;
     generationsUsed: number;
+    voiceCharactersUsed?: number;
   };
   
   // Actions
   setLicense: (license: Partial<LicenseInfo>) => void;
   setUser: (user: UserProfile | null) => void;
+  setUpgradeModalOpen: (open: boolean) => void;
   updateUsage: () => void;
+  updateVoiceUsage: (chars: number) => void;
   resetDailyUsage: () => void;
   checkAccess: (feature: keyof FeatureAccess) => boolean;
   getFeatures: () => FeatureAccess;
@@ -114,6 +118,7 @@ export const useAuthStore = create<AuthState>()(
       license: DEFAULT_LICENSE,
       user: null,
       isAuthenticated: false,
+      upgradeModalOpen: false,
       dailyUsage: {
         date: getToday(),
         generationsUsed: 0,
@@ -130,6 +135,8 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: user !== null,
         }),
 
+      setUpgradeModalOpen: (open) => set({ upgradeModalOpen: open }),
+
       updateUsage: () => {
         const today = getToday();
         const { dailyUsage } = get();
@@ -140,6 +147,7 @@ export const useAuthStore = create<AuthState>()(
             dailyUsage: {
               date: today,
               generationsUsed: 1,
+              voiceCharactersUsed: 0,
             },
           });
         } else {
@@ -152,11 +160,35 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      updateVoiceUsage: (chars) => {
+        const today = getToday();
+        const { dailyUsage } = get();
+        const currentVoiceUsed = dailyUsage.voiceCharactersUsed || 0;
+        
+        if (dailyUsage.date !== today) {
+          set({
+            dailyUsage: {
+              date: today,
+              generationsUsed: 0,
+              voiceCharactersUsed: chars,
+            },
+          });
+        } else {
+          set({
+            dailyUsage: {
+              ...dailyUsage,
+              voiceCharactersUsed: currentVoiceUsed + chars,
+            },
+          });
+        }
+      },
+
       resetDailyUsage: () =>
         set({
           dailyUsage: {
             date: getToday(),
             generationsUsed: 0,
+            voiceCharactersUsed: 0,
           },
         }),
 

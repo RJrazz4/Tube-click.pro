@@ -27,6 +27,8 @@ import {
   Zap,
   Crown,
   Building2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +36,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
   useAuthStore,
@@ -765,101 +769,204 @@ function AboutSection() {
 
 function PricingSection() {
   const license = useLicense();
-  const { upgradeTier } = useAuthStore();
+  const { upgradeTier, setUpgradeModalOpen } = useAuthStore();
 
-  const handleUpgrade = (tier: SubscriptionTier) => {
-    // In production, this would open a payment modal
-    upgradeTier(tier);
-    toast.success(`Upgraded to ${tier}! Welcome to the future.`);
+  const handleUpgradeClick = () => {
+    setUpgradeModalOpen(true);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="text-center">
-        <h2 className="text-2xl font-display font-bold text-foreground mb-2">Choose Your Plan</h2>
-        <p className="text-sm text-muted-foreground">Unlock the full power of AI content creation</p>
+    <div className="space-y-6 md:space-y-8">
+      <div className="text-center max-w-lg mx-auto">
+        <h2 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-2 flex items-center justify-center gap-2">
+          <Zap className="w-6 h-6 text-primary fill-primary animate-pulse" />
+          Choose Your Plan
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Enforce your content creation with zero-loophole hard limits. Upgrade to deploy our full stealth viral capability.
+        </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {PRICING_TIERS.map((plan) => {
-          const Icon = plan.icon;
-          const isCurrentPlan = license.tier === plan.tier;
-          
-          return (
-            <Card
-              key={plan.tier}
-              className={cn(
-                "cyber-card relative overflow-hidden transition-all duration-300",
-                plan.popular && "neon-glow-purple border-primary/50",
-                isCurrentPlan && "ring-2 ring-primary"
-              )}
-            >
-              {plan.popular && (
-                <div className="absolute top-0 right-0 bg-gradient-to-l from-primary to-pink-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
-                  POPULAR
+      {/* 2-Tier Side-by-Side Comparison */}
+      <div className="grid gap-6 md:grid-cols-2 max-w-4xl mx-auto items-stretch">
+        
+        {/* LEFT CARD: FREE PLAN ($0) - Minimalist Dark Design */}
+        <Card className={cn(
+          "cyber-card bg-card/40 border-border/60 p-6 flex flex-col justify-between transition-all duration-300 relative overflow-hidden",
+          license.tier === "free" && "ring-1 ring-border border-border/80 bg-card/20"
+        )}>
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-display font-bold text-foreground">Free Plan</h3>
+                <p className="text-xs text-muted-foreground">Perfect to test the waters</p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-display font-bold text-foreground">$0</p>
+                <p className="text-[10px] text-muted-foreground uppercase font-mono">Forever</p>
+              </div>
+            </div>
+
+            <div className="h-px bg-border/40 my-4" />
+
+            <div className="space-y-3.5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Features Included:</p>
+              <ul className="space-y-2.5 text-xs text-muted-foreground">
+                <li className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                  <span>10 generations per day (Zustand SWR)</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                  <span>2 thumbnails per batch</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                  <span>4 storyboard scenes</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                  <span className="text-foreground font-medium">Voiceover: 500 characters per day</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                  <span className="text-foreground font-medium">60% Clone &amp; Crush Loophole</span>
+                </li>
+              </ul>
+
+              <div className="h-px bg-border/20 my-4" />
+
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Limitations:</p>
+              <ul className="space-y-2.5 text-xs text-muted-foreground/60">
+                <li className="flex items-center gap-2.5">
+                  <XCircle className="w-4 h-4 text-destructive/60 shrink-0" />
+                  <span>No Unlimited Voiceovers (Limit: 500 chars)</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <XCircle className="w-4 h-4 text-destructive/60 shrink-0" />
+                  <span>No 90% Structural Clone (Stealth Loophole)</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <XCircle className="w-4 h-4 text-destructive/60 shrink-0" />
+                  <span>Watermarked video &amp; ZIP exports</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="mt-8">
+            {license.tier === "free" ? (
+              <Button disabled className="w-full bg-secondary/80 text-muted-foreground text-xs font-semibold uppercase tracking-wider h-11">
+                Current Plan Active
+              </Button>
+            ) : (
+              <Button onClick={() => upgradeTier("free")} variant="outline" className="w-full border-border hover:bg-secondary/40 text-xs font-semibold uppercase tracking-wider h-11">
+                Downgrade to Free
+              </Button>
+            )}
+          </div>
+        </Card>
+
+        {/* RIGHT CARD: PREMIUM PLAN ($19) - Glow Glowing Design */}
+        <Card className={cn(
+          "cyber-card bg-card/80 border-primary/50 p-6 flex flex-col justify-between transition-all duration-300 relative overflow-hidden scale-[1.01] md:scale-[1.03] shadow-neon-glow ring-1 ring-primary/40"
+        )}>
+          {/* Most Popular Ribbon */}
+          <div className="absolute top-0 right-0 bg-gradient-to-l from-primary via-indigo-600 to-pink-500 text-white text-[9px] font-bold tracking-widest px-3.5 py-1.5 rounded-bl-xl uppercase">
+            Most Popular
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-lg font-display font-bold text-foreground">Premium Plan</h3>
+                  <Sparkles className="w-4 h-4 text-primary fill-primary animate-pulse" />
                 </div>
-              )}
-              
-              <CardHeader className="text-center pb-2">
-                <div className={cn("w-14 h-14 mx-auto rounded-xl bg-gradient-to-br flex items-center justify-center mb-4", plan.gradient)}>
-                  <Icon className="w-7 h-7 text-white" />
+                <p className="text-xs text-muted-foreground">Deploy full stealth viral mastery</p>
+              </div>
+              <div className="text-right">
+                <div className="flex items-baseline justify-end">
+                  <span className="text-3xl font-display font-bold text-foreground">$19</span>
+                  <span className="text-xs text-muted-foreground font-mono">/mo</span>
                 </div>
-                <CardTitle className="text-xl font-display">{plan.name}</CardTitle>
-                <CardDescription className="text-xs">{plan.description}</CardDescription>
-                <div className="mt-4">
-                  <span className="text-4xl font-display font-bold text-foreground">{plan.price}</span>
-                  <span className="text-muted-foreground">{plan.period}</span>
-                </div>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  {plan.features.map((feature, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm">
-                      <Check className="w-4 h-4 text-green-400 shrink-0" />
-                      <span className="text-foreground">{feature}</span>
-                    </div>
-                  ))}
-                  {plan.limitations.map((limitation, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      <span>{limitation}</span>
-                    </div>
-                  ))}
-                </div>
-                
-                <Button
-                  onClick={() => handleUpgrade(plan.tier)}
-                  disabled={isCurrentPlan}
-                  className={cn("w-full", plan.gradient, "text-white hover:opacity-90")}
-                  variant={plan.popular ? "default" : "outline"}
+                <p className="text-[9px] text-primary uppercase font-mono font-bold tracking-wider">Stealth Activated</p>
+              </div>
+            </div>
+
+            <div className="h-px bg-primary/20 my-4" />
+
+            <div className="space-y-3.5">
+              <p className="text-xs font-semibold text-primary uppercase tracking-wider">Unlimited Premium Cues:</p>
+              <ul className="space-y-2.5 text-xs text-foreground/90">
+                <li className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
+                  <span className="font-semibold text-foreground">Unlimited Cinematic Voiceovers (VectorEngine)</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
+                  <span className="font-semibold text-foreground">90% Clone &amp; Crush (Stealth Disguise Activated)</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
+                  <span>100 generations per day (Priority queues)</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
+                  <span>4 thumbnails per batch (No watermark)</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
+                  <span>8 storyboard scenes (Uncapped resolution)</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
+                  <span>Full secure exports (Unmarked ZIP files)</span>
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
+                  <span>Advanced analytics &amp; direct priority support</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="mt-8 space-y-3">
+            {license.tier === "pro" || license.tier === "enterprise" ? (
+              <Button disabled className="w-full bg-primary/20 border border-primary/30 text-primary text-xs font-semibold uppercase tracking-wider h-11">
+                Active Premium Creator
+              </Button>
+            ) : (
+              <>
+                <Button 
+                  onClick={handleUpgradeClick} 
+                  className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-95 text-primary-foreground font-display font-bold uppercase tracking-wider text-xs h-11 flex items-center justify-center gap-1.5 shadow-md active:scale-98 transition-all"
                 >
-                  {isCurrentPlan ? (
-                    "Current Plan"
-                  ) : plan.tier === "free" ? (
-                    "Get Started"
-                  ) : (
-                    <>
-                      <Crown className="w-4 h-4 mr-2" />
-                      Upgrade to {plan.name}
-                    </>
-                  )}
+                  <Zap className="w-4 h-4 fill-primary-foreground text-primary-foreground" />
+                  Upgrade to Premium
                 </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
 
-      <Card className="cyber-card border-border bg-gradient-to-r from-primary/10 to-accent/10">
-        <CardContent className="py-6 text-center">
-          <p className="text-sm text-muted-foreground mb-2">Need a custom solution?</p>
-          <Button variant="outline" className="border-primary/50">
-            <Building2 className="w-4 h-4 mr-2" />
-            Contact Sales for Enterprise
-          </Button>
-        </CardContent>
-      </Card>
+                {/* Highly visible secondary God Mode trigger button */}
+                <div 
+                  onClick={handleUpgradeClick}
+                  className="relative overflow-hidden rounded-xl border border-dashed border-primary bg-primary/5 hover:bg-primary/10 transition-all duration-300 p-2.5 text-center cursor-pointer select-none"
+                >
+                  <p className="text-[10px] font-bold text-foreground flex items-center justify-center gap-1">
+                    ⚡️ UNLOCK GOD MODE — JUST ₹99 / $1.19
+                  </p>
+                  <p className="text-[9px] font-semibold text-primary">
+                    🔥 7 Days. FULL POWER. ONE-TIME ACCESS.
+                  </p>
+                  <p className="text-[8px] text-muted-foreground mt-0.5 leading-none">
+                    No auto-pay. Experience the full 90% Stealth Disguise engine for a week.
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
+
+      </div>
     </div>
   );
 }

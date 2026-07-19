@@ -3,10 +3,12 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { GhostAdminModal } from "@/components/GhostAdminModal";
 import { useGhostTrigger } from "@/hooks/useGhostTrigger";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 export function TopBar() {
   const [ghostOpen, setGhostOpen] = useState(false);
   const handleGhostTrigger = useGhostTrigger(() => setGhostOpen(true));
+  const setUpgradeModalOpen = useAuthStore((s) => s.setUpgradeModalOpen);
 
   return (
     <header className="fixed top-0 left-20 right-0 h-16 bg-background/80 backdrop-blur-xl border-b border-border z-40 flex items-center justify-between px-6">
@@ -42,14 +44,17 @@ export function TopBar() {
           </span>
         </div>
 
-        <Button variant="outline" size="sm" className="gap-2 border-border hover:border-primary/50 hover:bg-primary/10 relative pr-4" asChild>
-          <a href="https://github.com/RJrazz4/Tube-click.pro" target="_blank" rel="noopener noreferrer">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="hidden sm:inline">Pro</span>
-            <span className="absolute -top-2.5 -right-2 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 shadow-lg shadow-pink-500/40 whitespace-nowrap">
-              US Ready
-            </span>
-          </a>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="gap-2 border-border hover:border-primary/50 hover:bg-primary/10 relative pr-4" 
+          onClick={() => setUpgradeModalOpen(true)}
+        >
+          <Sparkles className="w-4 h-4 text-primary" />
+          <span className="hidden sm:inline">Pro</span>
+          <span className="absolute -top-2.5 -right-2 px-1.5 py-0.5 rounded-full text-[9px] font-bold text-white bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 shadow-lg shadow-pink-500/40 whitespace-nowrap">
+            US Ready
+          </span>
         </Button>
       </div>
     </header>
