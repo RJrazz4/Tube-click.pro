@@ -47,27 +47,11 @@ const tools = [
     glow: "neon-glow-purple",
   },
   {
-    title: "Thumbnail Architect",
-    description: "Create 4 AI thumbnails at once",
-    icon: Image,
-    path: "/thumbnails",
-    gradient: "from-neon-cyan to-blue-500",
-    glow: "neon-glow-cyan",
-  },
-  {
     title: "Visual Storyboard",
     description: "Cinematic frames from your script",
     icon: Film,
     path: "/storyboard",
     gradient: "from-purple-400 to-violet-600",
-    glow: "",
-  },
-  {
-    title: "SnapGuide Vision",
-    description: "Screenshots to step-by-step tutorials",
-    icon: Eye,
-    path: "/vision-guide",
-    gradient: "from-green-400 to-emerald-600",
     glow: "",
   },
   {
@@ -305,8 +289,8 @@ export default function Dashboard() {
       ) : (
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/20 via-card to-accent/20 p-5 md:p-8 border border-border gradient-border">
           <div className="relative z-10">
-            <h1 className="font-display text-2xl md:text-3xl lg:text-4xl font-bold mb-2 md:mb-3 text-glow-purple text-primary">
-              Algorithm Hijack: System Ready. ⚡️
+            <h1 className="font-display text-2xl md:text-3xl lg:text-4xl font-black mb-2 md:mb-3 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 text-transparent bg-clip-text drop-shadow-[0_0_15px_rgba(34,211,238,0.6)]">
+              Algorithm Hijack: System Ready. <span className="text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.8)]">⚡️</span>
             </h1>
             <p className="text-base md:text-lg text-muted-foreground max-w-xl leading-relaxed">
               Your competitors are sleeping. Drop a viral link below and let the <span className="text-primary text-glow-purple font-semibold">Neural Engine</span> steal their formula.

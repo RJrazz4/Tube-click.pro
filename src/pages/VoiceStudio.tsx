@@ -62,6 +62,13 @@ export default function VoiceStudio() {
   const animationRef = useRef<number | null>(null);
 
   useEffect(() => {
+    const pendingScript = sessionStorage.getItem('tubegenius_pending_voice_script');
+    if (pendingScript) {
+      setText(pendingScript);
+      sessionStorage.removeItem('tubegenius_pending_voice_script');
+      toast.success("⚡️ Chain-Loop Script loaded into Voiceover Studio!");
+    }
+
     const loadVoices = () => {
       const availableVoices = speechSynthesis.getVoices();
       setVoices(availableVoices);
@@ -104,14 +111,12 @@ export default function VoiceStudio() {
 
       audio.onended = () => { setIsPreviewPlaying(null); };
       audio.onerror = () => {
-        // Fallback if preview MP3 missing — log but continue
-        console.warn(`Preview MP3 not found for ${voice.name}: ${voice.preview}, using browser TTS fallback`);
+        console.warn(`Preview MP3 not found for ${voice.name}: ${voice.preview}`);
         setIsPreviewPlaying(null);
-        toast.info(`${voice.name} preview — static MP3 would play here (0 API calls). In production, these are ElevenLabs samples stored in public/previews/voices/`);
+        toast.info(`${voice.name} preview — static MP3 would play here (0 API calls).`);
       };
 
       await audio.play();
-      // Visualizer effect for preview
       animateVisualizer();
       setTimeout(() => { if (audio.paused) stopVisualizer(); }, 3000);
 
@@ -125,7 +130,6 @@ export default function VoiceStudio() {
     if (!text.trim()) { toast.error("Please enter some text to convert to speech"); return; }
     if (text.length > 5000) { toast.error("Text too long. Maximum 5000 characters allowed."); return; }
 
-    // Enforce 500 character limit on free plan
     if (license.tier === "free") {
       const voiceCharsUsed = dailyUsage.voiceCharactersUsed || 0;
       if (voiceCharsUsed + text.length > 500) {
@@ -147,9 +151,6 @@ export default function VoiceStudio() {
     animateVisualizer();
 
     try {
-      // Secure VectorEngine (ElevenLabs white-labeled) — server env only, no BYOK
-      // Route: /api/vectorengine-tts or /functions/v1/elevenlabs-tts (both secure)
-      // Frontend never knows provider key — VectorEngine = ElevenLabs but branded
       const audioBlob = await fetchEdgeFunctionBlob("elevenlabs-tts", {
         text,
         voiceId: selectedElevenLabsVoice,
@@ -171,7 +172,6 @@ export default function VoiceStudio() {
       incrementStat('voiceoversGenerated');
       saveContent({ type: 'voiceover', title: `Neural Voice - ${selectedElevenLabsVoice} via VectorEngine`, content: text });
 
-      // Record character usage
       if (license.tier === "free") {
         updateVoiceUsage(text.length);
       }
@@ -286,7 +286,7 @@ export default function VoiceStudio() {
                   {selectedVoiceInfo && <p className="text-xs text-muted-foreground flex items-center gap-1"><Zap className="w-3 h-3 text-green-400" />{selectedVoiceInfo.description} — Preview plays static MP3 from /previews/voices/{selectedVoiceInfo.name}.mp3 (0 API calls, saves 80% quota)</p>}
                 </div>
 
-                {/* Preview Button — Phase D1 */}
+                {/* Preview Button */}
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => { const v = ELEVENLABS_VOICES.find(v => v.id === selectedElevenLabsVoice); if (v) handlePreviewVoice(v); }} className="flex-1 gap-1.5 border-green-500/30 hover:border-green-500/50 h-9 text-xs">
                     {isPreviewPlaying === selectedVoiceInfo?.name ? <><Pause className="w-3.5 h-3.5" />Stop Preview</> : <><Headphones className="w-3.5 h-3.5" />Preview {selectedVoiceInfo?.name} (0 API)</>}
@@ -300,13 +300,13 @@ export default function VoiceStudio() {
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between"><Label className="text-sm text-foreground">Stability</Label><span className="text-xs text-muted-foreground">{(stability[0] * 100).toFixed(0)}%</span></div>
-                  <Slider value={stability} onValueChange={setStability} min={0} max={1} step={0.05} className="cursor-pointer" />
+                  <Slider value={stability} onValueChange={stability => setStability(stability)} min={0} max={1} step={0.05} className="cursor-pointer" />
                   <p className="text-xs text-muted-foreground">Lower = more expressive, Higher = more consistent</p>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between"><Label className="text-sm text-foreground">Speed</Label><span className="text-xs text-muted-foreground">{speed[0].toFixed(1)}x</span></div>
-                  <Slider value={speed} onValueChange={setSpeed} min={0.7} max={1.2} step={0.05} className="cursor-pointer" />
+                  <Slider value={speed} onValueChange={speed => setSpeed(speed)} min={0.7} max={1.2} step={0.05} className="cursor-pointer" />
                 </div>
               </>
             ) : (
@@ -320,8 +320,8 @@ export default function VoiceStudio() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><div className="flex items-center justify-between"><Label className="text-sm">Speed</Label><span className="text-xs text-muted-foreground">{rate[0].toFixed(1)}x</span></div><Slider value={rate} onValueChange={setRate} min={0.5} max={2} step={0.1} /></div>
-                <div className="space-y-2"><div className="flex items-center justify-between"><Label className="text-sm">Pitch</Label><span className="text-xs text-muted-foreground">{pitch[0].toFixed(1)}</span></div><Slider value={pitch} onValueChange={setPitch} min={0.5} max={2} step={0.1} /></div>
+                <div className="space-y-2"><div className="flex items-center justify-between"><Label className="text-sm">Speed</Label><span className="text-xs text-muted-foreground">{rate[0].toFixed(1)}x</span></div><Slider value={rate} onValueChange={rate => setRate(rate)} min={0.5} max={2} step={0.1} /></div>
+                <div className="space-y-2"><div className="flex items-center justify-between"><Label className="text-sm">Pitch</Label><span className="text-xs text-muted-foreground">{pitch[0].toFixed(1)}</span></div><Slider value={pitch} onValueChange={pitch => setPitch(pitch)} min={0.5} max={2} step={0.1} /></div>
               </>
             )}
 

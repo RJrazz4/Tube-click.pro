@@ -43,7 +43,7 @@ export function SmartGeoPaymentModal() {
 
   return (
     <Dialog open={upgradeModalOpen} onOpenChange={setUpgradeModalOpen}>
-      <DialogContent className="cyber-card bg-card/95 border-border/80 max-w-md p-6 relative">
+      <DialogContent className="cyber-card bg-card/95 border-border/80 max-w-md p-6 relative z-[100] shadow-[0_0_50px_rgba(0,0,0,0.9)]">
         <DialogHeader className="text-center pb-2">
           <div className="w-12 h-12 rounded-xl bg-primary/15 flex items-center justify-center mx-auto mb-3 border border-primary/20">
             <Zap className="w-6 h-6 text-primary fill-primary animate-pulse" />
