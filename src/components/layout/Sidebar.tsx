@@ -22,8 +22,6 @@ const navItems = [
   { icon: Settings, label: "Settings", path: "/settings" },
   { icon: Bot, label: "TubeBot AI", path: "/chat-agent" },
   { icon: Film, label: "Storyboard", path: "/storyboard" },
-  { icon: Image, label: "Thumbnails", path: "/thumbnails" },
-  { icon: Eye, label: "Vision Guide", path: "/vision-guide" },
   { icon: Mic, label: "Voiceover", path: "/voice" },
   { icon: Share2, label: "Multi-Platform Repurposer", path: "/repurposer" },
   { icon: TrendingUp, label: "Analytics & ROI Predictor", path: "/analytics" },

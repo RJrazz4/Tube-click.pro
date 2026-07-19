@@ -275,14 +275,6 @@ ${generatedContent.description || 'N/A'}
     toast.success("Script downloaded!");
   };
 
-  const handleSendToThumbnail = () => {
-    if (generatedContent?.titles?.[0]) {
-      navigate(`/thumbnails?title=${encodeURIComponent(generatedContent.titles[0])}`);
-    } else {
-      toast.error("No title available to send");
-    }
-  };
-
   return (
     <div className="h-[calc(100vh-8rem)] animate-fade-in">
       <div className="mb-4 md:mb-6">
@@ -485,16 +477,6 @@ ${generatedContent.description || 'N/A'}
                    >
                      <Download className="w-4 h-4" />
                      <span className="hidden sm:inline">Download</span>
-                   </Button>
-                   <Button
-                     variant="outline"
-                     size="sm"
-                     onClick={handleSendToThumbnail}
-                     disabled={isGenerating || !generatedContent?.titles?.[0]}
-                     className="gap-1.5 border-border hover:border-accent/50 h-9 md:h-10 px-3 text-xs md:text-sm touch-manipulation"
-                   >
-                     <ArrowRight className="w-4 h-4" />
-                     <span className="hidden sm:inline">Thumbnail</span>
                    </Button>
                  </div>
                )}

@@ -47,27 +47,11 @@ const tools = [
     glow: "neon-glow-purple",
   },
   {
-    title: "Thumbnail Architect",
-    description: "Create 4 AI thumbnails at once",
-    icon: Image,
-    path: "/thumbnails",
-    gradient: "from-neon-cyan to-blue-500",
-    glow: "neon-glow-cyan",
-  },
-  {
     title: "Visual Storyboard",
     description: "Cinematic frames from your script",
     icon: Film,
     path: "/storyboard",
     gradient: "from-purple-400 to-violet-600",
-    glow: "",
-  },
-  {
-    title: "SnapGuide Vision",
-    description: "Screenshots to step-by-step tutorials",
-    icon: Eye,
-    path: "/vision-guide",
-    gradient: "from-green-400 to-emerald-600",
     glow: "",
   },
   {
