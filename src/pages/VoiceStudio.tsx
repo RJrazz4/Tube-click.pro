@@ -13,6 +13,7 @@ import { fetchEdgeFunctionBlob } from "@/api/client/secureClient";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { VoiceVerificationModal } from "@/components/VoiceVerificationModal";
+import { useAuthStore } from "@/stores/useAuthStore";
 
 // White-labeled voice options — maps to VectorEngine (ElevenLabs) IDs server-side
 const ELEVENLABS_VOICES = [
@@ -33,6 +34,10 @@ const ELEVENLABS_VOICES = [
 ];
 
 export default function VoiceStudio() {
+  const license = useAuthStore((s) => s.license);
+  const dailyUsage = useAuthStore((s) => s.dailyUsage);
+  const updateVoiceUsage = useAuthStore((s) => s.updateVoiceUsage);
+
   const [text, setText] = useState("");
   const [useElevenLabs, setUseElevenLabs] = useState(true);
   const [selectedElevenLabsVoice, setSelectedElevenLabsVoice] = useState("george");
@@ -120,6 +125,24 @@ export default function VoiceStudio() {
     if (!text.trim()) { toast.error("Please enter some text to convert to speech"); return; }
     if (text.length > 5000) { toast.error("Text too long. Maximum 5000 characters allowed."); return; }
 
+    // Enforce 500 character limit on free plan
+    if (license.tier === "free") {
+      const voiceCharsUsed = dailyUsage.voiceCharactersUsed || 0;
+      if (voiceCharsUsed + text.length > 500) {
+        toast.error(`Daily Voiceover Limit Exceeded. Your Free plan has ${Math.max(0, 500 - voiceCharsUsed)} characters remaining today. Upgrade to Pro for Unlimited Cinematic Voiceovers!`, {
+          duration: 5000,
+          action: {
+            label: "Upgrade Pro",
+            onClick: () => {
+              useAuthStore.getState().upgradeTier("pro");
+              toast.success("Welcome to Pro Plan! Unlimited Cinematic Voiceovers unlocked.");
+            }
+          }
+        });
+        return;
+      }
+    }
+
     setIsGenerating(true);
     animateVisualizer();
 
@@ -147,6 +170,11 @@ export default function VoiceStudio() {
 
       incrementStat('voiceoversGenerated');
       saveContent({ type: 'voiceover', title: `Neural Voice - ${selectedElevenLabsVoice} via VectorEngine`, content: text });
+
+      // Record character usage
+      if (license.tier === "free") {
+        updateVoiceUsage(text.length);
+      }
 
       toast.success("Cinematic voiceover generated via VectorEngine secure route!");
 
@@ -312,7 +340,17 @@ export default function VoiceStudio() {
           <CardHeader className="pb-3"><CardTitle className="font-display text-base text-foreground">Script Editor — VectorEngine Secure</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <Textarea value={text} onChange={(e) => { setText(e.target.value); if (audioUrl) { URL.revokeObjectURL(audioUrl); setAudioUrl(null); } }} placeholder="Enter your voiceover script here..." className="min-h-[200px] bg-secondary border-border resize-none text-sm" />
-            <div className="flex items-center justify-between text-xs text-muted-foreground"><span>{text.length} characters</span><span>~{Math.ceil(text.split(/\s+/).filter(Boolean).length / 150)} min read</span></div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                {text.length} characters
+                {license.tier === "free" && (
+                  <span className="ml-2 px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-[10px]">
+                    Free Limit: {dailyUsage.voiceCharactersUsed || 0} / 500 characters used today
+                  </span>
+                )}
+              </span>
+              <span>~{Math.ceil(text.split(/\s+/).filter(Boolean).length / 150)} min read</span>
+            </div>
 
             <div className="flex items-center justify-center gap-3 p-4 bg-secondary/50 rounded-xl">
               <Button variant="outline" size="icon" onClick={handleStop} disabled={!isPlaying && !isPaused && !isGenerating} className="w-10 h-10 rounded-full border-border"><Square className="w-4 h-4" /></Button>

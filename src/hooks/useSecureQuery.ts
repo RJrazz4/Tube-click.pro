@@ -108,3 +108,19 @@ export function useSeoGeneration() {
 export function useTranscriptExtraction() {
   return useSecureMutation<{ transcript: string; segments: any[]; videoId: string; wordCount: number; length: number; source: string }, { url: string }>("transcript");
 }
+
+// Clone & Crush Auto-Competitor & Rewriter - Consolidated Mutation
+export function useCloneCrushMutation() {
+  return useSecureMutation<
+    {
+      success: boolean;
+      error?: string;
+      profile?: any;
+      competitors?: any[];
+      rewrite?: any;
+      model?: string;
+      failedOver?: boolean;
+    },
+    any
+  >("clone-crush");
+}

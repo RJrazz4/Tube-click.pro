@@ -27,6 +27,7 @@ const Terms = lazy(() => import("./pages/Terms"));
 const About = lazy(() => import("./pages/About"));
 const AdminPanel = lazy(() => import("./pages/AdminPanel"));
 const Settings = lazy(() => import("./pages/Settings"));
+const CloneCrush = lazy(() => import("./pages/CloneCrush"));
 
 // Tuned QueryClient for instant feel — stale 5min, gc 10min, no refetch on focus
 const queryClient = createAppQueryClient();
@@ -76,6 +77,7 @@ const App = () => (
               <Route path="/about" element={<About />} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/clone-crush" element={<CloneCrush />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
