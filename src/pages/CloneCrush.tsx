@@ -81,23 +81,60 @@ export default function CloneCrush() {
   useEffect(() => {
     if (profile) {
       if (!channelInput) setChannelInput(profile.url || profile.handle);
-      
-      // Auto guess niche based on description if empty
       if (!nicheInput) {
         const desc = profile.description.toLowerCase();
         if (desc.includes("crypto") || desc.includes("bitcoin")) setNicheInput("Crypto & Finance");
         else if (desc.includes("tech") || desc.includes("coding") || desc.includes("software")) setNicheInput("Tech & Coding");
         else if (desc.includes("vlog") || desc.includes("travel")) setNicheInput("Lifestyle Vlogging");
         else if (desc.includes("cooking") || desc.includes("food")) setNicheInput("Culinary & Cooking");
-        else if (desc.includes("business") || desc.includes("marketing") || desc.includes("money")) setNicheInput("Business & Wealth");
+        else if (desc.includes("business") || desc.includes("marketing")) setNicheInput("Business & Wealth");
         else setNicheInput("Educational Tutorials");
       }
-      
       if (!customDescription) {
         setCustomDescription(profile.description.slice(0, 150) + "...");
       }
     }
   }, [profile]);
+
+  // Background auto-discovery of competitors after profiling (Zero-Friction AI Niche Deduction)
+  const autoDiscoverCompetitors = async (prof: any) => {
+    const desc = (prof.description + " " + prof.name).toLowerCase();
+    let deducedNiche = "General YouTube Content";
+    if (desc.includes("crypto") || desc.includes("bitcoin") || desc.includes("finance") || desc.includes("trading") || desc.includes("money")) deducedNiche = "Crypto & Finance";
+    else if (desc.includes("tech") || desc.includes("coding") || desc.includes("software") || desc.includes("ai") || desc.includes("programming")) deducedNiche = "Tech & Coding";
+    else if (desc.includes("vlog") || desc.includes("travel") || desc.includes("lifestyle") || desc.includes("daily")) deducedNiche = "Lifestyle Vlogging";
+    else if (desc.includes("cooking") || desc.includes("food") || desc.includes("recipe")) deducedNiche = "Culinary & Cooking";
+    else if (desc.includes("business") || desc.includes("marketing") || desc.includes("startup") || desc.includes("entrepreneur")) deducedNiche = "Business & Wealth";
+    else if (desc.includes("gaming") || desc.includes("gameplay") || desc.includes("streamer")) deducedNiche = "Gaming & Esports";
+    else if (desc.includes("education") || desc.includes("tutorial") || desc.includes("learn")) deducedNiche = "Educational Tutorials";
+    else deducedNiche = prof.name || "Trending Creator Content";
+
+    setNicheInput(deducedNiche);
+    setCustomDescription(prof.description.slice(0, 150) || deducedNiche);
+    setIsSearchingCompetitors(true);
+    toast.loading(`AI automatically deducing niche ("${deducedNiche}") & auditing live viral velocity...`, { id: "competitors-find" });
+
+    try {
+      const res = await cloneCrushMutation.mutateAsync({
+        action: "competitors",
+        niche: deducedNiche,
+        description: prof.description || deducedNiche
+      });
+
+      if (res.success && res.competitors) {
+        setCompetitors(res.competitors);
+        const unlocked = res.competitors.find((v: any) => !v.isLocked) || res.competitors[0];
+        setSelectedVideo(unlocked);
+        toast.success(`Showdown Matrix Ready! Discovered 3 high-velocity competitors.`, { id: "competitors-find" });
+      } else {
+        throw new Error(res.error || "No viral competitors found");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to discover competitors automatically.", { id: "competitors-find" });
+    } finally {
+      setIsSearchingCompetitors(false);
+    }
+  };
 
   // 1. Channel Profile Scraper Call
   const handleProfileChannel = async () => {
@@ -119,12 +156,12 @@ export default function CloneCrush() {
       if (res.success && res.profile) {
         setProfile(res.profile);
         toast.success(`Success! Connected to ${res.profile.name}'s Channel Profile`, { id: "profile-scrape" });
+        await autoDiscoverCompetitors(res.profile);
       } else {
         throw new Error(res.error || "Channel not found");
       }
     } catch (err: any) {
       console.warn("Using scraper fallback profile due to error", err);
-      // Fallback profile if scraping is blocked
       const fallbackProfile = {
         id: `chan_fb_${Math.random().toString(36).substr(2, 5)}`,
         url: input.startsWith("http") ? input : `https://youtube.com/${input.startsWith("@") ? input : "@" + input}`,
@@ -132,46 +169,14 @@ export default function CloneCrush() {
         handle: input.startsWith("@") ? input : "@creator",
         avatar: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=60",
         banner: "PLACEHOLDER_GRADIENT",
-        description: "Custom Channel created via fast fallback. Type in your details to search viral trends!",
+        description: "Custom Channel created via fast fallback. Launching showdown matrix...",
         profiledAt: new Date().toISOString()
       };
       setProfile(fallbackProfile);
       toast.success("Connected via robust local profiling engine!", { id: "profile-scrape" });
+      await autoDiscoverCompetitors(fallbackProfile);
     } finally {
       setIsProfiling(false);
-    }
-  };
-
-  // 2. Discover Competitors Call (Velocity + Recency Bias)
-  const handleDiscoverCompetitors = async () => {
-    if (!nicheInput.trim()) {
-      toast.error("Please enter your channel niche");
-      return;
-    }
-
-    setIsSearchingCompetitors(true);
-    toast.loading("Analyzing trending viral scripts & calculating view velocity...", { id: "competitors-find" });
-
-    try {
-      const res = await cloneCrushMutation.mutateAsync({
-        action: "competitors",
-        niche: nicheInput,
-        description: customDescription || profile?.description || nicheInput
-      });
-
-      if (res.success && res.competitors) {
-        setCompetitors(res.competitors);
-        // Default select the first unlocked competitor video
-        const unlocked = res.competitors.find(v => !v.isLocked) || res.competitors[0];
-        setSelectedVideo(unlocked);
-        toast.success(`Discovered 3 high-velocity trending competitor videos!`, { id: "competitors-find" });
-      } else {
-        throw new Error(res.error || "No viral competitors found");
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to discover competitors. Try again.", { id: "competitors-find" });
-    } finally {
-      setIsSearchingCompetitors(false);
     }
   };
 
@@ -182,7 +187,6 @@ export default function CloneCrush() {
       return;
     }
 
-    // Gated Check for Locked Premium Videos
     if (selectedVideo.isLocked && license.tier === "free") {
       toast.error("This recently viral video is locked for Free Tier. Upgrade to Pro to clone this trend!");
       return;
@@ -191,7 +195,6 @@ export default function CloneCrush() {
     setIsRewriting(true);
     setActiveTab("script");
 
-    // Initialize Log steps console
     const steps: { label: string; status: "pending" | "processing" | "success" | "error" }[] = [
       { label: "Establishing Secure Tunnel & Scraping Video Captions...", status: "processing" },
       { label: "Mapping Narrative Pacing & Pacing Beats...", status: "pending" },
@@ -202,7 +205,6 @@ export default function CloneCrush() {
     setLogSteps(steps);
 
     try {
-      // Step A: Extract Transcript via existing /api/transcript endpoint
       const transcriptData = await transcriptMutation.mutateAsync({
         url: selectedVideo.url
       });
@@ -211,13 +213,11 @@ export default function CloneCrush() {
         throw new Error("Target video transcript is empty or closed captions are disabled. Select a different video.");
       }
 
-      // Update log console
       steps[0].status = "success";
       steps[1].status = "processing";
       setLogSteps([...steps]);
       await new Promise(r => setTimeout(r, 600));
 
-      // Step B: Call Rewrite Engine
       steps[1].status = "success";
       steps[2].status = "processing";
       setLogSteps([...steps]);
@@ -257,7 +257,6 @@ export default function CloneCrush() {
           changedExamplesCount: rw.changedExamplesCount
         });
 
-        // Save to general content list for recent dashboard activity too
         saveContent({
           type: "script",
           title: `Cloned Script: ${rw.rewrittenTitle.substring(0, 40)}...`,
@@ -283,7 +282,6 @@ export default function CloneCrush() {
     }
   };
 
-  // Helper Copy Script
   const handleCopyScript = async () => {
     if (!activeRewrite) return;
     const combinedText = `⚡️ TITLE:\n${activeRewrite.rewrittenTitle}\n\n⚡️ 15-SECOND GLITCH HOOK:\n${activeRewrite.glitchHook}\n\n⚡️ REWRITTEN SCRIPT:\n${activeRewrite.fullScript}`;
@@ -297,7 +295,6 @@ export default function CloneCrush() {
     }
   };
 
-  // Simulate Instant Pro Tier Upgrade (SaaS Monetization Demo)
   const handleSimulateUpgrade = () => {
     upgradeTier("pro");
     toast.success("Success! Upgraded to Pro Tier. Matrix fully unlocked!", {
@@ -315,11 +312,11 @@ export default function CloneCrush() {
             <Zap className="w-7 h-7 md:w-8 md:h-8 text-primary animate-pulse" />
             Clone &amp; Crush AI
             <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] border border-primary/20 font-display font-medium tracking-wide">
-              Auto-Competitor Matrix
+              Zero-Friction Showdown Matrix
             </span>
           </h1>
           <p className="text-sm md:text-base text-muted-foreground mt-1 max-w-3xl">
-            Uncover recent viral trends, calculate view-velocity, duplicate structural frameworks ethically, and deploy our proprietary <span className="text-foreground font-semibold">Stealth Disguise Protocol</span> to convert scripts into 100% unique masterpieces.
+            Auto-profile your channel, engage our Versus Showdown live velocity competitor audit, and deploy our proprietary <span className="text-foreground font-semibold">Stealth Disguise Protocol</span>.
           </p>
         </div>
 
@@ -341,7 +338,7 @@ export default function CloneCrush() {
       </div>
 
       <div className="grid lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT COLUMN: SETUP & COMPETITORS (8 columns on LG) */}
+        {/* LEFT COLUMN: SETUP & SHOWDOWN MATRIX (8 columns on LG) */}
         <div className="lg:col-span-8 space-y-6 md:space-y-8">
           
           {/* STEP 1: Paste URL & Auto-Profile */}
@@ -349,10 +346,10 @@ export default function CloneCrush() {
             <CardHeader className="pb-3 md:pb-4">
               <CardTitle className="font-display text-base md:text-lg text-foreground flex items-center gap-2">
                 <Compass className="w-5 h-5 text-primary" />
-                1. Auto-Profile Your Channel
+                1. Auto-Profile Your Channel (Zero-Friction URL Input)
               </CardTitle>
               <CardDescription className="text-xs md:text-sm text-muted-foreground">
-                Paste your URL or Handle. The AI will extract your branding and optimize search cues.
+                Paste your YouTube URL or Handle. The AI automatically deduces your niche and launches the live Versus Showdown matrix.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -374,186 +371,142 @@ export default function CloneCrush() {
                   {isProfiling ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Scraping...
+                      Profiling...
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4 text-primary-foreground fill-primary-foreground" />
-                      Profile Channel
+                      Launch Showdown
                     </>
                   )}
                 </Button>
               </div>
-
-              {profile && (
-                <div className="p-4 bg-secondary/20 rounded-xl border border-border/40 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                  <img 
-                    src={profile.avatar} 
-                    alt={profile.name} 
-                    className="w-12 h-12 rounded-full border border-border shrink-0 object-cover bg-card"
-                  />
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-foreground truncate">{profile.name}</p>
-                      <span className="text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full font-medium">Active Profile</span>
-                    </div>
-                    <p className="text-xs text-primary font-medium">{profile.handle}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-1">{profile.description}</p>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
 
-          {/* STEP 2: Configure & Find Competitors */}
-          <Card className="cyber-card border-border">
-            <CardHeader className="pb-3 md:pb-4">
-              <CardTitle className="font-display text-base md:text-lg text-foreground flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                2. Run Live Velocity Trend Audit
-              </CardTitle>
-              <CardDescription className="text-xs md:text-sm text-muted-foreground">
-                Calculates extreme recency multipliers to prioritize videos went viral hours or days ago.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="niche" className="text-xs text-muted-foreground">Channel Niche / Topic</Label>
-                  <Input
-                    id="niche"
-                    placeholder="e.g. Finance & Trading"
-                    value={nicheInput}
-                    onChange={(e) => setNicheInput(e.target.value)}
-                    className="bg-secondary/40 border-border/80 text-sm text-foreground placeholder:text-muted-foreground/60 h-10"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="customDescription" className="text-xs text-muted-foreground">Curation Filter Cues (Bio / Style)</Label>
-                  <Input
-                    id="customDescription"
-                    placeholder="e.g. cinematic editing, direct facts, fast pacing"
-                    value={customDescription}
-                    onChange={(e) => setCustomDescription(e.target.value)}
-                    className="bg-secondary/40 border-border/80 text-sm text-foreground placeholder:text-muted-foreground/60 h-10"
-                  />
-                </div>
+          {/* CRITICAL FIX 1: SIDE-BY-SIDE SHOWDOWN MATRIX (VERSUS MODE) */}
+          {profile && (
+            <div className="grid lg:grid-cols-12 gap-4 items-center animate-fade-in p-4 rounded-2xl bg-secondary/20 border border-border/60">
+              
+              {/* Left Side: User's Profile Card (5 cols) */}
+              <div className="lg:col-span-5 h-full">
+                <Card className="cyber-card border-primary/40 bg-card/95 p-5 h-full flex flex-col justify-between shadow-neon-glow">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[10px] font-mono uppercase bg-primary/20 text-primary px-2.5 py-0.5 rounded-full font-bold">
+                        Your Channel Profile
+                      </span>
+                      <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                    </div>
+                    <div className="flex items-center gap-3.5 mt-2">
+                      <img src={profile.avatar} alt={profile.name} className="w-14 h-14 rounded-full border-2 border-primary/50 object-cover bg-card shadow-md shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-base font-bold text-foreground truncate">{profile.name}</p>
+                        <p className="text-xs text-primary font-medium mt-0.5">{profile.handle}</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3 line-clamp-3 leading-relaxed">
+                      {profile.description}
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>AI Niche: <strong className="text-foreground">{nicheInput || "Auto-Deduced"}</strong></span>
+                    <span className="text-green-400 font-semibold">Active</span>
+                  </div>
+                </Card>
               </div>
 
-              <Button 
-                onClick={handleDiscoverCompetitors} 
-                disabled={isSearchingCompetitors || !nicheInput} 
-                className="w-full h-11 bg-primary text-primary-foreground font-semibold flex items-center justify-center gap-2"
-              >
-                {isSearchingCompetitors ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Calculating Velocity &amp; Curation Matrix...
-                  </>
-                ) : (
-                  <>
-                    <Compass className="w-4 h-4 mr-1" />
-                    Generate Auto-Competitor Matrix
-                  </>
-                )}
-              </Button>
+              {/* Center Divider: Glowing RED Lightning Bolt VS Divider (2 cols) */}
+              <div className="lg:col-span-2 flex flex-col items-center justify-center py-2 lg:py-0">
+                <div className="relative flex items-center justify-center">
+                  <div className="absolute inset-0 bg-red-500/30 rounded-full blur-xl animate-pulse" />
+                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-red-600 to-rose-950 border-2 border-red-500 flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.9)] relative z-10 animate-pulse">
+                    <Zap className="w-7 h-7 text-white fill-white animate-bounce" />
+                  </div>
+                </div>
+                <span className="text-[11px] font-display font-extrabold text-red-500 tracking-widest mt-2 uppercase drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">
+                  VS SHOWDOWN
+                </span>
+              </div>
 
-              {/* COMPETITOR MATRIX RENDER */}
-              {competitors.length > 0 && (
-                <div className="pt-4 space-y-4 border-t border-border/50">
-                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
-                    Select a trending viral blueprint to Clone &amp; Crush:
-                  </p>
-                  <div className="grid sm:grid-cols-3 gap-4">
-                    {competitors.map((video, idx) => {
-                      const isSelected = selectedVideo?.videoId === video.videoId;
-                      return (
-                        <div 
-                          key={video.videoId} 
-                          onClick={() => !video.isLocked && setSelectedVideo(video)}
-                          className={`group relative rounded-xl border p-3 cursor-pointer transition-all duration-300 flex flex-col justify-between overflow-hidden bg-secondary/10 h-full ${
-                            isSelected 
-                              ? "border-primary bg-primary/5 ring-1 ring-primary/40 shadow-neon-glow" 
-                              : "border-border/60 hover:border-border-hover bg-card/40"
-                          } ${video.isLocked ? "pointer-events-none" : ""}`}
-                        >
-                          {/* Banner Recency Tag */}
-                          <div className="absolute top-2 left-2 z-10 bg-primary/90 text-primary-foreground text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />
-                            {video.publishedAt}
-                          </div>
+              {/* Right Side: Auto-Competitor Matrix - 1 unlocked, 2 locked (5 cols) */}
+              <div className="lg:col-span-5 h-full">
+                <Card className="cyber-card border-border/80 bg-card/95 p-5 h-full flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">
+                        Live Velocity Matrix
+                      </span>
+                      <span className="text-xs text-muted-foreground">{competitors.length} Viral Outliers</span>
+                    </div>
 
-                          <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0">
-                            {/* Blur wrapper for locked content */}
-                            <img 
-                              src={video.thumbnail} 
-                              alt={video.title} 
-                              className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${
-                                video.isLocked ? "blur-md opacity-40" : ""
-                              }`}
-                            />
-                            
-                            {/* Locked Overlay */}
-                            {video.isLocked && (
-                              <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center bg-black/80">
-                                <Lock className="w-5 h-5 text-primary animate-pulse mb-1.5" />
-                                <p className="text-[10px] font-bold text-foreground uppercase tracking-widest leading-none">Locked</p>
-                                <p className="text-[8px] text-muted-foreground mt-1 font-display">Upgrade to Pro</p>
+                    {isSearchingCompetitors ? (
+                      <div className="py-10 text-center space-y-2">
+                        <Loader2 className="w-7 h-7 animate-spin text-primary mx-auto" />
+                        <p className="text-xs text-muted-foreground">Auditing real-time viral velocity &amp; recency bias...</p>
+                      </div>
+                    ) : competitors.length > 0 ? (
+                      <div className="grid grid-cols-3 gap-2 mt-2">
+                        {competitors.map((video, idx) => {
+                          const isSelected = selectedVideo?.videoId === video.videoId;
+                          return (
+                            <div
+                              key={video.videoId}
+                              onClick={() => !video.isLocked && setSelectedVideo(video)}
+                              className={`group relative rounded-xl border p-2 cursor-pointer transition-all duration-300 flex flex-col justify-between bg-secondary/30 ${
+                                isSelected 
+                                  ? "border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow" 
+                                  : "border-border/60 hover:border-border"
+                              } ${video.isLocked ? "pointer-events-none" : ""}`}
+                            >
+                              <div className="absolute top-1 left-1 z-10 bg-primary text-primary-foreground text-[7px] font-bold px-1.5 py-0.5 rounded-full">
+                                {idx === 0 ? "Unlocked" : `Locked #${idx}`}
                               </div>
-                            )}
-
-                            {!video.isLocked && (
-                              <div className="absolute bottom-1 right-1 bg-black/80 px-1.5 py-0.5 rounded text-[8px] font-mono font-semibold text-foreground">
-                                {video.duration}
+                              <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0 mb-1.5">
+                                <img 
+                                  src={video.thumbnail} 
+                                  alt={video.title} 
+                                  className={`w-full h-full object-cover ${video.isLocked ? "blur-sm opacity-40" : ""}`}
+                                />
+                                {video.isLocked && (
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center p-1 text-center bg-black/80">
+                                    <Lock className="w-4 h-4 text-primary animate-pulse mb-1" />
+                                    <span className="text-[7px] font-bold text-foreground">PRO LOCKED</span>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-
-                          <div className="mt-3 flex-1 min-w-0 flex flex-col justify-between">
-                            <div>
-                              <p className={`text-xs font-bold leading-tight line-clamp-2 ${video.isLocked ? "text-muted-foreground/50" : "text-foreground"}`}>
-                                {video.title}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground truncate mt-1">
-                                {video.channelName}
-                              </p>
+                              <div>
+                                <p className="text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p>
+                                <p className="text-[8px] text-primary font-mono mt-1 font-semibold">{video.views}</p>
+                              </div>
                             </div>
-
-                            <div className="mt-3 flex items-center justify-between border-t border-border/20 pt-2 shrink-0">
-                              <span className="text-[10px] font-mono text-primary font-bold">
-                                {video.views}
-                              </span>
-                              {!video.isLocked && (
-                                <span className="text-[9px] text-green-400 font-display font-medium bg-green-500/10 px-1.5 py-0.5 rounded border border-green-500/10">
-                                  Viral Velocity
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center text-xs text-muted-foreground">
+                        Profile your channel above to launch the live velocity showdown matrix.
+                      </div>
+                    )}
                   </div>
 
-                  {/* Pro upgrade banner if they have locked competitors */}
+                  {/* Pro upgrade banner if locked competitors */}
                   {competitors.some(v => v.isLocked) && license.tier === "free" && (
-                    <div className="p-4 rounded-xl bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex flex-col sm:flex-row items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <Lock className="w-5 h-5 text-primary shrink-0" />
-                        <div>
-                          <p className="text-xs font-bold text-foreground">Unlock 2 Additional Hidden Trend Competitors</p>
-                          <p className="text-[10px] text-muted-foreground">Access extreme velocity outliers that competitors are currently duplicating for explosive results.</p>
-                        </div>
+                    <div className="mt-3 p-2.5 rounded-lg bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Lock className="w-4 h-4 text-primary shrink-0" />
+                        <p className="text-[10px] font-bold text-foreground truncate">Unlock 2 Additional Hidden Trend Competitors</p>
                       </div>
-                      <Button onClick={handleSimulateUpgrade} size="sm" className="cyber-button text-xs shrink-0 font-display">
-                        Unlock Matrix (Upgrade Pro)
+                      <Button onClick={handleSimulateUpgrade} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">
+                        Upgrade Pro
                       </Button>
                     </div>
                   )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                </Card>
+              </div>
+
+            </div>
+          )}
 
           {/* STEP 3: Rewrite Customizer & Terminal Logs */}
           {selectedVideo && (
@@ -818,7 +771,7 @@ export default function CloneCrush() {
               </div>
               <p className="text-base text-foreground font-bold">No Active Rewrite Drafted</p>
               <p className="text-xs text-muted-foreground max-w-[250px] mt-2 leading-relaxed">
-                Profile your channel, generate competitors, select a video, and hit <strong className="text-foreground">Clone &amp; Crush</strong>.
+                Profile your channel, select a video from the Showdown Matrix, and hit <strong className="text-foreground">Clone &amp; Crush</strong>.
               </p>
             </Card>
           )}
@@ -852,7 +805,6 @@ export default function CloneCrush() {
                           </p>
                         </div>
                         
-                        {/* Delete Action button */}
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();

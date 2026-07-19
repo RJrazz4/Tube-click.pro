@@ -61,7 +61,7 @@ const PRICING_TIERS = [
     gradient: "from-gray-500 to-gray-600",
     features: [
       "10 generations/day",
-      "2 thumbnails per batch",
+      "2 AI Thumbnail Prompts (Text) per batch",
       "4 storyboard scenes",
       "Basic AI features",
       "Zero-Cost Hydra Router",
@@ -85,7 +85,7 @@ const PRICING_TIERS = [
     gradient: "from-neon-purple to-pink-500",
     features: [
       "100 generations/day",
-      "4 thumbnails per batch",
+      "4 AI Thumbnail Prompts (Text) per batch (Midjourney/DALL-E ready)",
       "8 storyboard scenes",
       "Voiceover Studio",
       "Full export (ZIP, video)",
@@ -106,7 +106,7 @@ const PRICING_TIERS = [
     gradient: "from-neon-cyan to-blue-500",
     features: [
       "Unlimited generations",
-      "10 thumbnails per batch",
+      "10 AI Thumbnail Prompts (Text) per batch",
       "Unlimited scenes",
       "Voiceover Studio",
       "Full export (ZIP, video)",
@@ -471,7 +471,7 @@ function DashboardSection() {
               </Badge>
             </div>
             <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-              <span className="text-sm text-foreground">Max Thumbnails per Batch</span>
+              <span className="text-sm text-foreground">Max AI Thumbnail Prompts per Batch</span>
               <Badge variant="secondary">{features.maxThumbnails}</Badge>
             </div>
             <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
@@ -776,23 +776,23 @@ function PricingSection() {
   };
 
   return (
-    <div className="space-y-6 md:space-y-8">
+    <div className="space-y-6 md:space-y-8 py-4">
       <div className="text-center max-w-lg mx-auto">
         <h2 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-2 flex items-center justify-center gap-2">
           <Zap className="w-6 h-6 text-primary fill-primary animate-pulse" />
           Choose Your Plan
         </h2>
         <p className="text-sm text-muted-foreground">
-          Enforce your content creation with zero-loophole hard limits. Upgrade to deploy our full stealth viral capability.
+          Enforce your content creation with zero-loophole hard limits. Upgrade to deploy our full stealth viral capability and AI thumbnail prompt generation.
         </p>
       </div>
 
-      {/* 2-Tier Side-by-Side Comparison */}
-      <div className="grid gap-6 md:grid-cols-2 max-w-4xl mx-auto items-stretch">
+      {/* 2-Tier Side-by-Side Comparison with Dominant Right Card */}
+      <div className="grid gap-8 md:grid-cols-2 max-w-4xl mx-auto items-stretch pt-4">
         
-        {/* LEFT CARD: FREE PLAN ($0) - Minimalist Dark Design */}
+        {/* LEFT CARD: FREE PLAN ($0) - Scaled Down & Muted */}
         <Card className={cn(
-          "cyber-card bg-card/40 border-border/60 p-6 flex flex-col justify-between transition-all duration-300 relative overflow-hidden",
+          "cyber-card bg-card/30 border-border/50 p-6 md:p-8 flex flex-col justify-between transition-all duration-300 relative overflow-hidden scale-95 opacity-85 hover:opacity-100",
           license.tier === "free" && "ring-1 ring-border border-border/80 bg-card/20"
         )}>
           <div>
@@ -814,11 +814,11 @@ function PricingSection() {
               <ul className="space-y-2.5 text-xs text-muted-foreground">
                 <li className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                  <span>10 generations per day (Zustand SWR)</span>
+                  <span>10 generations per day</span>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                  <span>2 thumbnails per batch</span>
+                  <span>2 AI Thumbnail Prompts (Text) per batch (Copy-paste to Midjourney/DALL-E)</span>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
@@ -848,7 +848,7 @@ function PricingSection() {
                 </li>
                 <li className="flex items-center gap-2.5">
                   <XCircle className="w-4 h-4 text-destructive/60 shrink-0" />
-                  <span>Watermarked video &amp; ZIP exports</span>
+                  <span>Watermarked exports</span>
                 </li>
               </ul>
             </div>
@@ -867,12 +867,12 @@ function PricingSection() {
           </div>
         </Card>
 
-        {/* RIGHT CARD: PREMIUM PLAN ($19) - Glow Glowing Design */}
+        {/* RIGHT CARD: PREMIUM PLAN ($19) - Visually Dominant, Scaled Up & Heavy Glowing Drop-Shadow */}
         <Card className={cn(
-          "cyber-card bg-card/80 border-primary/50 p-6 flex flex-col justify-between transition-all duration-300 relative overflow-hidden scale-[1.01] md:scale-[1.03] shadow-neon-glow ring-1 ring-primary/40"
+          "cyber-card bg-card/95 border-2 border-primary/80 p-6 md:p-8 flex flex-col justify-between transition-all duration-300 relative overflow-hidden scale-105 md:scale-[1.08] shadow-[0_0_50px_rgba(var(--primary),0.4)] ring-2 ring-primary/60 z-10"
         )}>
           {/* Most Popular Ribbon */}
-          <div className="absolute top-0 right-0 bg-gradient-to-l from-primary via-indigo-600 to-pink-500 text-white text-[9px] font-bold tracking-widest px-3.5 py-1.5 rounded-bl-xl uppercase">
+          <div className="absolute top-0 right-0 bg-gradient-to-l from-primary via-indigo-600 to-pink-500 text-white text-[9px] font-bold tracking-widest px-4 py-1.5 rounded-bl-xl uppercase shadow-md">
             Most Popular
           </div>
 
@@ -880,7 +880,7 @@ function PricingSection() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h3 className="text-lg font-display font-bold text-foreground">Premium Plan</h3>
+                  <h3 className="text-xl font-display font-bold text-foreground">Premium Plan</h3>
                   <Sparkles className="w-4 h-4 text-primary fill-primary animate-pulse" />
                 </div>
                 <p className="text-xs text-muted-foreground">Deploy full stealth viral mastery</p>
@@ -894,11 +894,11 @@ function PricingSection() {
               </div>
             </div>
 
-            <div className="h-px bg-primary/20 my-4" />
+            <div className="h-px bg-primary/30 my-4" />
 
             <div className="space-y-3.5">
               <p className="text-xs font-semibold text-primary uppercase tracking-wider">Unlimited Premium Cues:</p>
-              <ul className="space-y-2.5 text-xs text-foreground/90">
+              <ul className="space-y-2.5 text-xs text-foreground/95">
                 <li className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
                   <span className="font-semibold text-foreground">Unlimited Cinematic Voiceovers (VectorEngine)</span>
@@ -909,11 +909,11 @@ function PricingSection() {
                 </li>
                 <li className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
-                  <span>100 generations per day (Priority queues)</span>
+                  <span className="font-semibold text-foreground">4 High-Converting AI Thumbnail Prompts (Text) per batch (Midjourney/DALL-E ready)</span>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
-                  <span>4 thumbnails per batch (No watermark)</span>
+                  <span>100 generations per day (Priority queues)</span>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
@@ -921,11 +921,7 @@ function PricingSection() {
                 </li>
                 <li className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
-                  <span>Full secure exports (Unmarked ZIP files)</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
-                  <span>Advanced analytics &amp; direct priority support</span>
+                  <span>Full secure exports &amp; advanced analytics</span>
                 </li>
               </ul>
             </div>
@@ -940,7 +936,7 @@ function PricingSection() {
               <>
                 <Button 
                   onClick={handleUpgradeClick} 
-                  className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-95 text-primary-foreground font-display font-bold uppercase tracking-wider text-xs h-11 flex items-center justify-center gap-1.5 shadow-md active:scale-98 transition-all"
+                  className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-95 text-primary-foreground font-display font-bold uppercase tracking-wider text-xs h-12 flex items-center justify-center gap-1.5 shadow-lg active:scale-98 transition-all"
                 >
                   <Zap className="w-4 h-4 fill-primary-foreground text-primary-foreground" />
                   Upgrade to Premium
@@ -949,7 +945,7 @@ function PricingSection() {
                 {/* Highly visible secondary God Mode trigger button */}
                 <div 
                   onClick={handleUpgradeClick}
-                  className="relative overflow-hidden rounded-xl border border-dashed border-primary bg-primary/5 hover:bg-primary/10 transition-all duration-300 p-2.5 text-center cursor-pointer select-none"
+                  className="relative overflow-hidden rounded-xl border border-dashed border-primary bg-primary/10 hover:bg-primary/20 transition-all duration-300 p-3 text-center cursor-pointer select-none"
                 >
                   <p className="text-[10px] font-bold text-foreground flex items-center justify-center gap-1">
                     ⚡️ UNLOCK GOD MODE — JUST ₹99 / $1.19
