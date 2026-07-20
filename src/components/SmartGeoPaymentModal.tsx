@@ -29,13 +29,13 @@ export function SmartGeoPaymentModal() {
   const handleExecuteSubscription = () => {
     upgradeTier("pro");
     setUpgradeModalOpen(false);
-    toast.success("Welcome to Premium Plan! Unlimited Cinematic Voiceovers and 90% Stealth Disguise unlocked.");
+    toast.success("Welcome to Premium Plan! Unlimited Cinematic Voiceovers and 99% Glitch Protocol unlocked.");
   };
 
   const handleExecuteGodMode = () => {
     upgradeTier("pro"); // Unlocks all pro features
     setUpgradeModalOpen(false);
-    toast.success("⚡️ GOD MODE ACTIVATED! Enjoy 7 days of 90% Stealth Clones and Neural Speech.", {
+    toast.success("⚡️ GOD MODE ACTIVATED! Enjoy 7 days of 99% Glitch Protocol and Neural Speech.", {
       icon: "🔥",
       duration: 6000
     });
@@ -43,7 +43,7 @@ export function SmartGeoPaymentModal() {
 
   return (
     <Dialog open={upgradeModalOpen} onOpenChange={setUpgradeModalOpen}>
-      <DialogContent className="cyber-card bg-card/95 border-border/80 max-w-md p-6 relative z-[100] shadow-[0_0_50px_rgba(0,0,0,0.9)]">
+      <DialogContent className="cyber-card bg-card/95 border-border/80 max-w-md max-h-[90vh] overflow-y-auto p-6 shadow-[0_0_50px_rgba(0,0,0,0.9)] backdrop-blur-sm">
         <DialogHeader className="text-center pb-2">
           <div className="w-12 h-12 rounded-xl bg-primary/15 flex items-center justify-center mx-auto mb-3 border border-primary/20">
             <Zap className="w-6 h-6 text-primary fill-primary animate-pulse" />
@@ -140,9 +140,9 @@ export function SmartGeoPaymentModal() {
                   <p className="text-[10px] font-semibold text-primary">
                     🔥 7 Days. FULL POWER. ONE-TIME ACCESS.
                   </p>
-                  <p className="text-[9px] text-muted-foreground leading-tight">
-                    No auto-pay. Experience the full 90% Stealth Disguise engine and unlimited speech characters for a week.
-                  </p>
+                    <p className="text-[9px] text-muted-foreground leading-tight">
+                      No auto-pay. Experience the full 99% Glitch Protocol engine and unlimited speech characters for a week.
+                    </p>
                 </div>
               </div>
             </div>

@@ -97,17 +97,17 @@ export default function Repurposer() {
       const title = inputText.split('\n')[0].substring(0, 60) || "Video Repurposed Content";
       const wordCount = inputText.split(/\s+/).filter(Boolean).length;
 
-      const youtubeDesc = `🚀 In this video, we dive deep into: ${title}\n\n${transcriptMeta ? `Original video: https://youtube.com/watch?v=${transcriptMeta.videoId}\nTranscript length: ${transcriptMeta.wordCount} words via ${transcriptMeta.source}\n\n` : ''}Make sure to watch until the end for the ultimate insider secret! (Source: ${wordCount} words ${transcriptMeta ? 'transcript' : 'script'})\n\n📌 TIMESTAMPS:\n0:00 - Introduction\n1:20 - The Core Secret\n3:45 - Step-by-Step Breakdown\n7:10 - Common Mistakes to Avoid\n10:30 - Final Verdict & Summary\n\n🔔 Subscribe for more viral strategies!\n\n#YouTubeGrowth #ContentRepuposing #TubeGenius`;
+      const youtubeDesc = `🚀 In this video, we dive deep into: ${title}\n\n${transcriptMeta ? `Original video: https://youtube.com/watch?v=${transcriptMeta.videoId}\nTranscript length: ${transcriptMeta.wordCount} words via ${transcriptMeta.source}\n\n` : ''}Make sure to watch until the end for the ultimate insider secret! (Source: ${wordCount} words ${transcriptMeta ? 'transcript' : 'script'})\n\n📌 TIMESTAMPS:\n0:00 - Introduction\n1:20 - The Core Secret\n3:45 - Step-by-Step Breakdown\n7:10 - Common Mistakes to Avoid\n10:30 - Final Verdict & Summary\n\n🔔 Subscribe for more viral strategies!\n\n#YouTubeGrowth #ContentRepuposing #TubeClickPro`;
 
       const twitterThread = [
         `1/🧵 Most creators fail because they ignore this one crucial strategy regarding ${title.substring(0, 60)}. Here is everything you need to know in 60 seconds (from ${wordCount} word ${transcriptMeta ? 'transcript' : 'script'}):`,
         `2/ First, you need to understand the psychology behind viewer retention. If you lose them in the first 5 seconds, game over. Extracted from ${transcriptMeta ? `YT ${transcriptMeta.videoId}` : 'original script'}.`,
         `3/ Second, leverage high-contrast visual storytelling. People scroll fast — your thumbnail and hook must be undeniable.`,
         `4/ Finally, consistency combined with iterative improvement beats raw talent every single time. Start executing today!`,
-        `5/ Want the full breakdown? This repurposed thread is powered by TubeGenius Pro transcript extraction! 👇`,
+        `5/ Want the full breakdown? This repurposed thread is powered by TubeClick Pro transcript extraction! 👇`,
       ];
 
-      const instagramCaption = `✨ The secret nobody tells you about ${title.substring(0, 50)}...\n\n${transcriptMeta ? `🎥 Transcript from YT: ${transcriptMeta.wordCount} words analyzed` : '📝 Original script analyzed'} — swipe to see how top creators dominate the algorithm right now. 🚀\n\n💡 Save this post for later and tag a creator who needs to see this!\n\n#YouTubeGrowth #ContentCreator #ViralSecrets #CreatorEconomy #TubeGenius`;
+      const instagramCaption = `✨ The secret nobody tells you about ${title.substring(0, 50)}...\n\n${transcriptMeta ? `🎥 Transcript from YT: ${transcriptMeta.wordCount} words analyzed` : '📝 Original script analyzed'} — swipe to see how top creators dominate the algorithm right now. 🚀\n\n💡 Save this post for later and tag a creator who needs to see this!\n\n#YouTubeGrowth #ContentCreator #ViralSecrets #CreatorEconomy #TubeClickPro`;
 
       const linkedinPost = `🔥 The Creator Economy is shifting rapidly in 2026.\n\nWe just analyzed ${transcriptMeta ? `YouTube video ${transcriptMeta.videoId} (${transcriptMeta.wordCount} word transcript via ${transcriptMeta.source})` : `${wordCount} word script`} in the ${title.substring(0, 40)} niche and discovered a surprising trend:\n\n1. Short-form hooks drive 80% of top-of-funnel discovery.\n2. Deep-dive value builds long-term community retention.\n3. Multi-platform syndication multiplies reach 4x with zero extra video production cost — powered by built-in transcript extraction.\n\nWhat is your primary growth strategy this quarter? Let's discuss in the comments below! 👇`;
 

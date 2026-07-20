@@ -20,14 +20,14 @@ export default function Privacy() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">Introduction</h2>
           <p>
-            TubeGenius Pro ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we handle information when you use our web application.
+            TubeClick Pro ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we handle information when you use our web application.
           </p>
         </section>
 
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">Data We Collect</h2>
           <p>
-            <strong className="text-foreground">We do NOT store any user data on our servers.</strong> TubeGenius Pro operates entirely in your browser. All data, including your API keys and generated content, is stored locally on your device using your browser's LocalStorage.
+            <strong className="text-foreground">We do NOT store any user data on our servers.</strong> TubeClick Pro operates primarily in your browser. All data, including your API keys and generated content, is stored locally on your device using your browser's LocalStorage.
           </p>
         </section>
 
@@ -49,7 +49,7 @@ export default function Privacy() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">Third-Party Services</h2>
           <p>
-            TubeGenius Pro integrates with third-party APIs to provide AI-powered features:
+            TubeClick Pro integrates with third-party APIs to provide AI-powered features:
           </p>
           <ul className="list-disc pl-6 space-y-2">
             <li><strong className="text-foreground">OpenRouter (Google AI and other leading model providers)</strong> – For content generation and image analysis</li>

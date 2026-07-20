@@ -262,7 +262,7 @@ export default function VoiceStudio() {
           </CardHeader>
           <CardContent className="space-y-4 md:space-y-5">
             <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-              <div className="flex items-center gap-2"><Speaker className="w-4 h-4 text-primary" /><Label className="text-sm font-medium">TubeGenius Neural Engine (VectorEngine)</Label></div>
+              <div className="flex items-center gap-2"><Speaker className="w-4 h-4 text-primary" /><Label className="text-sm font-medium">TubeClick Neural Engine (VectorEngine)</Label></div>
               <Switch checked={useElevenLabs} onCheckedChange={(checked) => { setUseElevenLabs(checked); if (audioUrl) { URL.revokeObjectURL(audioUrl); setAudioUrl(null); } }} />
             </div>
 

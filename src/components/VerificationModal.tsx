@@ -56,7 +56,7 @@ export function VerificationModal({ open, onOpenChange, onVerified }: Verificati
             Verify &amp; Download Now
           </Button>
           <p className="text-xs text-muted-foreground text-center mt-3">
-            This helps us keep TubeGenius Neural Engine free for everyone.
+            This helps us keep TubeClick Pro accessible for everyone.
           </p>
         </div>
       </DialogContent>

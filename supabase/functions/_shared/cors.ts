@@ -3,7 +3,7 @@
 const ALLOWED_ORIGINS = [
   "https://tube-click.pro",
   "https://www.tube-click.pro",
-  "https://tubegenius.pro",
+  "https://tubeclickpro.in",
   "http://localhost:8080",
   "http://localhost:3000",
 ];

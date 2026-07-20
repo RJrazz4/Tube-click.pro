@@ -123,7 +123,7 @@ VITE_API_MODE=supabase # or vercel
 
 # App
 VITE_APP_ENV=production
-VITE_APP_URL=https://tubegenius.pro
+VITE_APP_URL=https://tubeclickpro.in
 ```
 
 **Never add:**

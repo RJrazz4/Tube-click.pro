@@ -20,14 +20,14 @@ export default function Terms() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">Agreement to Terms</h2>
           <p>
-            By accessing and using TubeGenius Pro, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our service.
+            By accessing and using TubeClick Pro, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our service.
           </p>
         </section>
 
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">BYOK (Bring Your Own Key) Model</h2>
           <p>
-            TubeGenius Pro operates on a <strong className="text-foreground">"Bring Your Own Key" (BYOK)</strong> model. This means:
+            TubeClick Pro operates on a <strong className="text-foreground">tiered subscription</strong> model. Free users have limited daily generations, while Pro users get unlimited access to all AI features.
           </p>
           <ul className="list-disc pl-6 space-y-2">
             <li>You must provide your own API keys for third-party services (Google AI, OpenAI, ElevenLabs, etc.)</li>
@@ -40,7 +40,7 @@ export default function Terms() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">User Responsibilities</h2>
           <p>
-            As a user of TubeGenius Pro, you agree to:
+            As a user of TubeClick Pro, you agree to:
           </p>
           <ul className="list-disc pl-6 space-y-2">
             <li>Use the service in compliance with all applicable laws and regulations</li>
@@ -54,14 +54,14 @@ export default function Terms() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">Intellectual Property</h2>
           <p>
-            Content generated using TubeGenius Pro belongs to you, subject to the terms of the third-party AI providers whose APIs you use. Please review the terms of Google AI, OpenAI, and other providers regarding ownership of AI-generated content.
+            Content generated using TubeClick Pro belongs to you. You are free to use generated scripts, thumbnails, voiceovers, and other content for your YouTube channels and social media platforms.
           </p>
         </section>
 
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">Disclaimer of Warranties</h2>
           <p>
-            TubeGenius Pro is provided <strong className="text-foreground">"AS IS"</strong> and <strong className="text-foreground">"AS AVAILABLE"</strong> without warranties of any kind, either express or implied, including but not limited to:
+            TubeClick Pro is provided <strong className="text-foreground">"AS IS"</strong> and <strong className="text-foreground">"AS AVAILABLE"</strong> without warranties of any kind, either express or implied, including but not limited to:
           </p>
           <ul className="list-disc pl-6 space-y-2">
             <li>Implied warranties of merchantability</li>

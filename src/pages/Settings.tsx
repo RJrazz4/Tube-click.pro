@@ -63,14 +63,14 @@ const PRICING_TIERS = [
       "10 generations/day",
       "2 AI Thumbnail Prompts (Text) per batch",
       "4 storyboard scenes",
-      "Basic AI features",
+      "60% Glitch Protocol (Vibe-Extract)",
       "Zero-Cost Hydra Router",
       "Community support",
     ],
     limitations: [
       "No voiceovers",
       "No exports",
-      "No advanced analytics",
+      "No 99% Glitch Protocol",
       "Watermark on exports",
     ],
     popular: false,
@@ -87,11 +87,11 @@ const PRICING_TIERS = [
       "100 generations/day",
       "4 AI Thumbnail Prompts (Text) per batch (Midjourney/DALL-E ready)",
       "8 storyboard scenes",
+      "99% Glitch Protocol (Structure Clone)",
       "Voiceover Studio",
       "Full export (ZIP, video)",
       "Advanced analytics",
       "Priority support",
-      "No watermark",
     ],
     limitations: [],
     popular: true,
@@ -108,6 +108,7 @@ const PRICING_TIERS = [
       "Unlimited generations",
       "10 AI Thumbnail Prompts (Text) per batch",
       "Unlimited scenes",
+      "99% Glitch Protocol + Priority Queue",
       "Voiceover Studio",
       "Full export (ZIP, video)",
       "Advanced analytics",
@@ -505,7 +506,7 @@ function DataPrivacySection() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `tubegenius-data-${new Date().toISOString().split("T")[0]}.json`;
+        a.download = `tubeclickpro-data-${new Date().toISOString().split("T")[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
       
@@ -657,12 +658,12 @@ function AboutSection() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-display font-semibold text-foreground mb-2">About</h2>
-        <p className="text-sm text-muted-foreground">Learn more about TubeGenius Pro</p>
+        <p className="text-sm text-muted-foreground">Learn more about TubeClick Pro</p>
       </div>
 
       <Card className="cyber-card border-border">
         <CardHeader>
-          <CardTitle className="text-base font-display">About TubeGenius Pro</CardTitle>
+          <CardTitle className="text-base font-display">About TubeClick Pro</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-4 p-4 rounded-lg bg-gradient-to-r from-primary/20 to-accent/20">
@@ -670,16 +671,14 @@ function AboutSection() {
               <Sparkles className="w-8 h-8 text-white" />
             </div>
             <div>
-              <h3 className="text-xl font-display font-bold text-foreground">TubeGenius Pro</h3>
+              <h3 className="text-xl font-display font-bold text-foreground">TubeClick Pro</h3>
               <p className="text-sm text-muted-foreground">Version 2.0.0</p>
-              <p className="text-xs text-muted-foreground mt-1">Powered by Zero-Cost Hydra Router</p>
+              <p className="text-xs text-muted-foreground mt-1">Powered by Zero-Cost Hydra AI Router</p>
             </div>
           </div>
           
           <p className="text-sm text-muted-foreground leading-relaxed">
-            TubeGenius Pro is an AI-powered content creation platform designed for YouTube creators.
-            Generate viral titles, scripts, thumbnails, and storyboards with the power of multiple
-            AI providers running in parallel through our proprietary Zero-Cost Hydra Router architecture.
+            TubeClick Pro is a Psychological Warfare Dashboard for YouTube creators. Reverse-engineer competitors, deploy AI-powered Glitch Protocols, and clone viral formulas with the power of multiple AI providers running in parallel through our proprietary architecture.
           </p>
         </CardContent>
       </Card>
@@ -697,7 +696,7 @@ function AboutSection() {
               { name: "Zustand", desc: "State Management" },
               { name: "React Query", desc: "Server State" },
               { name: "Vercel", desc: "Deployment" },
-              { name: "Zero-Cost Hydra", desc: "Multi-Provider Router" },
+              { name: "Zero-Cost Hydra", desc: "Multi-Provider AI Router" },
               { name: "Pollinations.ai", desc: "Free Image AI" },
             ].map((tech, i) => (
               <div key={i} className="p-3 rounded-lg bg-secondary/50 flex items-center justify-between">
@@ -844,7 +843,7 @@ function PricingSection() {
                 </li>
                 <li className="flex items-center gap-2.5">
                   <XCircle className="w-4 h-4 text-destructive/60 shrink-0" />
-                  <span>No 90% Structural Clone (Stealth Loophole)</span>
+                  <span>No 99% Glitch Protocol (Structure Clone)</span>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <XCircle className="w-4 h-4 text-destructive/60 shrink-0" />
@@ -905,7 +904,7 @@ function PricingSection() {
                 </li>
                 <li className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
-                  <span className="font-semibold text-foreground">90% Clone &amp; Crush (Stealth Disguise Activated)</span>
+                  <span className="font-semibold text-foreground">99% Glitch Protocol (Extreme Structure Clone)</span>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />

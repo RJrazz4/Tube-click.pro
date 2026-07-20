@@ -10,6 +10,10 @@ export interface ProfiledChannel {
   banner: string;
   description: string;
   profiledAt: string;
+  // Envy Engine — profile metrics
+  subscriberCount?: number;
+  subscriberCountText?: string;
+  videoCount?: number;
 }
 
 export interface CompetitorVideo {
@@ -25,6 +29,14 @@ export interface CompetitorVideo {
   channelName: string;
   duration?: string;
   isLocked: boolean; // True for locked videos (premium/login gate)
+  // Envy Engine — FOMO metrics
+  estimatedRevenue?: string;
+  estimatedRevenueNum?: number;
+  viralVelocityScore?: number;
+  uploadFrequency?: string;
+  estimatedMonthlySubGrowth?: number;
+  nicheCpm?: string;
+  relevance?: string;
 }
 
 export interface ScriptRewriteResult {
@@ -43,7 +55,45 @@ export interface ScriptRewriteResult {
   isStealthDisguised: boolean; // Tracks enforcement of the "Stealth Disguise Protocol"
   changedAnalogiesCount: number;
   changedExamplesCount: number;
+  // Glitch Protocol metadata
+  glitchTechniques?: string[];
+  glitchIntensity?: number; // 60 or 99
+  // Reverse-engineered thumbnail prompts (from thumbnail-reverse action)
+  reverseEngineeredPrompts?: string[];
+  reverseEngineeredSource?: {
+    videoId: string;
+    title: string;
+    views: string;
+    channel: string;
+    thumbnailUrl: string;
+    analysis: string;
+  } | null;
   createdAt: string;
+}
+
+export interface ThreatAlert {
+  type: 'critical' | 'warning' | 'info';
+  icon: string;
+  message: string;
+  competitorName: string;
+  videoTitle: string;
+  hoursAgo: number;
+  urgencyScore: number;
+}
+
+export interface WideningGap {
+  dailyLoss: number;
+  monthlyLoss: number;
+  multiplier: number;
+  message: string;
+}
+
+export interface EnvyMetrics {
+  totalCompetitorMonthlyRevenue: string;
+  totalCompetitorMonthlyRevenueNum: number;
+  averageViralVelocity: number;
+  nicheCpm: string;
+  niche: string;
 }
 
 interface CloneCrushState {
@@ -56,6 +106,13 @@ interface CloneCrushState {
   isSearchingCompetitors: boolean;
   competitorsFetchedAt: string | null;
   
+  // Envy Engine — aggregate metrics
+  envyMetrics: EnvyMetrics | null;
+  
+  // Threat Alerts
+  threatAlerts: ThreatAlert[];
+  wideningGap: WideningGap | null;
+  
   // Script Rewrites
   rewrites: ScriptRewriteResult[];
   isRewriting: boolean;
@@ -65,8 +122,9 @@ interface CloneCrushState {
   setProfile: (profile: ProfiledChannel | null) => void;
   setIsProfiling: (isProfiling: boolean) => void;
   
-  setCompetitors: (competitors: CompetitorVideo[]) => void;
+  setCompetitors: (competitors: CompetitorVideo[], envyMetrics?: EnvyMetrics | null) => void;
   setIsSearchingCompetitors: (isSearchingCompetitors: boolean) => void;
+  setThreatAlerts: (alerts: ThreatAlert[], wideningGap: WideningGap | null) => void;
   
   addRewrite: (rewrite: Omit<ScriptRewriteResult, "id" | "createdAt">) => ScriptRewriteResult;
   setIsRewriting: (isRewriting: boolean) => void;
@@ -85,6 +143,9 @@ export const useCloneCrushStore = create<CloneCrushState>()(
       competitors: [],
       isSearchingCompetitors: false,
       competitorsFetchedAt: null,
+      envyMetrics: null,
+      threatAlerts: [],
+      wideningGap: null,
       rewrites: [],
       isRewriting: false,
       activeRewrite: null,
@@ -92,11 +153,13 @@ export const useCloneCrushStore = create<CloneCrushState>()(
       setProfile: (profile) => set({ profile }),
       setIsProfiling: (isProfiling) => set({ isProfiling }),
 
-      setCompetitors: (competitors) => set({ 
+      setCompetitors: (competitors, envyMetrics = null) => set({ 
         competitors, 
-        competitorsFetchedAt: new Date().toISOString() 
+        competitorsFetchedAt: new Date().toISOString(),
+        envyMetrics,
       }),
       setIsSearchingCompetitors: (isSearchingCompetitors) => set({ isSearchingCompetitors }),
+      setThreatAlerts: (alerts, gap) => set({ threatAlerts: alerts, wideningGap: gap }),
 
       addRewrite: (rewriteInput) => {
         const newRewrite: ScriptRewriteResult = {
@@ -127,6 +190,9 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         competitors: [],
         isSearchingCompetitors: false,
         competitorsFetchedAt: null,
+        envyMetrics: null,
+        threatAlerts: [],
+        wideningGap: null,
         rewrites: [],
         isRewriting: false,
         activeRewrite: null,

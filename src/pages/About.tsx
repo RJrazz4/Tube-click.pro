@@ -18,7 +18,7 @@ export default function About() {
       <div className="space-y-12">
         <section className="space-y-4">
           <p className="text-lg text-muted-foreground leading-relaxed">
-            TubeGenius Pro is a <strong className="text-foreground">non-profit tool</strong> designed to help Indian creators compete globally using the power of Artificial Intelligence. We believe that every creator, regardless of their resources, deserves access to professional-grade AI tools.
+            TubeClick Pro is a <strong className="text-foreground">Psychological Warfare Dashboard</strong> designed for YouTube creators who refuse to grow slowly. We reverse-engineer competitor strategies, deploy AI-powered Glitch Protocols, and give you the unfair advantage that top creators use to dominate their niches.
           </p>
         </section>
 
@@ -57,14 +57,14 @@ export default function About() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">Our Mission</h2>
           <p className="text-muted-foreground leading-relaxed">
-            We started TubeGenius Pro with a simple goal: to democratize access to AI tools for content creators. Large studios and established creators have access to expensive tools and teams. We want to level the playing field by giving independent creators the same powerful capabilities – for free.
+            We started TubeClick Pro with a single belief: the YouTube algorithm rewards those who understand competition better than their rivals. Large studios have teams of analysts, thumbnail designers, and script strategists. We put that same intelligence engine in your hands — powered by AI that reverse-engineers what's already working and helps you deploy it faster.
           </p>
         </section>
 
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">How It Works</h2>
           <p className="text-muted-foreground leading-relaxed">
-            TubeGenius Pro uses a "Bring Your Own Key" (BYOK) model. You provide your own API keys from providers like Google AI, OpenAI, or ElevenLabs, and our platform provides the interface and tools to use them effectively. This means you only pay for what you use – directly to the API providers – with no middleman fees.
+            TubeClick Pro uses a tiered subscription (BYOK) model. You provide your own API keys from providers like Google AI, OpenAI, or ElevenLabs, and our platform provides the interface and tools to use them effectively. This means you only pay for what you use – directly to the API providers – with no middleman fees.
           </p>
         </section>
 
@@ -80,7 +80,7 @@ export default function About() {
             Made with ❤️ for creators everywhere
           </p>
           <p className="text-sm text-muted-foreground mt-2">
-            Join thousands of creators already using TubeGenius Pro
+            Join thousands of creators already using TubeClick Pro
           </p>
         </section>
       </div>

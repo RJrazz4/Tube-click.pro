@@ -58,7 +58,7 @@ async function fetchViaPiped(videoId: string): Promise<{ text: string; segments:
 
   for (const apiUrl of pipedInstances) {
     try {
-      const res = await fetch(apiUrl, { headers: { 'User-Agent': 'TubeGenius-Pro/2.0' } });
+      const res = await fetch(apiUrl, { headers: { 'User-Agent': 'TubeClickPro/2.0' } });
       if (!res.ok) continue;
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
