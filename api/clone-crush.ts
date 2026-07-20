@@ -79,6 +79,26 @@ async function scrapeChannelProfile(channelUrl: string) {
   const description = descMatch ? descMatch[1].trim() : 'No channel description available.';
   const avatar = imageMatch ? imageMatch[1] : 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=60';
 
+  // Extract subscriber count from page if available
+  const subMatch = html.match(/"subscriberCountText".*?"accessibilityText".*?([\d,\.]+[KMB]?)/i)
+    || html.match(/([\d,\.]+[KMB]?)\s*subscribers/i);
+  const subscriberCountText = subMatch ? subMatch[1] : '';
+
+  // Parse subscriber count to number
+  let subscriberCount = 0;
+  if (subscriberCountText) {
+    const cleaned = subscriberCountText.replace(/,/g, '');
+    const m = cleaned.match(/([\d\.]+)\s*[Mm]/);
+    const k = cleaned.match(/([\d\.]+)\s*[Kk]/);
+    if (m) subscriberCount = Math.round(parseFloat(m[1]) * 1000000);
+    else if (k) subscriberCount = Math.round(parseFloat(k[1]) * 1000);
+    else subscriberCount = parseInt(cleaned) || 0;
+  }
+
+  // Extract video count if available
+  const videoMatch = html.match(/([\d,]+)\s*videos/i);
+  const videoCount = videoMatch ? parseInt(videoMatch[1].replace(/,/g, '')) || 0 : 0;
+
   return {
     id: `chan_${Math.random().toString(36).substr(2, 9)}`,
     url,
@@ -87,7 +107,11 @@ async function scrapeChannelProfile(channelUrl: string) {
     avatar,
     banner: bannerUrl || 'PLACEHOLDER_GRADIENT', // Frontend can generate high-end CSS cyber grid banner if PLACEHOLDER_GRADIENT
     description,
-    profiledAt: new Date().toISOString()
+    profiledAt: new Date().toISOString(),
+    // Envy Engine — profile metrics for dashboard comparison
+    subscriberCount,
+    subscriberCountText: subscriberCountText || 'N/A',
+    videoCount,
   };
 }
 
@@ -104,8 +128,50 @@ interface RawScrapedVideo {
   duration?: string;
 }
 
+// Niche CPM rates (USD) for revenue estimation
+const NICHE_CPM: Record<string, number> = {
+  'finance': 14, 'crypto': 12, 'money': 12, 'investing': 13, 'trading': 12,
+  'tech': 8, 'coding': 7, 'software': 8, 'ai': 9, 'programming': 7,
+  'business': 10, 'marketing': 9, 'entrepreneur': 10, 'startup': 9,
+  'education': 6, 'tutorial': 5, 'learn': 5, 'how': 5,
+  'gaming': 4, 'gameplay': 3, 'streamer': 4,
+  'vlog': 4, 'travel': 5, 'lifestyle': 4, 'cooking': 5, 'food': 5,
+  'health': 7, 'fitness': 5, 'medical': 9,
+  'entertainment': 3, 'comedy': 3, 'reaction': 3,
+};
+
+function getNicheCpm(niche: string): number {
+  const lower = niche.toLowerCase();
+  for (const [key, cpm] of Object.entries(NICHE_CPM)) {
+    if (lower.includes(key)) return cpm;
+  }
+  return 5; // default CPM
+}
+
+// Estimate viral velocity score (0-100) from views and recency
+function calculateViralVelocityScore(viewsCount: number, recencyMultiplier: number): number {
+  const raw = Math.log10(Math.max(1, viewsCount)) * recencyMultiplier * 3;
+  return Math.min(100, Math.max(1, Math.round(raw)));
+}
+
+// Estimate upload frequency from published text
+function estimateUploadFrequency(publishedText: string): string {
+  const p = publishedText.toLowerCase();
+  if (p.includes('hour') || p.includes('minute') || p.includes('second')) return '3-5x/week';
+  if (p.includes('day')) {
+    const daysMatch = p.match(/(\d+)\s+day/);
+    const days = daysMatch ? parseInt(daysMatch[1]) : 1;
+    if (days <= 2) return 'Daily';
+    if (days <= 5) return '3-5x/week';
+    return '2-3x/week';
+  }
+  if (p.includes('week')) return '1-2x/week';
+  if (p.includes('month')) return '2-4x/month';
+  return '1x/month';
+}
+
 // Calculate video velocity based on Extreme Recency Bias
-function calculateRecencyVelocity(viewsText: string, publishedText: string): { viewsCount: number; velocity: number } {
+function calculateRecencyVelocity(viewsText: string, publishedText: string): { viewsCount: number; velocity: number; recencyMultiplier: number } {
   let viewsCount = 0;
   const cleanedViews = viewsText.toLowerCase().replace(/,/g, '');
   const mMatch = cleanedViews.match(/([\d\.]+)\s*m/);
@@ -149,7 +215,8 @@ function calculateRecencyVelocity(viewsText: string, publishedText: string): { v
 
   return {
     viewsCount,
-    velocity: viewsCount * recencyMultiplier
+    velocity: viewsCount * recencyMultiplier,
+    recencyMultiplier
   };
 }
 
@@ -225,6 +292,26 @@ async function scrapeYoutubeSearch(query: string): Promise<RawScrapedVideo[]> {
 }
 
 // -------------------------------------------------------------
+// Fallback Thumbnail Prompt Generator
+// -------------------------------------------------------------
+function generateFallbackThumbnailPrompts(title: string, isPremium: boolean): string[] {
+  if (isPremium) {
+    return [
+      `Extreme close-up of a person with wide eyes and hands on head in shock, dramatic red and blue lighting, dark background, bold white text "${title.substring(0, 30)}" with yellow highlight, professional YouTube thumbnail, 8K, hyper-detailed`,
+      `Split-screen comparison: left side dark and desaturated showing failure, right side bright and vibrant showing success, person pointing at the difference, text overlay "${title.substring(0, 25)}", cinematic lighting, high contrast`,
+      `Person holding a glowing object or document with mysterious green light illuminating their face from below, dark moody background, bold text "EXPOSED" in red, thumbnail composition following left-third rule, ultra-detailed 4K`,
+      `Dramatic reaction shot: person with mouth open in disbelief, hands covering mouth, bright neon green and purple accents, large text "THE TRUTH" with arrow pointing off-screen, professional photography, cinematic grade`,
+    ];
+  }
+  return [
+    `Professional YouTube thumbnail for "${title}", person smiling confidently, bright clean lighting, blue and white color scheme, readable text overlay, modern and clean design`,
+    `Educational style thumbnail: person presenting with a pointer or whiteboard, organized layout, warm lighting, green and white accents, clear title text, professional photography`,
+    `Clean minimalist thumbnail: person in center frame, neutral background, bold sans-serif text, simple color palette, good contrast, standard YouTube best practices`,
+    `Engaging thumbnail: person with surprised expression, colorful background, clear text with topic, professional lighting, friendly and approachable style`,
+  ];
+}
+
+// -------------------------------------------------------------
 // Consolidated Handler
 // -------------------------------------------------------------
 export default async function handler(req: Request) {
@@ -258,7 +345,10 @@ export default async function handler(req: Request) {
             avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=60',
             banner: 'PLACEHOLDER_GRADIENT',
             description: 'Custom added channel. Start creating!',
-            profiledAt: new Date().toISOString()
+            profiledAt: new Date().toISOString(),
+            subscriberCount: 0,
+            subscriberCountText: 'N/A',
+            videoCount: 0,
           }
         });
       }
@@ -321,11 +411,12 @@ export default async function handler(req: Request) {
       }
 
       const ratedCandidates = uniqueCandidates.map((v) => {
-        const { viewsCount, velocity } = calculateRecencyVelocity(v.viewsText, v.publishedText);
+        const { viewsCount, velocity, recencyMultiplier } = calculateRecencyVelocity(v.viewsText, v.publishedText);
         return {
           ...v,
           viewsCount,
           velocity,
+          recencyMultiplier,
         };
       });
 
@@ -371,6 +462,12 @@ export default async function handler(req: Request) {
 
       const finalCompetitors = selectedIds.map((selection, index) => {
         const matchedVideo = ratedCandidates.find((c) => c.videoId === selection.videoId) || ratedCandidates[index] || topCandidates[0];
+        const nicheCpm = getNicheCpm(niche);
+        const estimatedRevenue = Math.round((matchedVideo.viewsCount / 1000) * nicheCpm);
+        const viralVelocityScore = calculateViralVelocityScore(matchedVideo.viewsCount, matchedVideo.recencyMultiplier || 1);
+        const uploadFrequency = estimateUploadFrequency(matchedVideo.publishedText);
+        // Estimate monthly subscriber growth based on velocity (higher velocity = faster growth)
+        const estimatedMonthlySubGrowth = Math.round(matchedVideo.velocity / 100);
         
         return {
           id: matchedVideo.videoId,
@@ -387,18 +484,37 @@ export default async function handler(req: Request) {
           channelName: matchedVideo.channelName,
           duration: matchedVideo.duration || '8:45',
           isLocked: index > 0,
-          relevance: selection.relevanceReason
+          relevance: selection.relevanceReason,
+          // Envy Engine — FOMO metrics
+          estimatedRevenue: `$${estimatedRevenue.toLocaleString()}`,
+          estimatedRevenueNum: estimatedRevenue,
+          viralVelocityScore,
+          uploadFrequency,
+          estimatedMonthlySubGrowth,
+          nicheCpm: `$${nicheCpm}`,
         };
       });
 
+      // Calculate aggregate competitor stats for the dashboard "War Room"
+      const totalCompetitorRevenue = finalCompetitors.reduce((sum, c) => sum + c.estimatedRevenueNum, 0);
+      const avgViralScore = Math.round(finalCompetitors.reduce((sum, c) => sum + c.viralVelocityScore, 0) / finalCompetitors.length);
+
       return jsonResponse({
         success: true,
-        competitors: finalCompetitors
+        competitors: finalCompetitors,
+        // Aggregate envy data for dashboard
+        envyMetrics: {
+          totalCompetitorMonthlyRevenue: `$${totalCompetitorRevenue.toLocaleString()}`,
+          totalCompetitorMonthlyRevenueNum: totalCompetitorRevenue,
+          averageViralVelocity: avgViralScore,
+          nicheCpm: `$${getNicheCpm(niche)}`,
+          niche,
+        }
       });
     }
 
     // ---------------------------------------------------------
-    // ACTION: REWRITE (THE 1-CLICK = 4 ASSETS CHAIN-LOOP UNIFIED PROMPT)
+    // ACTION: REWRITE (TIERED GLITCH PROTOCOL — 60% vs 99%)
     // ---------------------------------------------------------
     if (action === 'rewrite') {
       if (!originalTranscript || !originalTitle || !targetVideoId) {
@@ -406,52 +522,104 @@ export default async function handler(req: Request) {
       }
 
       const truncatedTranscript = originalTranscript.slice(0, 11000);
+      const isPremium = tier === 'premium';
+
+      // ── TIERED SYSTEM PROMPT: 60% (Free) vs 99% (Premium) ──
+      const glitchProtocolBlock = isPremium ? `
+=== GLITCH PROTOCOL: 99% EXECUTION (PREMIUM) ===
+You are operating at MAXIMUM AGGRESSION. Every output must be weaponized for maximum CTR.
+
+TITLE ENGINEERING (99%):
+- The rewrittenTitle MUST contain at least ONE of these "Curiosity Glitch" patterns:
+  • Time-jump: "At 7:42, [shocking revelation]..." or "By Day 3, everything changed..."
+  • Hidden secret: "The one thing nobody tells you about [topic]..." or "[Authority figure] doesn't want you to know..."
+  • Shocking mistake: "97% of people get [topic] wrong — here's why..." or "I made a $[amount] mistake so you don't have to..."
+  • Impossible result: "How I [achieved X] in [impossibly short time]..." or "This shouldn't be possible, but..."
+- The title must create an INFORMATION GAP that is physically painful to not close.
+- Use power words: Secret, Hidden, Banned, Exposed, Revealed, Warning, Urgent, Finally, Truth
+
+GLITCH HOOK (99%):
+- The glitchHook (first 15 seconds) must contain a PATTERN INTERRUPT that forces the viewer to stop scrolling.
+- Structure: [SHOCKING STATEMENT] → [CREDIBILITY SIGNAL] → [OPEN LOOP]
+- Example: "What I'm about to show you has been banned in 3 countries. I've spent 6 months and $40,000 testing this. And by the end of this video, you'll understand why most creators are losing money every single day."
+- The hook MUST create a CURIOSITY DEBT — the viewer MUST watch to resolve the tension.
+
+SCRIPT STRUCTURE (99%):
+- Every 45-60 seconds, inject a "RETENTION SPIKE": a mini-glitch, surprising fact, or callback to the hook.
+- Use the "Open Loop → Partial Close → New Open Loop" technique throughout.
+- End with a "LOOP BOMB" — reference something from the hook that was never fully explained, forcing replay.
+
+THUMBNAIL DIRECTION (99%):
+- Describe the most psychologically aggressive thumbnail: specific facial expression (e.g., "eyes wide, mouth slightly open in shock, one hand covering mouth"), exact color contrast (bright subject on dark background), emotional trigger visible, and minimal but impactful text overlay suggestion.
+` : `
+=== GLITCH PROTOCOL: 60% EXECUTION (FREE) ===
+You are operating at STANDARD OPTIMIZATION. Output should be professional and engaging but safe.
+
+TITLE ENGINEERING (60%):
+- Rewrite the title with strong SEO keywords and emotional triggers.
+- Use standard curiosity techniques: numbers, power words, clear value proposition.
+- Keep it professional and broadly appealing — no extreme psychological manipulation.
+- Example pattern: "[Number] [Topic] Secrets That [Benefit]" or "How to [Achieve X] in [Timeframe]"
+
+GLITCH HOOK (60%):
+- The hook should be engaging and informative but not manipulative.
+- Structure: [VALUE STATEMENT] → [BRIEF CONTEXT] → [WHAT THEY'LL LEARN]
+- Standard retention: clear promise of what the viewer will gain.
+
+SCRIPT STRUCTURE (60%):
+- Well-structured, clear sections, professional pacing.
+- Standard engagement techniques: questions, examples, clear transitions.
+- Educational and valuable — focus on delivering genuine content.
+
+THUMBNAIL DIRECTION (60%):
+- Describe a clean, professional thumbnail: good lighting, clear subject, readable text, standard YouTube best practices.
+- Suggest general color schemes and composition — nothing aggressive.
+`;
 
       const rewriteSystemInstruction = `You are an Elite Viral YouTube growth expert, copywriter, and high-retention psychologist.
 Your task is to take a competitor's transcript and execute the Unified Chain-Loop generation: returning 4 core viral assets in a single structured JSON response.
 
-You must follow these strict protocols with total precision:
+${glitchProtocolBlock}
 
-1. THE "STEALTH DISGUISE" PROTOCOL (Anti-Clone Illusion):
+=== STEALTH DISGUISE PROTOCOL (BOTH TIERS) ===
 - Heavily disguise the rewritten output so that it does not feel cloned.
 - CHANGE EVERY ANALOGY and SWAP ALL EXAMPLES/CASE STUDIES for fascinating, equally powerful alternatives.
 - Rephrase every core concept uniquely.
 
-2. THE "GLITCH HOOK" INJECTION:
-- In the absolute first 15 seconds, inject a high-curiosity "Glitch" (extreme angle, curiosity gap, pattern-interrupt).
-
-3. THE 4-ASSET UNIFIED CHAIN-LOOP PAYLOAD SCHEMA:
+=== OUTPUT SCHEMA ===
 You must output a single JSON object containing ALL 4 viral assets:
-- rewrittenTitle: String (Viral SEO title)
+- rewrittenTitle: String (Viral SEO title — MUST follow the Glitch Protocol tier rules above)
 - seoTags: Array of 10 high-CTR YouTube tag strings
-- glitchHook: String (First 15s hook)
+- glitchHook: String (First 15s hook — MUST follow the Glitch Protocol tier rules above)
 - fullScript: String (Fully rewritten script with [NARRATOR:] and visual/sound cues)
-- thumbnailPrompt: String (High-converting AI Thumbnail Prompt text designed for Midjourney or DALL-E copy-paste)
+- thumbnailPrompt: String (Visual direction for thumbnail — tier-appropriate detail level)
 - editingGuide: String (Step-by-step editing & visual guide with pacing and B-roll notes)
 - changedAnalogiesCount: Number
 - changedExamplesCount: Number
+- glitchTechniques: Array of strings — list which specific glitch techniques were deployed
 
 Strict JSON Schema:
 {
   "originalTitle": "Original Title",
-  "rewrittenTitle": "Rewritten Viral Title",
+  "rewrittenTitle": "Rewritten Viral Title with Glitch injection",
   "seoTags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8", "tag9", "tag10"],
   "glitchHook": "The first 15-second glitch pattern interrupt hook",
   "fullScript": "The fully rewritten script...",
-  "thumbnailPrompt": "Midjourney/DALL-E prompt for high-CTR thumbnail...",
+  "thumbnailPrompt": "Thumbnail visual direction...",
   "editingGuide": "Step-by-step editing guide...",
   "changedAnalogiesCount": 5,
-  "changedExamplesCount": 4
+  "changedExamplesCount": 4,
+  "glitchTechniques": ["time-jump", "hidden-secret", "shocking-mistake"]
 }`;
 
       const userPrompt = `Target Video ID: ${targetVideoId}
 Original Title: "${originalTitle}"
 Target Niche: "${niche || 'General YouTube'}"
-Subscription Tier Requested: "${tier}"
+Subscription Tier: "${tier}" (${isPremium ? '99% GLITCH PROTOCOL — MAXIMUM AGGRESSION' : '60% GLITCH PROTOCOL — STANDARD OPTIMIZATION'})
 Original Transcript excerpt:
 ${truncatedTranscript}
 
-Execute the 4-Asset Chain-Loop generation conforming strictly to the "Stealth Disguise" protocol and return JSON only.`;
+Execute the Chain-Loop generation. Your tier is "${tier}" — follow the Glitch Protocol rules for that tier exactly. Return JSON only.`;
 
       const outcome = await fetchOpenRouterWithRetry({
         systemInstruction: { parts: [{ text: rewriteSystemInstruction }] },
@@ -494,13 +662,237 @@ Execute the 4-Asset Chain-Loop generation conforming strictly to the "Stealth Di
           editingGuide: parsed.editingGuide || "1. Cut dead air. 2. Add zoom punch-in on glitch hook. 3. Sound FX (whoosh/riser) on key reveals. 4. Dynamic B-roll every 4 seconds.",
           changedAnalogiesCount: typeof parsed.changedAnalogiesCount === 'number' ? parsed.changedAnalogiesCount : 3,
           changedExamplesCount: typeof parsed.changedExamplesCount === 'number' ? parsed.changedExamplesCount : 4,
+          glitchTechniques: Array.isArray(parsed.glitchTechniques) ? parsed.glitchTechniques : (isPremium ? ["time-jump", "hidden-secret", "retention-spike"] : ["basic-curiosity"]),
+          glitchIntensity: isPremium ? 99 : 60,
           tier,
           isStealthDisguised: true
         }
       });
     }
 
-    return jsonResponse({ error: 'Invalid action. Supported: profile, competitors, rewrite' }, 400);
+    // ---------------------------------------------------------
+    // ACTION: THUMBNAIL-REVERSE (TIERED THEFT ENGINE)
+    // Takes the glitch title → searches YouTube → finds top viral thumbnail → reverse-engineers it
+    // ---------------------------------------------------------
+    if (action === 'thumbnail-reverse') {
+      const { glitchTitle, niche: reverseNiche, tier: reverseTier = 'free' } = bodyResult.data;
+      if (!glitchTitle) {
+        return jsonResponse({ error: 'glitchTitle is required for thumbnail reverse-engineering' }, 400);
+      }
+
+      const isPremiumReverse = reverseTier === 'premium';
+
+      // Step 1: Search YouTube for the glitch title concept
+      let searchResults = await fetchPipedSearch(glitchTitle);
+      if (searchResults.length === 0) {
+        searchResults = await scrapeYoutubeSearch(glitchTitle);
+      }
+
+      if (searchResults.length === 0) {
+        // Fallback: generate generic prompts without reverse-engineering
+        return jsonResponse({
+          success: true,
+          reverseEngineered: false,
+          fallback: true,
+          thumbnailPrompts: generateFallbackThumbnailPrompts(glitchTitle, isPremiumReverse),
+          sourceVideo: null,
+          tier: reverseTier,
+        });
+      }
+
+      // Step 2: Find the top viral video (highest views)
+      const topVideo = searchResults[0];
+      const thumbnailUrl = topVideo.thumbnail || `https://i.ytimg.com/vi/${topVideo.videoId}/maxresdefault.jpg`;
+
+      // Step 3: Use LLM to reverse-engineer the thumbnail into prompts
+      const reverseEngineerPrompt = isPremiumReverse
+        ? `You are an elite YouTube thumbnail reverse-engineer and visual psychologist. Your job is to analyze a VIRAL YouTube thumbnail and extract its exact visual DNA into 4 copy-paste-ready text prompts for AI image generators (Midjourney, DALL-E, Flux).
+
+RULES FOR 99% THEFT (PREMIUM):
+- Extract the EXACT visual formula: color contrast ratios, facial expression psychology, element placement, text positioning, emotional triggers
+- Mirror the composition precisely: where the subject is placed, what angle they're facing, where the eyes look
+- Capture the psychological triggers: fear, curiosity, shock, authority, urgency
+- Each of the 4 prompts should use a DIFFERENT proven CTR pattern:
+  1. "Curiosity Gap" — subject looking at something hidden, partial reveal
+  2. "Shock/Fear" — exaggerated expression, dramatic lighting, before/after implied
+  3. "Authority/Proof" — confident pose, results visible, social proof elements
+  4. "Number/List" — clear count, organized layout, promise of structured info
+- Include specific details: "eyes wide with raised eyebrows", "bright neon green text on black", "left-third rule composition"
+
+Output JSON with 4 prompts, each being a complete, copy-paste-ready text prompt for an AI image generator.`
+
+        : `You are a YouTube thumbnail advisor. Analyze a viral YouTube thumbnail and create 4 general-purpose thumbnail text prompts.
+
+RULES FOR 60% THEFT (FREE):
+- Describe the GENERAL style and mood of the thumbnail — do NOT mirror it precisely
+- Use generic descriptions: "excited expression", "bright colors", "clear text"
+- Suggest standard YouTube thumbnail best practices
+- Each prompt should be broad and reusable — NOT a precise mirror
+- Intentionally omit the killer details (exact colors, specific expressions, precise layout)
+- Keep it safe, professional, and educational
+
+Output JSON with 4 prompts, each being a general text prompt for an AI image generator.`;
+
+      let thumbnailPrompts: string[] = [];
+      let sourceVideoInfo = null;
+
+      try {
+        const reverseOutcome = await fetchOpenRouterWithRetry({
+          systemInstruction: { parts: [{ text: reverseEngineerPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: `Viral video found:\nTitle: "${topVideo.title}"\nViews: ${topVideo.viewsText}\nChannel: ${topVideo.channelName}\nThumbnail URL: ${thumbnailUrl}\n\nOriginal search query (the Glitch Title): "${glitchTitle}"\nNiche: "${reverseNiche || 'General'}"\n\nAnalyze this thumbnail's visual DNA and create 4 ${isPremiumReverse ? 'PRECISE' : 'GENERAL'} text prompts. Return JSON:\n{\n  "prompts": ["prompt1", "prompt2", "prompt3", "prompt4"],\n  "analysis": "Brief analysis of why this thumbnail works"\n}` }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
+        });
+
+        const reverseContent = extractOpenRouterText(await reverseOutcome.res.json());
+        if (reverseContent) {
+          const reverseParsed = JSON.parse(cleanupJson(reverseContent));
+          thumbnailPrompts = Array.isArray(reverseParsed.prompts) ? reverseParsed.prompts : [];
+          sourceVideoInfo = {
+            videoId: topVideo.videoId,
+            title: topVideo.title,
+            views: topVideo.viewsText,
+            channel: topVideo.channelName,
+            thumbnailUrl,
+            analysis: reverseParsed.analysis || 'Viral thumbnail reverse-engineered',
+          };
+        }
+      } catch (err) {
+        console.warn('[clone-crush:thumbnail-reverse] LLM reverse-engineering failed, using fallbacks', err);
+      }
+
+      // Fallback if LLM failed
+      if (thumbnailPrompts.length === 0) {
+        thumbnailPrompts = generateFallbackThumbnailPrompts(glitchTitle, isPremiumReverse);
+      }
+
+      return jsonResponse({
+        success: true,
+        reverseEngineered: !!sourceVideoInfo,
+        fallback: !sourceVideoInfo,
+        thumbnailPrompts,
+        sourceVideo: sourceVideoInfo,
+        tier: reverseTier,
+        glitchIntensity: isPremiumReverse ? 99 : 60,
+      });
+    }
+
+    // ---------------------------------------------------------
+    // ACTION: THREAT-ALERTS (LIVE THREAT DETECTION)
+    // Analyzes competitor videos for recency and generates threat alerts
+    // ---------------------------------------------------------
+    if (action === 'threat-alerts') {
+      const { competitors: competitorList, userSubscribers = 0 } = bodyResult.data;
+      if (!Array.isArray(competitorList) || competitorList.length === 0) {
+        return jsonResponse({ error: 'competitors array is required' }, 400);
+      }
+
+      const now = Date.now();
+      const alerts: Array<{
+        type: 'critical' | 'warning' | 'info';
+        icon: string;
+        message: string;
+        competitorName: string;
+        videoTitle: string;
+        hoursAgo: number;
+        urgencyScore: number;
+      }> = [];
+
+      let wideningGapMultiplier = 1.0;
+
+      for (const comp of competitorList) {
+        const publishedDate = comp.publishedDate || comp.publishedAt;
+        let hoursAgo = 999;
+
+        // Parse recency from publishedAt text
+        if (typeof publishedDate === 'string') {
+          const lower = publishedDate.toLowerCase();
+          if (lower.includes('hour')) {
+            const m = lower.match(/(\d+)\s*hour/);
+            hoursAgo = m ? parseInt(m[1]) : 1;
+          } else if (lower.includes('minute')) {
+            hoursAgo = 0.5;
+          } else if (lower.includes('day')) {
+            const m = lower.match(/(\d+)\s*day/);
+            hoursAgo = m ? parseInt(m[1]) * 24 : 24;
+          } else if (lower.includes('week')) {
+            const m = lower.match(/(\d+)\s*week/);
+            hoursAgo = m ? parseInt(m[1]) * 168 : 168;
+          } else if (lower.includes('month')) {
+            const m = lower.match(/(\d+)\s*month/);
+            hoursAgo = m ? parseInt(m[1]) * 720 : 720;
+          }
+        }
+
+        const velocity = comp.viralVelocityScore || 0;
+        const revenue = comp.estimatedRevenueNum || 0;
+        const name = comp.channelName || 'A competitor';
+        const title = comp.title || 'a new video';
+
+        // Critical: posted within last 6 hours with high velocity
+        if (hoursAgo <= 6 && velocity >= 50) {
+          alerts.push({
+            type: 'critical',
+            icon: '🚨',
+            message: `THREAT: ${name} posted "${title.substring(0, 50)}..." ${hoursAgo < 1 ? 'minutes ago' : `${Math.round(hoursAgo)} hours ago`}. Velocity: ${velocity}/100. Deploy Clone & Crush NOW to steal momentum.`,
+            competitorName: name,
+            videoTitle: title,
+            hoursAgo,
+            urgencyScore: Math.min(100, Math.round((1 / Math.max(0.5, hoursAgo)) * velocity)),
+          });
+          wideningGapMultiplier += 0.3;
+        }
+        // Warning: posted within 24 hours
+        else if (hoursAgo <= 24 && velocity >= 30) {
+          alerts.push({
+            type: 'warning',
+            icon: '⚠️',
+            message: `ALERT: ${name} posted "${title.substring(0, 50)}..." ${Math.round(hoursAgo)} hours ago. Gaining traction — act before it goes viral.`,
+            competitorName: name,
+            videoTitle: title,
+            hoursAgo,
+            urgencyScore: Math.min(80, Math.round((1 / Math.max(1, hoursAgo)) * velocity * 0.8)),
+          });
+          wideningGapMultiplier += 0.15;
+        }
+        // Info: high revenue competitor
+        else if (revenue > 500) {
+          alerts.push({
+            type: 'info',
+            icon: '📊',
+            message: `INTEL: ${name}'s recent video generated ~$${revenue.toLocaleString()} in estimated ad revenue. Study their strategy.`,
+            competitorName: name,
+            videoTitle: title,
+            hoursAgo,
+            urgencyScore: Math.min(50, Math.round(revenue / 100)),
+          });
+          wideningGapMultiplier += 0.05;
+        }
+      }
+
+      // Sort by urgency (highest first)
+      alerts.sort((a, b) => b.urgencyScore - a.urgencyScore);
+
+      // Calculate widening gap
+      const totalCompetitorRevenue = competitorList.reduce((sum: number, c: any) => sum + (c.estimatedRevenueNum || 0), 0);
+      const gapPerDay = Math.round(totalCompetitorRevenue * wideningGapMultiplier / 30);
+
+      return jsonResponse({
+        success: true,
+        alerts: alerts.slice(0, 5), // Top 5 alerts
+        alertCount: alerts.length,
+        hasCritical: alerts.some(a => a.type === 'critical'),
+        wideningGap: {
+          dailyLoss: gapPerDay,
+          monthlyLoss: gapPerDay * 30,
+          multiplier: Math.round(wideningGapMultiplier * 100) / 100,
+          message: gapPerDay > 0
+            ? `Competitors are pulling ahead by ~$${gapPerDay.toLocaleString()}/day. The gap widens every hour you wait.`
+            : 'No immediate revenue gap detected — competitors are within range.',
+        },
+      });
+    }
+
+    return jsonResponse({ error: 'Invalid action. Supported: profile, competitors, rewrite, thumbnail-reverse, threat-alerts' }, 400);
 
   } catch (e: unknown) {
     console.error('[clone-crush] global unexpected error:', e);

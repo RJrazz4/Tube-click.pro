@@ -63,14 +63,14 @@ const PRICING_TIERS = [
       "10 generations/day",
       "2 AI Thumbnail Prompts (Text) per batch",
       "4 storyboard scenes",
-      "Basic AI features",
+      "60% Glitch Protocol (Vibe-Extract)",
       "Zero-Cost Hydra Router",
       "Community support",
     ],
     limitations: [
       "No voiceovers",
       "No exports",
-      "No advanced analytics",
+      "No 99% Glitch Protocol",
       "Watermark on exports",
     ],
     popular: false,
@@ -87,11 +87,11 @@ const PRICING_TIERS = [
       "100 generations/day",
       "4 AI Thumbnail Prompts (Text) per batch (Midjourney/DALL-E ready)",
       "8 storyboard scenes",
+      "99% Glitch Protocol (Structure Clone)",
       "Voiceover Studio",
       "Full export (ZIP, video)",
       "Advanced analytics",
       "Priority support",
-      "No watermark",
     ],
     limitations: [],
     popular: true,
@@ -108,6 +108,7 @@ const PRICING_TIERS = [
       "Unlimited generations",
       "10 AI Thumbnail Prompts (Text) per batch",
       "Unlimited scenes",
+      "99% Glitch Protocol + Priority Queue",
       "Voiceover Studio",
       "Full export (ZIP, video)",
       "Advanced analytics",
@@ -844,7 +845,7 @@ function PricingSection() {
                 </li>
                 <li className="flex items-center gap-2.5">
                   <XCircle className="w-4 h-4 text-destructive/60 shrink-0" />
-                  <span>No 90% Structural Clone (Stealth Loophole)</span>
+                  <span>No 99% Glitch Protocol (Structure Clone)</span>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <XCircle className="w-4 h-4 text-destructive/60 shrink-0" />
@@ -905,7 +906,7 @@ function PricingSection() {
                 </li>
                 <li className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
-                  <span className="font-semibold text-foreground">90% Clone &amp; Crush (Stealth Disguise Activated)</span>
+                  <span className="font-semibold text-foreground">99% Glitch Protocol (Extreme Structure Clone)</span>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />

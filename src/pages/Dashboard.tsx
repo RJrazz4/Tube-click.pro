@@ -18,6 +18,10 @@ import {
   TrendingUp,
   Search,
   Zap,
+  DollarSign,
+  Flame,
+  Gauge,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -145,6 +149,10 @@ export default function Dashboard() {
   const { stats, recentContent, totalContent } = useContentStats();
   const { deleteContent, clearAll } = useContentActions();
   const profile = useCloneCrushStore((s) => s.profile);
+  const competitors = useCloneCrushStore((s) => s.competitors);
+  const envyMetrics = useCloneCrushStore((s) => s.envyMetrics);
+  const threatAlerts = useCloneCrushStore((s) => s.threatAlerts);
+  const wideningGap = useCloneCrushStore((s) => s.wideningGap);
 
   const [isExporting, setIsExporting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
@@ -216,7 +224,7 @@ export default function Dashboard() {
 
   const statDefs = [
     { key: "scripts", label: "Scripts Generated", value: stats.scriptsGenerated, icon: FileText, color: "text-primary" },
-    { key: "thumbs", label: "Thumbnails Created", value: stats.thumbnailsCreated, icon: Image, color: "text-accent" },
+    { key: "thumbs", label: "Thumbnail Prompts", value: stats.thumbnailsCreated, icon: Image, color: "text-accent" },
     { key: "voice", label: "Voiceovers Made", value: stats.voiceoversGenerated, icon: Mic, color: "text-orange-400" },
     { key: "guides", label: "Guides Created", value: stats.guidesCreated, icon: Eye, color: "text-green-400" },
   ];
@@ -261,9 +269,15 @@ export default function Dashboard() {
                 <span className="px-2.5 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 font-display text-[10px] uppercase tracking-wider font-semibold">
                   Profiled Creator
                 </span>
+                {envyMetrics && (
+                  <span className="px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 font-display text-[10px] uppercase tracking-wider font-semibold flex items-center gap-1">
+                    <Flame className="w-3 h-3" />
+                    {competitors.length} Competitors Tracked
+                  </span>
+                )}
               </div>
               <p className="text-xs md:text-sm text-primary font-medium tracking-wide">
-                {profile.handle}
+                {profile.handle} {profile.subscriberCountText && profile.subscriberCountText !== 'N/A' && `• ${profile.subscriberCountText} subscribers`}
               </p>
               <p className="text-xs md:text-sm text-muted-foreground max-w-2xl line-clamp-2 md:line-clamp-3 leading-relaxed">
                 {profile.description}
@@ -289,16 +303,24 @@ export default function Dashboard() {
       ) : (
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/20 via-card to-accent/20 p-5 md:p-8 border border-border gradient-border">
           <div className="relative z-10">
-            <h1 className="font-display text-2xl md:text-3xl lg:text-4xl font-black mb-2 md:mb-3 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 text-transparent bg-clip-text drop-shadow-[0_0_15px_rgba(34,211,238,0.6)]">
-              Algorithm Hijack: System Ready. <span className="text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.8)]">⚡️</span>
+            <h1 className="font-display text-2xl md:text-3xl lg:text-4xl font-black mb-2 md:mb-3 bg-gradient-to-r from-red-400 via-orange-400 to-yellow-400 text-transparent bg-clip-text drop-shadow-[0_0_15px_rgba(239,68,68,0.4)]">
+              Your Competitors Are Growing. <span className="text-red-400 animate-pulse">Are You?</span>
             </h1>
             <p className="text-base md:text-lg text-muted-foreground max-w-xl leading-relaxed">
-              Your competitors are sleeping. Drop a viral link below and let the <span className="text-primary text-glow-purple font-semibold">Neural Engine</span> steal their formula.
+              Paste your YouTube URL below to unlock the <span className="text-red-400 font-semibold">Competitive Intelligence War Room</span> — see exactly who's stealing your audience, how much they're earning, and clone their winning formula in 1 click.
             </p>
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              Zustand state + React Query caching — 0 polling, instant updates (Phase A2)
-            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <Link to="/clone-crush">
+                <Button size="sm" className="cyber-button text-xs gap-1.5 font-display">
+                  <Zap className="w-3.5 h-3.5 text-primary-foreground fill-primary-foreground" />
+                  Launch Clone &amp; Crush
+                </Button>
+              </Link>
+              <span className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                Real-time competitor analysis
+              </span>
+            </div>
             {totalContent > 0 && (
               <div className="mt-4 flex gap-3">
                 <Button variant="outline" size="sm" onClick={handleClearAll} disabled={isExporting || isClearing} className="border-destructive/40 text-destructive hover:bg-destructive/10 h-10 px-4 text-sm">
@@ -310,6 +332,127 @@ export default function Dashboard() {
           </div>
           <div className="absolute -right-10 -top-10 w-40 h-40 bg-primary/30 rounded-full blur-3xl" />
           <div className="absolute -right-20 -bottom-10 w-60 h-60 bg-accent/20 rounded-full blur-3xl" />
+        </div>
+      )}
+
+      {/* THE WAR ROOM — Envy Engine Dashboard */}
+      {profile && competitors.length > 0 && envyMetrics && (
+        <div className="space-y-4 animate-fade-in">
+          <h2 className="font-display text-lg md:text-xl font-semibold text-foreground flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-red-400 animate-pulse" />
+            <span className="bg-gradient-to-r from-red-400 to-orange-400 text-transparent bg-clip-text">
+              Competitive Intelligence — The War Room
+            </span>
+          </h2>
+          
+          {/* Live Threat Alerts */}
+          {threatAlerts.length > 0 && (
+            <div className="space-y-2">
+              {threatAlerts.slice(0, 2).map((alert, idx) => (
+                <div
+                  key={idx}
+                  className={`p-3 rounded-xl border flex items-center gap-3 ${
+                    alert.type === 'critical'
+                      ? 'bg-red-500/10 border-red-500/30'
+                      : alert.type === 'warning'
+                      ? 'bg-yellow-500/10 border-yellow-500/20'
+                      : 'bg-blue-500/10 border-blue-500/20'
+                  }`}
+                >
+                  <span className="text-lg shrink-0">{alert.icon}</span>
+                  <p className={`text-xs font-bold flex-1 ${
+                    alert.type === 'critical' ? 'text-red-400' : alert.type === 'warning' ? 'text-yellow-400' : 'text-blue-400'
+                  }`}>
+                    {alert.message}
+                  </p>
+                </div>
+              ))}
+              {wideningGap && wideningGap.dailyLoss > 0 && (
+                <div className="p-3 rounded-xl bg-red-500/5 border border-red-500/15 flex items-center gap-3">
+                  <TrendingUp className="w-4 h-4 text-red-400 shrink-0" />
+                  <p className="text-[10px] font-bold text-red-400 flex-1">
+                    📉 Widening Gap: ~${wideningGap.dailyLoss.toLocaleString()}/day — ${wideningGap.monthlyLoss.toLocaleString()}/month slipping away
+                  </p>
+                  <Link to="/clone-crush">
+                    <Button size="sm" className="cyber-button text-[9px] h-7 px-2 font-display">Crush Now</Button>
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Revenue Gap Banner */}
+          <div className="p-4 md:p-5 rounded-2xl bg-gradient-to-r from-red-500/10 via-card to-green-500/10 border border-red-500/20 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="relative z-10">
+              <p className="text-[10px] text-red-400 font-mono uppercase tracking-widest font-bold mb-2">
+                🔴 Revenue Gap Analysis — Your Niche: {envyMetrics.niche}
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Competitors Earn (est.)</p>
+                  <p className="text-xl md:text-2xl font-display font-bold text-green-400 mt-0.5">
+                    {envyMetrics.totalCompetitorMonthlyRevenue}<span className="text-xs text-muted-foreground">/mo</span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Your Subscribers</p>
+                  <p className="text-xl md:text-2xl font-display font-bold text-foreground mt-0.5">
+                    {profile.subscriberCountText || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Avg Viral Velocity</p>
+                  <p className="text-xl md:text-2xl font-display font-bold text-red-400 mt-0.5">
+                    {envyMetrics.averageViralVelocity}<span className="text-xs text-muted-foreground">/100</span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Niche CPM</p>
+                  <p className="text-xl md:text-2xl font-display font-bold text-primary mt-0.5">
+                    {envyMetrics.nicheCpm}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Competitor Quick Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {competitors.map((comp, idx) => {
+              const velocityColor = (comp.viralVelocityScore || 0) >= 70 ? 'border-red-500/40 bg-red-500/5' : (comp.viralVelocityScore || 0) >= 40 ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-green-500/40 bg-green-500/5';
+              return (
+                <div key={comp.videoId} className={`p-3 rounded-xl border ${velocityColor} transition-all hover:scale-[1.01]`}>
+                  <div className="flex items-start gap-3">
+                    <img src={comp.thumbnail} alt={comp.title} className="w-20 h-12 rounded-lg object-cover bg-black/40 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-foreground line-clamp-2 leading-tight">{comp.title}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{comp.channelName}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-[10px] font-bold text-green-400 flex items-center gap-0.5">
+                      <DollarSign className="w-3 h-3" />{comp.estimatedRevenue || "N/A"}
+                    </span>
+                    <span className="text-[10px] font-bold text-red-400 flex items-center gap-0.5">
+                      <Flame className="w-3 h-3" />{comp.viralVelocityScore || 0}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground ml-auto">{comp.views}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* CTA to Clone & Crush */}
+          <div className="flex items-center justify-center">
+            <Link to="/clone-crush">
+              <Button className="cyber-button text-xs gap-1.5 font-display h-10 px-6">
+                <Zap className="w-3.5 h-3.5 text-primary-foreground fill-primary-foreground" />
+                Open Clone &amp; Crush to Crush These Competitors
+              </Button>
+            </Link>
+          </div>
         </div>
       )}
 
@@ -421,7 +564,7 @@ export default function Dashboard() {
               </p>
               <ul className="text-xs text-muted-foreground mt-1 space-y-0.5">
                 <li>✓ Scripts (full text)</li>
-                <li>✓ Thumbnails (base64 images)</li>
+                <li>✓ Thumbnail Prompts (text-based)</li>
                 <li>✓ Guides (markdown)</li>
                 <li>✓ Voiceover transcripts</li>
                 <li>✓ Storyboard descriptions</li>

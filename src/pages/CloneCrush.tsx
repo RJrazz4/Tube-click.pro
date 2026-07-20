@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { 
   Zap, 
   Sparkles, 
@@ -25,7 +25,10 @@ import {
   Mic,
   Image,
   Search,
-  Film
+  Film,
+  DollarSign,
+  Flame,
+  Gauge,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +51,9 @@ export default function CloneCrush() {
     competitors, 
     isSearchingCompetitors, 
     competitorsFetchedAt,
+    envyMetrics,
+    threatAlerts,
+    wideningGap,
     rewrites,
     isRewriting,
     activeRewrite,
@@ -55,6 +61,7 @@ export default function CloneCrush() {
     setIsProfiling,
     setCompetitors,
     setIsSearchingCompetitors,
+    setThreatAlerts,
     addRewrite,
     setIsRewriting,
     setActiveRewrite,
@@ -129,10 +136,22 @@ export default function CloneCrush() {
       });
 
       if (res.success && res.competitors) {
-        setCompetitors(res.competitors);
+        const envyData = (res as any).envyMetrics || null;
+        setCompetitors(res.competitors, envyData);
         const unlocked = res.competitors.find((v: any) => !v.isLocked) || res.competitors[0];
         setSelectedVideo(unlocked);
         toast.success(`Showdown Matrix Ready! Discovered 3 high-velocity competitors.`, { id: "competitors-find" });
+
+        // Fetch threat alerts in background (non-blocking)
+        cloneCrushMutation.mutateAsync({
+          action: "threat-alerts",
+          competitors: res.competitors,
+          userSubscribers: prof.subscriberCount || 0,
+        }).then((alertRes: any) => {
+          if (alertRes.success) {
+            setThreatAlerts(alertRes.alerts || [], alertRes.wideningGap || null);
+          }
+        }).catch(() => {/* silent — threat alerts are non-critical */});
       } else {
         throw new Error(res.error || "No viral competitors found");
       }
@@ -204,10 +223,11 @@ export default function CloneCrush() {
 
     const steps: { label: string; status: "pending" | "processing" | "success" | "error" }[] = [
       { label: "Establishing Secure Tunnel & Scraping Video Captions...", status: "processing" },
-      { label: "Mapping Narrative Pacing & Pacing Beats...", status: "pending" },
+      { label: `Deploying ${selectedTier === "premium" ? "99% GLITCH PROTOCOL" : "60% Standard Optimization"}...`, status: "pending" },
       { label: "Enforcing Anti-Clone 'Stealth Disguise' Protocol...", status: "pending" },
-      { label: "Formulating High-Curiosity First-15s Glitch Hook...", status: "pending" },
-      { label: "Compiling Unified Chain-Loop (4 Viral Assets Package)...", status: "pending" }
+      { label: `Injecting ${selectedTier === "premium" ? "EXTREME" : "Standard"} Curiosity Glitch into Title & Hook...`, status: "pending" },
+      { label: "Reverse-Engineering Top Viral Thumbnail DNA...", status: "pending" },
+      { label: "Compiling Unified Chain-Loop (5 Viral Assets Package)...", status: "pending" }
     ];
     setLogSteps(steps);
 
@@ -247,9 +267,34 @@ export default function CloneCrush() {
         steps[3].status = "success";
         steps[4].status = "processing";
         setLogSteps([...steps]);
-        await new Promise(r => setTimeout(r, 400));
 
         const rw = rewriteRes.rewrite;
+
+        // Step 5: Thumbnail Reverse-Engineering (runs in parallel with saving)
+        let reverseEngineeredPrompts: string[] = [];
+        let reverseEngineeredSource: any = null;
+
+        try {
+          const reverseRes = await cloneCrushMutation.mutateAsync({
+            action: "thumbnail-reverse",
+            glitchTitle: rw.rewrittenTitle,
+            niche: nicheInput,
+            tier: selectedTier,
+          });
+          const reverseData = reverseRes as any;
+          if (reverseData.success && reverseData.thumbnailPrompts) {
+            reverseEngineeredPrompts = reverseData.thumbnailPrompts;
+            reverseEngineeredSource = reverseData.sourceVideo || null;
+          }
+        } catch {
+          // Non-critical — fall back to the basic thumbnail prompt
+        }
+
+        steps[4].status = "success";
+        steps[5].status = "processing";
+        setLogSteps([...steps]);
+        await new Promise(r => setTimeout(r, 300));
+
         const savedRewrite = addRewrite({
           targetVideoId: selectedVideo.videoId,
           targetVideoTitle: selectedVideo.title,
@@ -264,20 +309,26 @@ export default function CloneCrush() {
           tier: selectedTier,
           isStealthDisguised: true,
           changedAnalogiesCount: rw.changedAnalogiesCount,
-          changedExamplesCount: rw.changedExamplesCount
+          changedExamplesCount: rw.changedExamplesCount,
+          glitchTechniques: rw.glitchTechniques,
+          glitchIntensity: rw.glitchIntensity || (selectedTier === "premium" ? 99 : 60),
+          reverseEngineeredPrompts,
+          reverseEngineeredSource,
         });
 
+        const promptCount = reverseEngineeredPrompts.length || 1;
         saveContent({
           type: "script",
           title: `Chain-Loop Asset Package: ${rw.rewrittenTitle.substring(0, 35)}...`,
-          content: `⚡️ [TITLE & SEO TAGS]:\n${rw.rewrittenTitle}\nTags: ${rw.seoTags.join(', ')}\n\n⚡️ [15s GLITCH HOOK]:\n${rw.glitchHook}\n\n⚡️ [FULL SCRIPT]:\n${rw.fullScript}\n\n⚡️ [THUMBNAIL PROMPT]:\n${rw.thumbnailPrompt}\n\n⚡️ [EDITING GUIDE]:\n${rw.editingGuide}`,
-          metadata: { platform: "YouTube", style: selectedTier === "premium" ? "90% Chain-Loop Clone" : "60% Chain-Loop Vibe" }
+          content: `⚡️ [GLITCH INTENSITY: ${rw.glitchIntensity || (selectedTier === "premium" ? 99 : 60)}%]\n\n⚡️ [TITLE & SEO TAGS]:\n${rw.rewrittenTitle}\nTags: ${rw.seoTags.join(', ')}\n\n⚡️ [15s GLITCH HOOK]:\n${rw.glitchHook}\n\n⚡️ [FULL SCRIPT]:\n${rw.fullScript}\n\n⚡️ [THUMBNAIL PROMPTS (${promptCount})]:\n${reverseEngineeredPrompts.length > 0 ? reverseEngineeredPrompts.map((p, i) => `${i+1}. ${p}`).join('\n\n') : rw.thumbnailPrompt}\n\n⚡️ [EDITING GUIDE]:\n${rw.editingGuide}`,
+          metadata: { platform: "YouTube", style: selectedTier === "premium" ? "99% Glitch Protocol" : "60% Standard Optimization" }
         });
         incrementStat("scriptsGenerated");
 
-        steps[4].status = "success";
+        steps[5].status = "success";
         setLogSteps([...steps]);
-        toast.success("🚀 Chain-Loop Complete! 4 Viral Assets Generated Instantly.");
+        const intensityLabel = selectedTier === "premium" ? "99% GLITCH" : "60% Standard";
+        toast.success(`🚀 ${intensityLabel} Chain-Loop Complete! ${promptCount > 1 ? promptCount + ' reverse-engineered thumbnail prompts' : '4 Viral Assets'} Generated.`);
       } else {
         throw new Error(rewriteRes.error || "Failed to compile Chain-Loop asset package");
       }
@@ -422,6 +473,62 @@ export default function CloneCrush() {
             </CardContent>
           </Card>
 
+          {/* THREAT ALERTS — Live Threat Detection */}
+          {threatAlerts.length > 0 && (
+            <div className="space-y-2 animate-fade-in">
+              {threatAlerts.slice(0, 3).map((alert, idx) => (
+                <div
+                  key={idx}
+                  className={`p-3 rounded-xl border flex items-start gap-3 ${
+                    alert.type === 'critical'
+                      ? 'bg-red-500/10 border-red-500/30 animate-pulse'
+                      : alert.type === 'warning'
+                      ? 'bg-yellow-500/10 border-yellow-500/20'
+                      : 'bg-blue-500/10 border-blue-500/20'
+                  }`}
+                >
+                  <span className="text-lg shrink-0">{alert.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-bold ${
+                      alert.type === 'critical' ? 'text-red-400' : alert.type === 'warning' ? 'text-yellow-400' : 'text-blue-400'
+                    }`}>
+                      {alert.message}
+                    </p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-[9px] text-muted-foreground">Urgency: {alert.urgencyScore}/100</span>
+                      <span className="text-[9px] text-muted-foreground">{alert.hoursAgo < 1 ? 'Just now' : `${Math.round(alert.hoursAgo)}h ago`}</span>
+                    </div>
+                  </div>
+                  {alert.type === 'critical' && (
+                    <Link to="/clone-crush" className="shrink-0">
+                      <Button size="sm" className="cyber-button text-[9px] h-7 px-2 font-display">
+                        <Zap className="w-3 h-3 text-primary-foreground fill-primary-foreground" />
+                        Crush Now
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              ))}
+
+              {/* Widening Gap Indicator */}
+              {wideningGap && wideningGap.dailyLoss > 0 && (
+                <div className="p-3 rounded-xl bg-gradient-to-r from-red-500/5 via-card to-red-500/5 border border-red-500/15 flex items-center gap-3">
+                  <TrendingUp className="w-4 h-4 text-red-400 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-[10px] font-bold text-red-400 font-display uppercase tracking-wider">
+                      📉 Widening Gap: ~${wideningGap.dailyLoss.toLocaleString()}/day
+                    </p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5">{wideningGap.message}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-display font-bold text-red-400">${wideningGap.monthlyLoss.toLocaleString()}</p>
+                    <p className="text-[8px] text-muted-foreground">Monthly gap</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* CRITICAL FIX 1: SIDE-BY-SIDE SHOWDOWN MATRIX (VERSUS MODE) */}
           {profile && (
             <div className="grid lg:grid-cols-12 gap-4 items-center animate-fade-in p-4 rounded-2xl bg-secondary/20 border border-border/60">
@@ -487,6 +594,7 @@ export default function CloneCrush() {
                       <div className="grid grid-cols-3 gap-2 mt-2">
                         {competitors.map((video, idx) => {
                           const isSelected = selectedVideo?.videoId === video.videoId;
+                          const velocityColor = (video.viralVelocityScore || 0) >= 70 ? 'text-red-400' : (video.viralVelocityScore || 0) >= 40 ? 'text-yellow-400' : 'text-green-400';
                           return (
                             <div
                               key={video.videoId}
@@ -516,6 +624,21 @@ export default function CloneCrush() {
                               <div>
                                 <p className="text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p>
                                 <p className="text-[8px] text-primary font-mono mt-1 font-semibold">{video.views}</p>
+                                {/* FOMO Metrics */}
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  {video.estimatedRevenue && (
+                                    <span className="text-[7px] font-bold text-green-400 bg-green-400/10 px-1 py-0.5 rounded flex items-center gap-0.5">
+                                      <DollarSign className="w-2.5 h-2.5" />
+                                      {video.estimatedRevenue}
+                                    </span>
+                                  )}
+                                  {video.viralVelocityScore !== undefined && (
+                                    <span className={`text-[7px] font-bold ${velocityColor} bg-secondary/60 px-1 py-0.5 rounded flex items-center gap-0.5`}>
+                                      <Flame className="w-2.5 h-2.5" />
+                                      {video.viralVelocityScore}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           );
@@ -543,6 +666,39 @@ export default function CloneCrush() {
                 </Card>
               </div>
 
+            </div>
+          )}
+
+          {/* ENVY ENGINE — Revenue Gap & Velocity Alert */}
+          {envyMetrics && competitors.length > 0 && (
+            <div className="grid grid-cols-3 gap-3 animate-fade-in">
+              <div className="p-3 rounded-xl bg-gradient-to-br from-green-500/10 to-green-500/5 border border-green-500/20">
+                <p className="text-[10px] text-green-400 font-mono uppercase tracking-wider font-bold flex items-center gap-1">
+                  <DollarSign className="w-3 h-3" /> Competitor Revenue
+                </p>
+                <p className="text-lg font-display font-bold text-green-400 mt-1">
+                  {envyMetrics.totalCompetitorMonthlyRevenue}
+                </p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">Estimated combined/mo</p>
+              </div>
+              <div className="p-3 rounded-xl bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/20">
+                <p className="text-[10px] text-red-400 font-mono uppercase tracking-wider font-bold flex items-center gap-1">
+                  <Flame className="w-3 h-3" /> Viral Velocity
+                </p>
+                <p className="text-lg font-display font-bold text-red-400 mt-1">
+                  {envyMetrics.averageViralVelocity}/100
+                </p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">Avg competitor score</p>
+              </div>
+              <div className="p-3 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
+                <p className="text-[10px] text-primary font-mono uppercase tracking-wider font-bold flex items-center gap-1">
+                  <Gauge className="w-3 h-3" /> Niche CPM
+                </p>
+                <p className="text-lg font-display font-bold text-primary mt-1">
+                  {envyMetrics.nicheCpm}
+                </p>
+                <p className="text-[9px] text-muted-foreground mt-0.5">{envyMetrics.niche}</p>
+              </div>
             </div>
           )}
 
@@ -587,7 +743,7 @@ export default function CloneCrush() {
                   <div 
                     onClick={() => {
                       if (license.tier === "free") {
-                        toast.error("90% Loophole Framework is reserved for Pro and Enterprise plans.");
+                        toast.error("99% Glitch Protocol is reserved for Pro and Enterprise plans.");
                         return;
                       }
                       setSelectedVideoTier("premium");
@@ -609,14 +765,14 @@ export default function CloneCrush() {
                           disabled={license.tier === "free"}
                           className="accent-primary" 
                         />
-                        <p className="text-sm font-bold text-foreground">90% Loophole (Structure Clone)</p>
+                        <p className="text-sm font-bold text-foreground">99% Glitch Protocol (Maximum Aggression)</p>
                       </div>
                       {license.tier === "free" && (
                         <Lock className="w-3.5 h-3.5 text-primary" />
                       )}
                     </div>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      Maintains original pacing, psychological triggers, and framework, but swaps 100% of sentences, analogies, and examples.
+                      Injects extreme Curiosity Glitches: time-jumps, hidden secrets, shocking mistakes. Reverse-engineers proven viral thumbnails with ruthless precision.
                     </p>
                   </div>
                 </div>
@@ -755,6 +911,39 @@ export default function CloneCrush() {
                   </div>
                 </div>
 
+                {/* GLITCH INTENSITY INDICATOR */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-display font-bold text-foreground uppercase tracking-wider">Glitch Intensity</span>
+                      <span className={`text-xs font-mono font-bold ${
+                        (activeRewrite.glitchIntensity || 60) >= 90 ? 'text-red-400' : 'text-yellow-400'
+                      }`}>
+                        {activeRewrite.glitchIntensity || 60}%
+                      </span>
+                    </div>
+                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-1000 ${
+                          (activeRewrite.glitchIntensity || 60) >= 90
+                            ? 'bg-gradient-to-r from-red-600 via-red-400 to-orange-400'
+                            : 'bg-gradient-to-r from-yellow-600 via-yellow-400 to-green-400'
+                        }`}
+                        style={{ width: `${activeRewrite.glitchIntensity || 60}%` }}
+                      />
+                    </div>
+                  </div>
+                  {activeRewrite.glitchTechniques && activeRewrite.glitchTechniques.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {activeRewrite.glitchTechniques.map((tech, i) => (
+                        <span key={i} className="text-[8px] font-mono bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded">
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* HIGH-CURIOSITY GLITCH HOOK HAZARD CARD */}
                 <div className="relative rounded-xl border border-destructive/30 bg-destructive/5 p-4 overflow-hidden shadow-sm animate-pulse-subtle">
                   <div className="absolute top-0 right-0 w-20 h-20 bg-destructive/10 rounded-full blur-xl" />
@@ -762,7 +951,7 @@ export default function CloneCrush() {
                     <ShieldAlert className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
                     <div>
                       <p className="text-xs font-bold text-destructive font-display uppercase tracking-wider">
-                        15s Glitch Hook (Extreme Pattern Interrupt)
+                        15s Glitch Hook ({(activeRewrite.glitchIntensity || 60) >= 90 ? 'EXTREME' : 'Standard'} Pattern Interrupt)
                       </p>
                       <p className="text-xs text-foreground mt-1.5 leading-relaxed font-medium italic">
                         "{activeRewrite.glitchHook}"
@@ -786,17 +975,67 @@ export default function CloneCrush() {
                     </div>
                   </TabsContent>
 
-                  {/* THUMBNAIL PROMPT CONTENT */}
+                  {/* THUMBNAIL PROMPT CONTENT — Reverse-Engineered or Basic */}
                   <TabsContent value="thumbnail" className="pt-3 space-y-3">
-                    <div className="p-3 bg-secondary/40 rounded-xl border border-border/60">
-                      <p className="text-xs font-bold text-foreground mb-1">AI Thumbnail Prompt (Midjourney / DALL-E Ready):</p>
-                      <p className="text-xs font-mono text-primary bg-secondary/80 p-3 rounded-lg border border-primary/20 select-all leading-relaxed">
-                        {activeRewrite.thumbnailPrompt}
-                      </p>
-                    </div>
-                    <Button onClick={handleCopyThumbnailPrompt} size="sm" className="w-full cyber-button text-xs h-9">
-                      <Copy className="w-3.5 h-3.5 mr-2" /> Copy Prompt for Midjourney
-                    </Button>
+                    {activeRewrite.reverseEngineeredPrompts && activeRewrite.reverseEngineeredPrompts.length > 0 ? (
+                      <>
+                        {/* Reverse-Engineered Thumbnail Source */}
+                        {activeRewrite.reverseEngineeredSource && (
+                          <div className="p-2.5 bg-green-500/10 rounded-xl border border-green-500/20 flex items-center gap-3">
+                            <img
+                              src={activeRewrite.reverseEngineeredSource.thumbnailUrl}
+                              alt="Source thumbnail"
+                              className="w-16 h-9 rounded object-cover bg-black/40 shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-bold text-green-400">🔬 Reverse-Engineered from Viral Thumbnail</p>
+                              <p className="text-[9px] text-muted-foreground truncate">{activeRewrite.reverseEngineeredSource.title}</p>
+                              <p className="text-[9px] text-muted-foreground">{activeRewrite.reverseEngineeredSource.views} • {activeRewrite.reverseEngineeredSource.channel}</p>
+                            </div>
+                          </div>
+                        )}
+                        {/* 4 Reverse-Engineered Prompts */}
+                        {activeRewrite.reverseEngineeredPrompts.map((prompt, i) => (
+                          <div key={i} className="p-3 bg-secondary/40 rounded-xl border border-border/60">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <p className="text-xs font-bold text-foreground">
+                                {(activeRewrite.glitchIntensity || 60) >= 90 ? '🎯' : '🎨'} Prompt {i + 1}: {
+                                  ['Curiosity Gap', 'Shock/Fear', 'Authority/Proof', 'Number/List'][i] || 'Visual'
+                                }
+                              </p>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-[10px]"
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(prompt);
+                                    toast.success(`Prompt ${i + 1} copied!`);
+                                  } catch { toast.error("Failed to copy"); }
+                                }}
+                              >
+                                <Copy className="w-3 h-3" />
+                              </Button>
+                            </div>
+                            <p className="text-[10px] font-mono text-primary bg-secondary/80 p-2.5 rounded-lg border border-primary/20 select-all leading-relaxed">
+                              {prompt}
+                            </p>
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        <div className="p-3 bg-secondary/40 rounded-xl border border-border/60">
+                          <p className="text-xs font-bold text-foreground mb-1">AI Thumbnail Prompt (Midjourney / DALL-E Ready):</p>
+                          <p className="text-xs font-mono text-primary bg-secondary/80 p-3 rounded-lg border border-primary/20 select-all leading-relaxed">
+                            {activeRewrite.thumbnailPrompt}
+                          </p>
+                        </div>
+                        <Button onClick={handleCopyThumbnailPrompt} size="sm" className="w-full cyber-button text-xs h-9">
+                          <Copy className="w-3.5 h-3.5 mr-2" /> Copy Prompt for Midjourney
+                        </Button>
+                      </>
+                    )}
                   </TabsContent>
 
                   {/* SEO TAGS CONTENT */}
@@ -863,7 +1102,7 @@ export default function CloneCrush() {
                         <div onClick={() => setActiveRewrite(r)} className="flex-1 min-w-0 pr-6">
                           <p className="text-[11px] font-bold text-foreground truncate">{r.rewrittenTitle}</p>
                           <p className="text-[9px] text-muted-foreground truncate mt-0.5">
-                            {r.tier === "premium" ? "90% Framework" : "60% Vibe"} • {new Date(r.createdAt).toLocaleDateString()}
+                            {r.tier === "premium" ? "99% Glitch" : "60% Standard"} • {r.glitchIntensity || (r.tier === "premium" ? 99 : 60)}% • {new Date(r.createdAt).toLocaleDateString()}
                           </p>
                         </div>
                         
