@@ -31,6 +31,7 @@ import { useContentStats, useContentActions } from "@/hooks/useContentStats";
 import type { SavedContent } from "@/stores/useContentStore";
 import { exportAllAsZip } from "@/lib/export";
 import { VerificationModal } from "@/components/VerificationModal";
+import { TheLab } from "@/components/lab/TheLab";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
 
 const tools = [
@@ -462,6 +463,9 @@ export default function Dashboard() {
           <StatCard key={stat.key} label={stat.label} value={stat.value} icon={stat.icon} color={stat.color} />
         ))}
       </div>
+
+      {/* THE LAB — Zeigarnik Effect Retention Engine */}
+      <TheLab />
 
       {/* Unified 8-Tool Grid — memoized */}
       <div>
