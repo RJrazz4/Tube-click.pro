@@ -1,5 +1,5 @@
 /**
- * TubeGenius Pro — Secure Edge Function Client
+ * TubeClick Pro — Secure Edge Function Client
  * Phase A3: Secure Environment Setup — No client-side API keys.
  * All keys live in Deno.env (Supabase) or process.env (Vercel Edge) on server.
  * 

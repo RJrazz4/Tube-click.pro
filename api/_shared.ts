@@ -184,7 +184,7 @@ export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<Op
             "Content-Type": "application/json",
             "Authorization": `Bearer ${keys[ki]}`,
             // Phase F2: env-driven attribution headers — no literal <YOUR_SITE_*> placeholders
-            "X-Title": process.env.OPENROUTER_SITE_TITLE || "TubeClick.Pro",
+            "X-Title": process.env.OPENROUTER_SITE_TITLE || "TubeClick Pro",
             ...(process.env.OPENROUTER_SITE_URL ? { "HTTP-Referer": process.env.OPENROUTER_SITE_URL } : {}),
           },
           body: JSON.stringify(orBody),

@@ -271,7 +271,7 @@ ${generatedContent.hashtags?.join(' ') || 'N/A'}
 === VIDEO DESCRIPTION ===
 ${generatedContent.description || 'N/A'}
     `.trim();
-    downloadAsText(content, `tubegenius-script-${Date.now()}.txt`);
+      downloadAsText(content, `tubeclickpro-script-${Date.now()}.txt`);
     toast.success("Script downloaded!");
   };
 

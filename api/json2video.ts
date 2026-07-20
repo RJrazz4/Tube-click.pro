@@ -1,6 +1,6 @@
 /**
  * Vercel Edge — /api/json2video — Phase D2 JSON2Video Assembly Pipeline
- * Secure route that forwards internal TubeGenius payload to JSON2Video API
+ * Secure route that forwards internal TubeClick Pro payload to JSON2Video API
  * Server: JSON2VIDEO_API_KEY (never client)
  * 
  * Flow:
@@ -56,7 +56,7 @@ export default async function handler(req: Request) {
         const isVertical = apiPayload.resolution === '1080x1920';
         apiPayload = {
           id: apiPayload.meta?.projectId || `tg-${Date.now()}`,
-          comment: `TubeGenius Pro - ${apiPayload.meta?.topic || 'Video'} - ${apiPayload.scenes.length} scenes`,
+          comment: `TubeClick Pro - ${apiPayload.meta?.topic || 'Video'} - ${apiPayload.scenes.length} scenes`,
           resolution: isVertical ? 'custom' : 'full-hd',
           width: isVertical ? 1080 : 1920,
           height: isVertical ? 1920 : 1080,

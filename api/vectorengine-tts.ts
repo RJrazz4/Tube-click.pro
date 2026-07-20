@@ -2,7 +2,7 @@
  * Vercel Edge — /api/vectorengine-tts — Phase D1
  * VectorEngine API white-label wrapper around ElevenLabs
  * Server: ELEVENLABS_API_KEY (mapped as VectorEngine in white-label)
- * For TubeGenius Pro, VectorEngine = ElevenLabs but branded as Neural Engine
+ * For TubeClick Pro, VectorEngine = ElevenLabs but branded as Neural Engine
  * Also supports future VectorEngine provider if VECTORENGINE_API_KEY set
  */
 export const config = { runtime: 'edge' };
@@ -65,7 +65,7 @@ export default async function handler(req: Request) {
     }
 
     const buf = await elRes.arrayBuffer();
-    return new Response(buf, { status: 200, headers: { ...corsHeaders, 'Content-Type': 'audio/mpeg', 'X-Provider': 'VectorEngine (white-labeled ElevenLabs)', 'X-WhiteLabel': 'TubeGenius Neural Engine' } });
+    return new Response(buf, { status: 200, headers: { ...corsHeaders, 'Content-Type': 'audio/mpeg', 'X-Provider': 'VectorEngine (white-labeled ElevenLabs)', 'X-WhiteLabel': 'TubeClick Neural Engine' } });
 
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

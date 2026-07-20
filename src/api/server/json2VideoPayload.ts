@@ -98,7 +98,7 @@ export interface Json2VideoApiPayload {
 }
 
 /**
- * Builds internal TubeGenius payload from storyboard + voiceover
+ * Builds internal TubeClick Pro payload from storyboard + voiceover
  */
 export function buildJson2VideoInternalPayload(params: {
   scenes: ScenePayload[];
@@ -124,7 +124,7 @@ export function buildJson2VideoInternalPayload(params: {
       language: "en",
     },
     branding: {
-      watermark: params.tier === "free" ? "TubeGenius Pro" : undefined,
+      watermark: params.tier === "free" ? "TubeClick Pro" : undefined,
       outro: true,
     },
     meta: {
@@ -138,7 +138,7 @@ export function buildJson2VideoInternalPayload(params: {
 }
 
 /**
- * Converts internal TubeGenius payload to actual JSON2Video API v2 payload
+ * Converts internal TubeClick Pro payload to actual JSON2Video API v2 payload
  * This is what is POSTed to https://api.json2video.com/v2/movies with x-api-key header
  */
 export function toJson2VideoApiPayload(
@@ -297,7 +297,7 @@ export function buildPayloadFromAppState(params: {
   });
 
   const api = toJson2VideoApiPayload(internal, {
-    webhookUrl: undefined, // Set to your webhook endpoint like https://tubegenius.pro/api/webhook/json2video
+    webhookUrl: undefined, // Set to your webhook endpoint like https://tubeclickpro.in/api/webhook/json2video
     draft: true,
   });
 
@@ -328,7 +328,7 @@ Security:
 // Example payload for documentation / testing
 export const EXAMPLE_PAYLOAD: Json2VideoApiPayload = {
   id: "tg-example-123",
-  comment: "TubeGenius Pro - Example Shorts - 5 scenes - 9:16 - Tier: pro",
+  comment: "TubeClick Pro - Example Shorts - 5 scenes - 9:16 - Tier: pro",
   resolution: "custom",
   width: 1080,
   height: 1920,

@@ -291,7 +291,7 @@ async function fetchPipedSearch(query: string): Promise<RawScrapedVideo[]> {
   for (const api of instances) {
     try {
       const res = await fetch(`${api}/search?q=${encodeURIComponent(query)}&filter=videos`, {
-        headers: { 'User-Agent': 'TubeGenius-Pro/2.0' },
+        headers: { 'User-Agent': 'TubeClickPro/2.0' },
         signal: AbortSignal.timeout(5000)
       });
       if (!res.ok) continue;

@@ -1,6 +1,6 @@
 /**
  * @deprecated — REMOVED in Phase A1 Secure Audit
- * TubeGenius Pro no longer uses client-side BYOK (Bring Your Own Key).
+ * TubeClick Pro no longer uses client-side BYOK (Bring Your Own Key).
  * All API keys are server-only via Deno.env / process.env.
  *
  * This file is intentionally neutered to prevent accidental usage.
