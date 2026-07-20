@@ -18,6 +18,67 @@ import {
 } from './_shared.js';
 
 // -------------------------------------------------------------
+// SERVER-SIDE TIER ENFORCEMENT
+// The tier MUST come from a verified source — never trust the client.
+// In production, this reads from Supabase auth JWT or session DB.
+// For MVP/demo, we enforce: unknown/invalid tier → 'free'.
+// -------------------------------------------------------------
+
+/** Allowed tier values — reject anything else */
+const VALID_TIERS = new Set(['free', 'premium', 'enterprise']);
+
+/**
+ * Normalize and enforce the tier server-side.
+ * CRITICAL: Never trust client-supplied tier values.
+ * In production, replace this with a Supabase session lookup:
+ *   const { data } = await supabase.from('subscriptions').select('tier').eq('user_id', userId).single();
+ *   return data?.tier || 'free';
+ */
+function enforceTier(rawTier: unknown): 'free' | 'premium' | 'enterprise' {
+  if (typeof rawTier === 'string' && VALID_TIERS.has(rawTier)) {
+    return rawTier as 'free' | 'premium' | 'enterprise';
+  }
+  return 'free'; // Default to most restrictive
+}
+
+/**
+ * Rate limit map: action → { count, windowStart }
+ * Simple in-memory rate limiter per edge instance.
+ * In production, use Vercel KV or Redis for persistent rate limiting.
+ */
+const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
+  'profile':        { max: 10,  windowMs: 60_000 },
+  'competitors':    { max: 10,  windowMs: 60_000 },
+  'rewrite':        { max: 20,  windowMs: 60_000 },
+  'thumbnail-reverse': { max: 15, windowMs: 60_000 },
+  'threat-alerts':  { max: 20,  windowMs: 60_000 },
+};
+
+const rateLimitStore = new Map<string, { count: number; windowStart: number }>();
+
+function checkRateLimit(action: string, ip: string): { allowed: boolean; retryAfter?: number } {
+  const limit = RATE_LIMITS[action];
+  if (!limit) return { allowed: true };
+
+  const key = `${action}:${ip}`;
+  const now = Date.now();
+  const entry = rateLimitStore.get(key);
+
+  if (!entry || now - entry.windowStart > limit.windowMs) {
+    rateLimitStore.set(key, { count: 1, windowStart: now });
+    return { allowed: true };
+  }
+
+  if (entry.count >= limit.max) {
+    const retryAfter = Math.ceil((entry.windowStart + limit.windowMs - now) / 1000);
+    return { allowed: false, retryAfter };
+  }
+
+  entry.count++;
+  return { allowed: true };
+}
+
+// -------------------------------------------------------------
 // YouTube Channel Scraper Helpers
 // -------------------------------------------------------------
 function cleanChannelUrl(urlOrHandle: string): string {
@@ -322,7 +383,25 @@ export default async function handler(req: Request) {
     const bodyResult = await safeJsonBody(req);
     if (bodyResult.error) return jsonResponse({ error: bodyResult.error }, 400);
 
-    const { action, channelUrl, niche, description, targetVideoId, originalTranscript, originalTitle, tier = 'free' } = bodyResult.data;
+    const { action } = bodyResult.data;
+
+    // ── Server-side rate limiting (per IP per action) ──
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || req.headers.get('x-real-ip')
+      || 'unknown';
+    const rateCheck = checkRateLimit(action || 'unknown', clientIp);
+    if (!rateCheck.allowed) {
+      return jsonResponse({
+        error: `Rate limit exceeded for "${action}". Please wait ${rateCheck.retryAfter}s before trying again.`,
+        code: 'RATE_LIMITED',
+        retryAfter: rateCheck.retryAfter,
+      }, 429);
+    }
+
+    // ── Server-side tier enforcement — NEVER trust client-supplied tier ──
+    const tier = enforceTier(bodyResult.data.tier);
+
+    const { channelUrl, niche, description, targetVideoId, originalTranscript, originalTitle } = bodyResult.data;
 
     // ---------------------------------------------------------
     // ACTION: PROFILE
@@ -675,12 +754,13 @@ Execute the Chain-Loop generation. Your tier is "${tier}" — follow the Glitch 
     // Takes the glitch title → searches YouTube → finds top viral thumbnail → reverse-engineers it
     // ---------------------------------------------------------
     if (action === 'thumbnail-reverse') {
-      const { glitchTitle, niche: reverseNiche, tier: reverseTier = 'free' } = bodyResult.data;
+      const { glitchTitle, niche: reverseNiche } = bodyResult.data;
       if (!glitchTitle) {
         return jsonResponse({ error: 'glitchTitle is required for thumbnail reverse-engineering' }, 400);
       }
 
-      const isPremiumReverse = reverseTier === 'premium';
+      // Uses server-enforced `tier` from above (never client-supplied reverseTier)
+      const isPremiumReverse = tier === 'premium';
 
       // Step 1: Search YouTube for the glitch title concept
       let searchResults = await fetchPipedSearch(glitchTitle);
@@ -695,8 +775,8 @@ Execute the Chain-Loop generation. Your tier is "${tier}" — follow the Glitch 
           reverseEngineered: false,
           fallback: true,
           thumbnailPrompts: generateFallbackThumbnailPrompts(glitchTitle, isPremiumReverse),
-          sourceVideo: null,
-          tier: reverseTier,
+        sourceVideo: null,
+        tier,
         });
       }
 
@@ -771,7 +851,7 @@ Output JSON with 4 prompts, each being a general text prompt for an AI image gen
         fallback: !sourceVideoInfo,
         thumbnailPrompts,
         sourceVideo: sourceVideoInfo,
-        tier: reverseTier,
+        tier,
         glitchIntensity: isPremiumReverse ? 99 : 60,
       });
     }
