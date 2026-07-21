@@ -45,7 +45,12 @@ export function ViralGrowthPass() {
         setLicense({ tier: "free", status: "active", expiresAt: undefined });
         setAppTier("free");
       }
-    } catch {
+    } catch (error) {
+      console.error("[viral-growth-pass] Failed to load referral progress", {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        userId: data.session?.user.id,
+      });
       setStatus("unavailable");
     }
   }, [license.expiresAt, license.tier, setAppTier, setLicense]);

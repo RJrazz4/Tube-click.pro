@@ -135,34 +135,83 @@ function extractSemanticKeywords(html: string): string[] {
 }
 
 async function youtubeApi(path: string, params: Record<string, string>) {
-  const key = process.env.YOUTUBE_API_KEY;
-  if (!key) throw new Error('YOUTUBE_API_KEY is not configured');
+  const key = process.env.YOUTUBE_API_KEY?.trim();
+  if (!key) throw new Error('YouTube Data API is unavailable: YOUTUBE_API_KEY is not configured');
+
   const query = new URLSearchParams({ ...params, key });
-  const response = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${query}`);
-  const data = await response.json();
-  if (!response.ok || data.error) throw new Error(data.error?.message || `YouTube API error (${response.status})`);
+  let response: Response;
+  try {
+    response = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${query}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (error) {
+    const reason = error instanceof Error && error.name === 'TimeoutError' ? 'request timed out' : 'network request failed';
+    throw new Error(`YouTube Data API ${reason}`);
+  }
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || data?.error) {
+    const message = data?.error?.message || `request failed with status ${response.status}`;
+    throw new Error(`YouTube Data API error: ${message}`);
+  }
   return data;
 }
 
-function channelRef(input: string): { id?: string; handle?: string } {
+type ChannelReference = { id: string } | { handle: string } | { query: string };
+
+function channelRef(input: string): ChannelReference {
   const value = input.trim();
-  const id = value.match(/(?:youtube\.com\/(?:channel\/))([A-Za-z0-9_-]{20,})/)?.[1];
-  const handle = value.match(/(?:youtube\.com\/)?(@[A-Za-z0-9._-]+)/)?.[1] || (value.startsWith('@') ? value : `@${value}`);
-  return id ? { id } : { handle };
+  if (!value) throw new Error('A YouTube channel URL or @handle is required');
+  if (/^UC[A-Za-z0-9_-]{20,}$/.test(value)) return { id: value };
+  if (/^@[A-Za-z0-9._-]+$/.test(value)) return { handle: value };
+
+  const normalized = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  let url: URL;
+  try {
+    url = new URL(normalized);
+  } catch {
+    throw new Error('Enter a valid YouTube channel URL or @handle');
+  }
+
+  const host = url.hostname.toLowerCase().replace(/^www\./, '');
+  if (host !== 'youtube.com' && host !== 'm.youtube.com') {
+    throw new Error('Only YouTube channel URLs and @handles are supported');
+  }
+
+  const parts = url.pathname.split('/').filter(Boolean);
+  if (parts[0] === 'channel' && /^UC[A-Za-z0-9_-]{20,}$/.test(parts[1] || '')) return { id: parts[1] };
+  if (parts[0]?.startsWith('@') && /^@[A-Za-z0-9._-]+$/.test(parts[0])) return { handle: parts[0] };
+  // Legacy /c/ and /user/ URLs have no direct Data API identifier. Resolve the
+  // actual channel through YouTube's search endpoint; never invent profile data.
+  if ((parts[0] === 'c' || parts[0] === 'user') && parts[1]) return { query: parts[1] };
+  throw new Error('The URL must identify a YouTube channel (/@handle or /channel/ID)');
 }
 
 async function youtubeChannelProfile(input: string) {
   const ref = channelRef(input);
-  let data = await youtubeApi('channels', { part: 'snippet,statistics,brandingSettings', ...(ref.id ? { id: ref.id } : { forHandle: ref.handle! }) });
-  if (!data.items?.length && ref.handle) data = await youtubeApi('search', { part: 'snippet', q: ref.handle, type: 'channel', maxResults: '1' });
-  const item = data.items?.[0];
-  if (!item) throw new Error('YouTube channel was not found');
-  const channelId = item.id?.channelId || item.id;
-  if (channelId && !item.statistics) data = await youtubeApi('channels', { part: 'snippet,statistics,brandingSettings', id: channelId });
-  const channel = data.items?.[0] || item;
+  let channelId: string | undefined;
+  let channelData: any;
+
+  if ('id' in ref || 'handle' in ref) {
+    channelData = await youtubeApi('channels', {
+      part: 'snippet,statistics,brandingSettings',
+      ...('id' in ref ? { id: ref.id } : { forHandle: ref.handle }),
+    });
+  } else {
+    const search = await youtubeApi('search', { part: 'snippet', q: ref.query, type: 'channel', maxResults: '1' });
+    channelId = search.items?.[0]?.id?.channelId;
+    if (!channelId) throw new Error('YouTube channel was not found');
+    channelData = await youtubeApi('channels', { part: 'snippet,statistics,brandingSettings', id: channelId });
+  }
+
+  const channel = channelData.items?.[0];
+  if (!channel?.id || !channel?.snippet) throw new Error('YouTube channel was not found');
   const stats = channel.statistics || {};
+  const avatar = channel.snippet.thumbnails?.high?.url || channel.snippet.thumbnails?.medium?.url || channel.snippet.thumbnails?.default?.url;
+  if (!avatar) throw new Error('YouTube Data API did not return a channel avatar');
+
   return { id: channel.id, url: `https://www.youtube.com/channel/${channel.id}`, name: channel.snippet.title,
-    handle: channel.snippet.customUrl || ref.handle || '', avatar: channel.snippet.thumbnails?.high?.url || channel.snippet.thumbnails?.default?.url,
+    handle: channel.snippet.customUrl || ('handle' in ref ? ref.handle : ''), avatar,
     banner: channel.brandingSettings?.image?.bannerExternalUrl || '', description: channel.snippet.description || '', profiledAt: new Date().toISOString(),
     subscriberCount: Number(stats.subscriberCount || 0), subscriberCountText: Number(stats.subscriberCount || 0).toLocaleString(), videoCount: Number(stats.videoCount || 0), extractedKeywords: [] };
 }

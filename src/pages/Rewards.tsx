@@ -39,7 +39,13 @@ export default function Rewards() {
         setLicense({ tier: "pro", status: "active", expiresAt: nextProfile.proTierExpiresAt });
         setAppTier("pro");
       }
-    } catch {
+    } catch (error) {
+      console.error("[rewards] Failed to load referral progress", {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        authenticated: Boolean(data.session),
+        userId: data.session?.user.id,
+      });
       setLoadError(true);
       toast.error("Could not load referral progress. Please try again.");
     } finally {
