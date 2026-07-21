@@ -136,11 +136,6 @@
       "count": 3
     }
   },
-  "src/lib/monetization/locker.ts": {
-    "no-empty": {
-      "count": 1
-    }
-  },
   "src/lib/scriptCleaner.ts": {
     "no-useless-escape": {
       "count": 11

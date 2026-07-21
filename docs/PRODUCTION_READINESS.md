@@ -85,7 +85,7 @@
   4. Verify `POST /api/v1/health` returns 200
   5. Test with a free-tier storyboard request
 - [ ] **Custom domain**: Configure `tubeclick.pro` or `app.tubeclick.pro` in Vercel Domains settings.
-- [ ] **Stripe/Subscription integration**: Add Stripe webhook to set `x-tier` header based on active subscription. Wire to `src/lib/monetization/locker.ts`.
+- [ ] **Referral entitlement rollout**: Apply the qualified-chain migrations and resolve server-side tier access from `referral_profiles.pro_tier_expires_at`.
 
 ## 8. Future Hardening
 
@@ -107,5 +107,5 @@
 | Monitoring | ✅ 80% | Vercel Analytics + uptime monitor needed |
 | Reliability | ✅ 95% | Provider fallback, key rotation, model failover |
 | Testing | ✅ 70% | Unit tests for adapters needed |
-| Deployment | ✅ 80% | Vercel setup instructions, Stripe integration pending |
+| Deployment | ✅ 80% | Vercel setup instructions, referral entitlement rollout pending |
 | Future | ⏳ Documented | Redis persistence, alerting, analytics pipeline |

@@ -2,14 +2,12 @@
  * Phase G2 — Truncation banner: the upsell moment, honestly framed.
  *
  * Rendered only when the plan's engine truncated the storyboard
- * (response.truncated). The CTA opens the existing payment URL from the
- * monetization locker — copy comes from the unit-locked view-model.
+ * (response.truncated). The CTA routes to the free Referral Rewards loop.
  */
 import { Crown } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getLockerUrl } from "@/lib/monetization/locker";
 import { toTruncationBanner } from "@/lib/orchestrator/truncation-banner-view";
 import type { OrchestratorStoryboardResponse } from "@/lib/orchestrator/types";
 
@@ -31,10 +29,10 @@ export function TruncationBanner({ body }: { body: OrchestratorStoryboardRespons
           <Button
             variant="outline"
             className="border-amber-500/50 text-amber-200 hover:bg-amber-500/10"
-            onClick={() => window.open(getLockerUrl(), "_blank", "noopener,noreferrer")}
+            onClick={() => { window.location.href = "/rewards"; }}
           >
             <Crown className="h-4 w-4" />
-            {view.ctaLabel}
+            Unlock Pro for Free
           </Button>
         )}
       </CardContent>

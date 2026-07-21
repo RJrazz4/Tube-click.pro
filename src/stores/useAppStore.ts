@@ -5,13 +5,11 @@ type SubscriptionTier = "free" | "pro" | "enterprise";
 
 interface AppState {
   tier: SubscriptionTier;
-  isPaywallLocked: boolean;
   sidebarOpen: boolean;
   // UI smoothness state
   lastGenerationTime: number; // timestamp for debouncing
   // Actions
   setTier: (tier: SubscriptionTier) => void;
-  setPaywallLocked: (locked: boolean) => void;
   setSidebarOpen: (open: boolean) => void;
   updateGenerationTime: () => void;
   canGenerate: () => boolean; // throttle check — prevents rapid-fire API burns
@@ -23,12 +21,10 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       tier: "free",
-      isPaywallLocked: false,
       sidebarOpen: false,
       lastGenerationTime: 0,
 
       setTier: (tier) => set({ tier }),
-      setPaywallLocked: (isPaywallLocked) => set({ isPaywallLocked }),
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
 
       updateGenerationTime: () => set({ lastGenerationTime: Date.now() }),

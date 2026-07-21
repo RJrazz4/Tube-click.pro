@@ -72,5 +72,5 @@ export const VERCEL_EDGE_BENEFITS = {
   performance: "Edge PoPs in US — <50ms cold start, edge caching, faster than Supabase Edge for US audience",
   smoothness: "Instant API responses, better LCP for premium subscription model",
   scalability: "Auto-scales, no Deno cold start, native Next.js App Router compatible",
-  future: "Easy to add Stripe webhook middleware for paywall locker in same /api/* layer",
+  rewards: "Pro entitlement is resolved through the qualified referral loop",
 };

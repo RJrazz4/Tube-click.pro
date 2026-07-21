@@ -99,7 +99,7 @@ export function ThumbnailCountRadioGroup({
 
       {!isPremium && value > maxCount && (
         <p className="text-xs text-amber-400">
-          Free plan limited to {maxCount} thumbnails. Upgrade to Premium for up to 4.
+          Free plan limited to {maxCount} thumbnails. Unlock Pro for free to access up to 4.
         </p>
       )}
     </div>

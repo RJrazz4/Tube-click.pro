@@ -148,7 +148,7 @@ export default function AdminPanel() {
             <Link2 className="w-4 h-4 text-pink-400" />
             Monetization Locker URL
           </CardTitle>
-          <CardDescription>Prepare Stripe/Paywall tier guard (Phase D)</CardDescription>
+          <CardDescription>Optional sponsor verification configuration</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Input
@@ -159,7 +159,7 @@ export default function AdminPanel() {
             className="bg-secondary border-border h-11"
           />
           <p className="text-xs text-muted-foreground">
-            Used for verification modals on export/download. In Pro architecture this will be replaced by Stripe webhook.
+            Used only for optional sponsor verification on export/download. Pro access is earned through Referral Rewards.
           </p>
         </CardContent>
       </Card>

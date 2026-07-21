@@ -15,6 +15,7 @@ import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsText } from "@/lib/export";
 import { cleanScript } from "@/lib/scriptCleaner";
 import { useNavigate } from "react-router-dom";
+import { useSoftGate } from "@/contexts/SoftGateContext";
 
 interface GeneratedContent {
   titles: string[];
@@ -84,6 +85,7 @@ export default function ChatAgent() {
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { runGuarded } = useSoftGate();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -98,8 +100,8 @@ export default function ChatAgent() {
     return () => clearTimeout(id);
   }, [cooldownLeft]);
 
-  const handleSubmit = async (e?: React.FormEvent, overrideTopic?: string) => {
-    e.preventDefault();
+  const performSubmit = async (e?: React.FormEvent, overrideTopic?: string) => {
+    e?.preventDefault();
     
     // Input validation
     const trimmedTopic = (overrideTopic ?? topic).trim();
@@ -223,6 +225,15 @@ ${processedContent.description}
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleSubmit = (event?: React.FormEvent, overrideTopic?: string) => {
+    event?.preventDefault();
+    const candidate = (overrideTopic ?? topic).trim();
+    if (!candidate || candidate.length < 3 || candidate.length > 500 || isGenerating) {
+      return performSubmit(undefined, overrideTopic);
+    }
+    return runGuarded("see this result", () => performSubmit(undefined, overrideTopic));
   };
 
   // Phase E3: retry the last failed request (respects rate-limit cooldown)

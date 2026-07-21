@@ -25,15 +25,15 @@ export default function Terms() {
         </section>
 
         <section className="space-y-4">
-          <h2 className="text-2xl font-semibold text-foreground">BYOK (Bring Your Own Key) Model</h2>
+          <h2 className="text-2xl font-semibold text-foreground">Free and Pro Access</h2>
           <p>
-            TubeClick Pro operates on a <strong className="text-foreground">tiered subscription</strong> model. Free users have limited daily generations, while Pro users get unlimited access to all AI features.
+            TubeClick Pro does not sell subscriptions. Pro access is a time-limited reward earned through the qualified referral loop or granted manually by an authorized administrator for seed users.
           </p>
           <ul className="list-disc pl-6 space-y-2">
-            <li>You must provide your own API keys for third-party services (Google AI, OpenAI, ElevenLabs, etc.)</li>
-            <li>You are solely responsible for all API usage and associated costs incurred through your keys</li>
-            <li>You must comply with the terms of service of each third-party API provider</li>
-            <li>We do not have access to your API keys – they are stored locally on your device</li>
+            <li>Three verified friend invitations are required for referral qualification</li>
+            <li>At least one invited friend must unlock their own Pro access</li>
+            <li>Signups alone do not guarantee a reward</li>
+            <li>AI provider credentials are managed securely by our server infrastructure</li>
           </ul>
         </section>
 
@@ -46,8 +46,8 @@ export default function Terms() {
             <li>Use the service in compliance with all applicable laws and regulations</li>
             <li>Not use the service to generate harmful, illegal, or inappropriate content</li>
             <li>Take responsibility for all content you generate using the platform</li>
-            <li>Safeguard your API keys and not share them with unauthorized parties</li>
-            <li>Monitor your API usage and costs with third-party providers</li>
+            <li>Not manipulate referral attribution, create fraudulent accounts, or abuse reward qualification</li>
+            <li>Keep your TubeClick account credentials secure</li>
           </ul>
         </section>
 

@@ -8,7 +8,7 @@
  * Integrates with:
  *   - Phase 4: packages/shared/tier.ts (tier config constants)
  *   - Existing: src/stores/useAppStore.ts (persisted tier state)
- *   - Existing: src/lib/monetization/locker.ts (paywall guard)
+ *   - Pro access: qualified referral rewards
  */
 
 import { useMemo } from "react";
@@ -19,15 +19,13 @@ import {
   clampByTier,
   type SubscriptionTier as TierFromConfig,
 } from "../../packages/shared/tier";
-import type { SubscriptionTier as LockerTier } from "@/lib/monetization/locker";
-
 export type AppTier = "free" | "pro" | "enterprise";
 
 /**
- * Normalise the locker's SubscriptionTier to the shared TierConfig type.
+ * Normalise the application tier to the shared TierConfig type.
  * "pro" and "enterprise" both map to "premium" for feature limits.
  */
-function toConfigTier(tier: AppTier | LockerTier): TierFromConfig {
+function toConfigTier(tier: AppTier): TierFromConfig {
   if (tier === "free") return "free";
   return "premium"; // pro & enterprise → premium tier
 }
@@ -79,7 +77,7 @@ export function useTierConfig(): TierInfo {
       clampValue: (value: number, field) => clampByTier(configTier, value, field),
       upgradeMessage:
         rawTier === "free"
-          ? `You're on the Free plan (${limits.maxScenes === Infinity ? "unlimited" : limits.maxScenes} scenes, ${limits.allowedBrands.join(", ")} only). Upgrade to Premium for unlimited scenes, all brands, and high-quality output without watermarks.`
+          ? `You're on the Free plan (${limits.maxScenes === Infinity ? "unlimited" : limits.maxScenes} scenes, ${limits.allowedBrands.join(", ")} only). Unlock Pro for free through Referral Rewards for expanded limits, all brands, and watermark-free output.`
           : "",
     };
   }, [rawTier]);

@@ -84,7 +84,7 @@ export function TierAlertBanner({
             </p>
             <p className="text-xs text-muted-foreground">
               You have {sceneCount} scenes, but the Free plan allows a maximum of {maxScenes}.
-              Upgrade to Premium for unlimited scenes.
+              Unlock Pro for free to access expanded scene limits.
             </p>
           </div>
         </div>
@@ -95,7 +95,7 @@ export function TierAlertBanner({
             className="shrink-0 gap-1.5 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            Upgrade
+            Unlock Pro for Free
           </Button>
         )}
       </div>
@@ -149,7 +149,7 @@ export function TierAlertBanner({
             className="shrink-0 gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            Upgrade
+            Unlock Pro for Free
           </Button>
         )}
       </div>

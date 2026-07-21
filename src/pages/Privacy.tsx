@@ -27,7 +27,7 @@ export default function Privacy() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">Data We Collect</h2>
           <p>
-            <strong className="text-foreground">We do NOT store any user data on our servers.</strong> TubeClick Pro operates primarily in your browser. All data, including your API keys and generated content, is stored locally on your device using your browser's LocalStorage.
+            TubeClick Pro stores authentication identifiers, referral attribution events, and reward qualification progress in Supabase. Creative history and application preferences are primarily stored locally in your browser. AI provider credentials are server-managed and are never stored in the browser.
           </p>
         </section>
 
@@ -37,7 +37,7 @@ export default function Privacy() {
             We use your browser's LocalStorage to save:
           </p>
           <ul className="list-disc pl-6 space-y-2">
-            <li>Your API keys (encrypted and stored locally on your device only)</li>
+            <li>Guest-preview usage state for registration-wall enforcement</li>
             <li>Generated content history for your convenience</li>
             <li>Application preferences and settings</li>
           </ul>
@@ -57,14 +57,14 @@ export default function Privacy() {
             <li><strong className="text-foreground">ElevenLabs</strong> – For voice synthesis features</li>
           </ul>
           <p>
-            When you use these features, your prompts and content are sent directly to these third-party services using your own API keys. Please review their respective privacy policies for information on how they handle your data.
+            When you use these features, relevant prompts and content are routed through our secured server infrastructure. Provider credentials are never stored in your browser. Please review the respective provider privacy policies for information on how they process data.
           </p>
         </section>
 
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">Cookies</h2>
           <p>
-            We do not use cookies for tracking purposes. Any cookies present are essential for the basic functionality of the application.
+            We use essential authentication cookies, a signed guest-preview cookie that enforces the one-free-action product limit, and—when you open a creator referral link—a signed referral-attribution cookie. These cookies are HttpOnly and used only for product access, referral credit, and abuse prevention. Anti-fraud network signals are stored as keyed, non-reversible hashes and retained only for a limited period.
           </p>
         </section>
 

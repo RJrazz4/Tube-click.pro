@@ -41,7 +41,7 @@ describe("truncation banner view-model", () => {
       plannedScenes: 7,
       generatedScenes: 4,
       upgradeTier: "pro",
-      ctaLabel: "See Pro plans",
+      ctaLabel: "Unlock Pro for Free",
     });
     expect(view?.title).toBe("3 more scenes waiting beyond your plan");
     expect(view?.message).toContain("The director planned 7 scenes");
@@ -54,7 +54,7 @@ describe("truncation banner view-model", () => {
       body({ tier: "pro", plannedScenes: 12, generatedScenes: 8, remainingScenes: 4 }),
     );
     expect(view?.upgradeTier).toBe("cinematic");
-    expect(view?.ctaLabel).toBe("See Cinematic plans");
+    expect(view?.ctaLabel).toBe("Unlock Pro for Free");
     expect(view?.message).toContain("Pro renders up to 8 scenes per storyboard");
     expect(view?.message).toContain("Cinematic unlocks unlimited scenes");
   });

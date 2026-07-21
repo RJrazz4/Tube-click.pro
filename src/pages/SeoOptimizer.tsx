@@ -11,6 +11,11 @@ import { useSeoGeneration } from "@/hooks/useSecureQuery";
 import { QK } from "@/api/client/queryKeys";
 import { useQueryClient } from "@tanstack/react-query";
 import { useContentStore } from "@/stores/useContentStore";
+import { NativeSponsorBanner } from "@/components/sponsors/NativeSponsorBanner";
+import { getSponsorForPlacement } from "@/config/sponsors";
+import { useSoftGate } from "@/contexts/SoftGateContext";
+
+const seoSponsor = getSponsorForPlacement("seo");
 
 const StatBadge = memo(function StatBadge({ label, value, color }: { label: string; value: string | number; color?: string }) {
   return (
@@ -29,12 +34,13 @@ export default function SeoOptimizer() {
   const queryClient = useQueryClient();
   const saveContent = useContentStore(s => s.saveContent);
   const incrementStat = useContentStore(s => s.incrementStat);
+  const { runGuarded } = useSoftGate();
 
   const seoMutation = useSeoGeneration();
 
   const result = seoMutation.data;
 
-  const handleAnalyze = async () => {
+  const performAnalyze = async () => {
     const trimmed = keyword.trim();
     if (!trimmed) {
       toast.error("Please enter a keyword or title");
@@ -76,6 +82,12 @@ export default function SeoOptimizer() {
     } catch (err: any) {
       toastFriendlyError(err, "Failed to analyze SEO");
     }
+  };
+
+  const handleAnalyze = () => {
+    const candidate = keyword.trim();
+    if (!candidate || candidate.length < 2 || candidate.length > 200) return performAnalyze();
+    return runGuarded("see this SEO result", performAnalyze);
   };
 
   const handleCopyTags = async () => {
@@ -252,6 +264,8 @@ export default function SeoOptimizer() {
           </CardContent>
         </Card>
       </div>
+
+      {seoSponsor && <NativeSponsorBanner {...seoSponsor} />}
     </div>
   );
 }
