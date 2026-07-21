@@ -213,20 +213,7 @@ export default function CloneCrush() {
         throw new Error(res.error || "Channel not found");
       }
     } catch (err: any) {
-      console.warn("Using scraper fallback profile due to error", err);
-      const fallbackProfile = {
-        id: `chan_fb_${Math.random().toString(36).substr(2, 5)}`,
-        url: input.startsWith("http") ? input : `https://youtube.com/${input.startsWith("@") ? input : "@" + input}`,
-        name: input.split("/").pop()?.replace("@", "") || "YouTube Channel",
-        handle: input.startsWith("@") ? input : "@creator",
-        avatar: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=60",
-        banner: "PLACEHOLDER_GRADIENT",
-        description: "Custom Channel created via fast fallback. Launching showdown matrix...",
-        profiledAt: new Date().toISOString()
-      };
-      setProfile(fallbackProfile);
-      toast.success("Connected via robust local profiling engine!", { id: "profile-scrape" });
-      await autoDiscoverCompetitors(fallbackProfile);
+      toast.error(err.message || "Could not load live YouTube channel data.", { id: "profile-scrape" });
     } finally {
       setIsProfiling(false);
     }
