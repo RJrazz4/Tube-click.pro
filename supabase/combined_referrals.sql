@@ -49,3 +49,85 @@ exception when unique_violation then return jsonb_build_object('verified',false,
 create or replace function public.get_referral_dashboard(p_user_id uuid) returns jsonb language sql security definer set search_path=public,pg_temp as $$ select to_jsonb(p) from referral_profiles p where user_id=p_user_id $$;
 revoke all on function public.claim_referral_reward(text,uuid,text,text),public.get_referral_dashboard(uuid),public.evaluate_qualified_referral_chain(uuid,int) from public,anon,authenticated;
 grant execute on function public.claim_referral_reward(text,uuid,text,text),public.get_referral_dashboard(uuid) to service_role;
+
+-- Keep referral rows available for every newly-created auth user.
+create or replace function public.create_referral_profile_for_user()
+returns trigger
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $$
+begin
+  insert into public.referral_profiles(user_id)
+  values(new.id)
+  on conflict(user_id) do nothing;
+  return new;
+end
+$$;
+
+revoke all on function public.create_referral_profile_for_user()
+from public,anon,authenticated;
+
+drop trigger if exists create_referral_profile_after_signup
+on auth.users;
+
+create trigger create_referral_profile_after_signup
+after insert on auth.users
+for each row
+execute function public.create_referral_profile_for_user();
+
+insert into public.referral_profiles(user_id)
+select id from auth.users
+on conflict(user_id) do nothing;
+
+-- Click attribution is deliberately service-role only; ip_hash must be generated
+-- server-side with REFERRAL_HASH_SECRET and never exposed to the browser.
+create or replace function public.record_referral_click(
+  p_ref_code text,
+  p_ip_hash text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $$
+declare
+  owner uuid;
+begin
+  select user_id into owner
+  from public.referral_profiles
+  where referral_code=upper(p_ref_code);
+
+  if owner is null then
+    return false;
+  end if;
+
+  if exists(
+    select 1 from public.referral_events
+    where referrer_id=owner
+      and ip_hash=p_ip_hash
+      and event_type='click'
+      and created_at > now()-interval '24 hours'
+  ) then
+    return true;
+  end if;
+
+  insert into public.referral_events(
+    referrer_id,ref_code,ip_hash,event_type,status
+  ) values (
+    owner,upper(p_ref_code),p_ip_hash,'click','pending'
+  );
+
+  update public.referral_profiles
+  set total_invites=total_invites+1,updated_at=now()
+  where user_id=owner;
+
+  return true;
+end
+$$;
+
+revoke all on function public.record_referral_click(text,text)
+from public,anon,authenticated;
+
+grant execute on function public.record_referral_click(text,text)
+to service_role;
