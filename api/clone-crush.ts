@@ -410,11 +410,11 @@ export default async function handler(req: Request) {
     if (action === 'profile') {
       if (!channelUrl) return jsonResponse({ error: 'Channel URL or @handle is required' }, 400);
       try {
-        const profile = await scrapeChannelProfile(channelUrl);
+        const profile = await youtubeChannelProfile(channelUrl);
         return jsonResponse({ success: true, profile, extractedKeywords: profile.extractedKeywords });
       } catch (err: any) {
         return jsonResponse({ error: err.message }, 502);
-
+      }
     }
 
     // ---------------------------------------------------------
