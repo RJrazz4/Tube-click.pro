@@ -135,26 +135,59 @@ function extractSemanticKeywords(html: string): string[] {
 }
 
 async function youtubeApi(path: string, params: Record<string, string>) {
-  const key = process.env.YOUTUBE_API_KEY?.trim();
-  if (!key) throw new Error('YouTube Data API is unavailable: YOUTUBE_API_KEY is not configured');
-
-  const query = new URLSearchParams({ ...params, key });
-  let response: Response;
-  try {
-    response = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${query}`, {
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch (error) {
-    const reason = error instanceof Error && error.name === 'TimeoutError' ? 'request timed out' : 'network request failed';
-    throw new Error(`YouTube Data API ${reason}`);
+  const rawKeys = process.env.YOUTUBE_API_KEY?.trim() || "";
+  if (!rawKeys) {
+    throw new Error('YouTube Data API is unavailable: YOUTUBE_API_KEY is not configured');
   }
 
-  const data = await response.json().catch(() => null);
-  if (!response.ok || data?.error) {
-    const message = data?.error?.message || `request failed with status ${response.status}`;
-    throw new Error(`YouTube Data API error: ${message}`);
+  const keys = rawKeys.split(",").map(k => k.trim()).filter(Boolean);
+  if (keys.length === 0) {
+    throw new Error('YouTube Data API is unavailable: YOUTUBE_API_KEY contains no valid keys');
   }
-  return data;
+
+  let lastError: Error | null = null;
+
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    const query = new URLSearchParams({ ...params, key });
+    let response: Response;
+
+    try {
+      // 4 seconds per key attempt to keep total within the Vercel execution and frontend timeout budgets
+      response = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${query}`, {
+        signal: AbortSignal.timeout(4_000),
+      });
+    } catch (error) {
+      const isTimeout = error instanceof Error && error.name === 'TimeoutError';
+      const reason = isTimeout ? 'request timed out' : 'network request failed';
+      console.warn(`[youtubeApi] Key #${i + 1} failed during fetch: ${reason}`);
+      lastError = new Error(`YouTube Data API ${reason}`);
+      continue; // Try next key
+    }
+
+    const data = await response.json().catch(() => null);
+    if (!response.ok || data?.error) {
+      const message = data?.error?.message || `request failed with status ${response.status}`;
+      const isQuotaOrRateLimit = response.status === 429 || response.status === 403 ||
+                                 message.toLowerCase().includes('quota') ||
+                                 message.toLowerCase().includes('rate limit') ||
+                                 message.toLowerCase().includes('limit exceeded');
+      
+      console.warn(`[youtubeApi] Key #${i + 1} failed with API error (status ${response.status}): ${message}`);
+
+      if (isQuotaOrRateLimit) {
+        lastError = new Error(`YouTube Data API error: ${message}`);
+        continue; // Try next key
+      } else {
+        // If it's a fatal bad request or 404, throw immediately as retrying won't help
+        throw new Error(`YouTube Data API error: ${message}`);
+      }
+    }
+
+    return data;
+  }
+
+  throw new Error(`YouTube Data API requests failed for all ${keys.length} configured keys. Last error: ${lastError?.message || 'Unknown error'}`);
 }
 
 type ChannelReference = { id: string } | { handle: string } | { query: string };
