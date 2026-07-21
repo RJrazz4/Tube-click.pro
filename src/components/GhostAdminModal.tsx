@@ -146,7 +146,7 @@ export function GhostAdminModal({ open, onOpenChange }: GhostAdminModalProps) {
               <div className="space-y-2">
                 <Label className="text-sm flex items-center gap-2">
                   <Link2 className="w-3.5 h-3.5 text-pink-400" />
-                  Monetization Locker URL (Stripe/Paywall)
+                  Optional Sponsor Verification URL
                 </Label>
                 <Input
                   type={showPasswords ? "text" : "password"}
@@ -156,7 +156,7 @@ export function GhostAdminModal({ open, onOpenChange }: GhostAdminModalProps) {
                   className="bg-secondary border-border h-11"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Used for verification modals. Prepares Stripe/Paywall tier guard (Phase D). Leave empty to disable.
+                  Used only for optional sponsor verification before free exports. Leave empty to disable.
                 </p>
               </div>
 

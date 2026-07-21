@@ -13,6 +13,7 @@
  * Progress bars shift weekly via seeded random, creating illusion of active development.
  */
 import { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
 import {
   Lock,
   Clock,
@@ -472,21 +473,17 @@ export function TheLab() {
                 </span>
               ) : (
                 <span className="text-red-400 font-semibold">
-                  Upgrade to Pro to guarantee your spot.
+                  Unlock Pro for free to guarantee your spot.
                 </span>
               )}
             </p>
           </div>
           {!isPro && (
-            <Button
-              size="sm"
-              className="cyber-button text-[10px] h-8 px-3 font-display shrink-0"
-              onClick={() => {
-                useAuthStore.getState().setUpgradeModalOpen(true);
-              }}
-            >
-              <Zap className="w-3 h-3 text-primary-foreground fill-primary-foreground" />
-              Upgrade
+            <Button size="sm" asChild className="cyber-button text-[10px] h-8 px-3 font-display shrink-0">
+              <Link to="/rewards">
+                <Zap className="w-3 h-3 text-primary-foreground fill-primary-foreground" />
+                Unlock Pro for Free
+              </Link>
             </Button>
           )}
         </CardContent>

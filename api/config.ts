@@ -12,7 +12,7 @@ export default async function handler(req: Request) {
 
   try {
     // Public config — safe to expose
-    // In production, this could read from Supabase or Stripe
+    // In production, this can read referral entitlement configuration from Supabase
     const lockerUrl = process.env.LOCKER_URL || "";
 
     return jsonResponse({

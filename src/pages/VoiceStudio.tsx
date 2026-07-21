@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Mic, Play, Pause, Square, Volume2, Download, Loader2, Sparkles, Speaker, Headphones, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,8 +13,12 @@ import { toastFriendlyError } from "@/lib/errorToast";
 import { fetchEdgeFunctionBlob } from "@/api/client/secureClient";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
-import { VoiceVerificationModal } from "@/components/VoiceVerificationModal";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { NativeSponsorBanner } from "@/components/sponsors/NativeSponsorBanner";
+import { getSponsorForPlacement } from "@/config/sponsors";
+import { useSoftGate } from "@/contexts/SoftGateContext";
+
+const voiceSponsor = getSponsorForPlacement("voice");
 
 // White-labeled voice options — maps to VectorEngine (ElevenLabs) IDs server-side
 const ELEVENLABS_VOICES = [
@@ -34,6 +39,8 @@ const ELEVENLABS_VOICES = [
 ];
 
 export default function VoiceStudio() {
+  const { runGuarded } = useSoftGate();
+  const navigate = useNavigate();
   const license = useAuthStore((s) => s.license);
   const dailyUsage = useAuthStore((s) => s.dailyUsage);
   const updateVoiceUsage = useAuthStore((s) => s.updateVoiceUsage);
@@ -43,7 +50,6 @@ export default function VoiceStudio() {
   const [selectedElevenLabsVoice, setSelectedElevenLabsVoice] = useState("george");
   const [stability, setStability] = useState([0.5]);
   const [speed, setSpeed] = useState([1]);
-  const [showVerification, setShowVerification] = useState(false);
   
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState<string>("");
@@ -126,22 +132,19 @@ export default function VoiceStudio() {
     }
   }, [previewAudio, isPreviewPlaying]);
 
-  const generateElevenLabsAudio = async () => {
+  const performElevenLabsGeneration = async () => {
     if (!text.trim()) { toast.error("Please enter some text to convert to speech"); return; }
     if (text.length > 5000) { toast.error("Text too long. Maximum 5000 characters allowed."); return; }
 
     if (license.tier === "free") {
       const voiceCharsUsed = dailyUsage.voiceCharactersUsed || 0;
       if (voiceCharsUsed + text.length > 500) {
-        toast.error(`Daily Voiceover Limit Exceeded. Your Free plan has ${Math.max(0, 500 - voiceCharsUsed)} characters remaining today. Upgrade to Pro for Unlimited Cinematic Voiceovers!`, {
+        toast.error(`Daily Voiceover Limit Exceeded. Your Free plan has ${Math.max(0, 500 - voiceCharsUsed)} characters remaining today. Unlock Pro for free through Referral Rewards.`, {
           duration: 5000,
           action: {
-            label: "Upgrade Pro",
-            onClick: () => {
-              useAuthStore.getState().upgradeTier("pro");
-              toast.success("Welcome to Pro Plan! Unlimited Cinematic Voiceovers unlocked.");
-            }
-          }
+            label: "Unlock Pro for Free",
+            onClick: () => navigate("/rewards"),
+          },
         });
         return;
       }
@@ -184,7 +187,9 @@ export default function VoiceStudio() {
     } finally { setIsGenerating(false); }
   };
 
-  const handleBrowserTTSPlay = () => {
+  const generateElevenLabsAudio = () => runGuarded("generate the next voiceover", performElevenLabsGeneration);
+
+  const performBrowserTTSPlay = () => {
     if (!text.trim()) { toast.error("Please enter some text to convert to speech"); return; }
     if (text.length > 10000) toast.warning("Very long text may cause browser TTS to be slow");
     if (isPaused) { speechSynthesis.resume(); setIsPaused(false); setIsPlaying(true); animateVisualizer(); return; }
@@ -201,16 +206,19 @@ export default function VoiceStudio() {
     saveContent({ type: 'voiceover', title: `Browser TTS - ${selectedVoice}`, content: text });
   };
 
+  const handleBrowserTTSPlay = () => runGuarded("generate the next voiceover", performBrowserTTSPlay);
+
   const handlePlay = () => {
     if (useElevenLabs) {
       if (audioUrl && audioRef.current) { audioRef.current.play(); return; }
       if (!text.trim()) { toast.error("Please enter some text to convert to speech"); return; }
       if (audioUrl) { audioRef.current?.play(); return; }
       generateElevenLabsAudio();
-    } else { handleBrowserTTSPlay(); }
+    } else {
+      if (isPaused || isPlaying) performBrowserTTSPlay();
+      else handleBrowserTTSPlay();
+    }
   };
-
-  const handleVerifiedGenerate = () => { generateElevenLabsAudio(); };
 
   const handlePause = () => {
     if (useElevenLabs && audioRef.current) { audioRef.current.pause(); setIsPlaying(false); stopVisualizer(); }
@@ -377,7 +385,7 @@ export default function VoiceStudio() {
         </Card>
       </div>
 
-      <VoiceVerificationModal open={showVerification} onOpenChange={setShowVerification} onVerified={handleVerifiedGenerate} />
+      {voiceSponsor && <NativeSponsorBanner {...voiceSponsor} />}
     </div>
   );
 }

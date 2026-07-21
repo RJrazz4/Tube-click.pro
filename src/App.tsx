@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { createAppQueryClient } from "@/lib/cache/queryClient";
+import { SoftGateProvider } from "@/contexts/SoftGateContext";
+import { SoftGateRoute } from "@/components/auth/SoftGateRoute";
 
 // Eager load the dashboard for instant first paint
 import Index from "./pages/Index";
@@ -13,8 +15,6 @@ import NotFound from "./pages/NotFound";
 
 // Lazy load heavy tool pages to reduce initial bundle — Phase A1 Performance
 const ChatAgent = lazy(() => import("./pages/ChatAgent"));
-const Storyboard = lazy(() => import("./pages/Storyboard"));
-// StoryboardLegacy removed — image generation purged (Phase 0 pivot)
 const VoiceStudio = lazy(() => import("./pages/VoiceStudio"));
 const Repurposer = lazy(() => import("./pages/Repurposer"));
 const Analytics = lazy(() => import("./pages/Analytics"));
@@ -25,6 +25,9 @@ const About = lazy(() => import("./pages/About"));
 const AdminPanel = lazy(() => import("./pages/AdminPanel"));
 const Settings = lazy(() => import("./pages/Settings"));
 const CloneCrush = lazy(() => import("./pages/CloneCrush"));
+const ReferralCapture = lazy(() => import("./pages/ReferralCapture"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const Rewards = lazy(() => import("./pages/Rewards"));
 
 // Tuned QueryClient for instant feel — stale 5min, gc 10min, no refetch on focus
 const queryClient = createAppQueryClient();
@@ -54,28 +57,32 @@ const App = () => (
           },
         }}
       />
-      <BrowserRouter>
-        <MainLayout>
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/chat-agent" element={<ChatAgent />} />
-              <Route path="/storyboard" element={<Storyboard />} />
-              <Route path="/voice" element={<VoiceStudio />} />
-              <Route path="/repurposer" element={<Repurposer />} />
-              <Route path="/analytics" element={<Analytics />} />
-              <Route path="/seo" element={<SeoOptimizer />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/terms" element={<Terms />} />
-              <Route path="/about" element={<About />} />
-              <Route path="/admin" element={<AdminPanel />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/clone-crush" element={<CloneCrush />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
-        </MainLayout>
-      </BrowserRouter>
+      <SoftGateProvider>
+        <BrowserRouter>
+          <MainLayout>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/chat-agent" element={<SoftGateRoute><ChatAgent /></SoftGateRoute>} />
+                <Route path="/voice" element={<SoftGateRoute><VoiceStudio /></SoftGateRoute>} />
+                <Route path="/repurposer" element={<SoftGateRoute><Repurposer /></SoftGateRoute>} />
+                <Route path="/analytics" element={<SoftGateRoute><Analytics /></SoftGateRoute>} />
+                <Route path="/seo" element={<SoftGateRoute><SeoOptimizer /></SoftGateRoute>} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
+                <Route path="/about" element={<About />} />
+                <Route path="/admin" element={<AdminPanel />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/rewards" element={<Rewards />} />
+                <Route path="/clone-crush" element={<SoftGateRoute><CloneCrush /></SoftGateRoute>} />
+                <Route path="/ref/:code" element={<ReferralCapture />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </MainLayout>
+        </BrowserRouter>
+      </SoftGateProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

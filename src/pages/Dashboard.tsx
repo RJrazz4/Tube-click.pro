@@ -1,4 +1,4 @@
-import { memo, useState, useCallback } from "react";
+import { lazy, memo, Suspense, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   Bot,
@@ -9,7 +9,6 @@ import {
   Download,
   Trash2,
   ArrowUpRight,
-  Film,
   Loader2,
   X,
   Sparkles,
@@ -26,6 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useContentStats, useContentActions } from "@/hooks/useContentStats";
 import type { SavedContent } from "@/stores/useContentStore";
@@ -33,6 +33,14 @@ import { exportAllAsZip } from "@/lib/export";
 import { VerificationModal } from "@/components/VerificationModal";
 import { TheLab } from "@/components/lab/TheLab";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
+
+const ViralGrowthPass = lazy(() =>
+  import("@/components/referrals/ViralGrowthPass").then((module) => ({ default: module.ViralGrowthPass })),
+);
+
+const CompetitorShowdown = lazy(() =>
+  import("@/components/showdown/CompetitorShowdown").then((module) => ({ default: module.CompetitorShowdown })),
+);
 
 const tools = [
   {
@@ -50,14 +58,6 @@ const tools = [
     path: "/chat-agent",
     gradient: "from-neon-purple to-pink-500",
     glow: "neon-glow-purple",
-  },
-  {
-    title: "Visual Storyboard",
-    description: "Cinematic frames from your script",
-    icon: Film,
-    path: "/storyboard",
-    gradient: "from-purple-400 to-violet-600",
-    glow: "",
   },
   {
     title: "Voiceover Studio",
@@ -216,8 +216,6 @@ export default function Dashboard() {
         return Mic;
       case "guide":
         return Eye;
-      case "storyboard":
-        return Film;
       default:
         return FileText;
     }
@@ -336,9 +334,28 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* THE WAR ROOM — Envy Engine Dashboard */}
-      {profile && competitors.length > 0 && envyMetrics && (
-        <div className="space-y-4 animate-fade-in">
+      <Suspense fallback={<div className="h-28 animate-pulse rounded-2xl border border-border bg-card/60" />}>
+        <ViralGrowthPass />
+      </Suspense>
+
+      {/* Competitive intelligence views */}
+      {competitors.length > 0 && (
+        <Tabs defaultValue="overview" className="space-y-4">
+          <TabsList className="grid h-auto w-full max-w-md grid-cols-2 border border-border/60 bg-card/70 p-1">
+            <TabsTrigger value="overview" className="gap-2 py-2">
+              <TrendingUp className="h-4 w-4" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="showdown" className="gap-2 py-2">
+              <Gauge className="h-4 w-4" />
+              Showdown Analytics
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="mt-0">
+            {/* THE WAR ROOM — Envy Engine Dashboard */}
+            {profile && envyMetrics && (
+              <div className="space-y-4 animate-fade-in">
           <h2 className="font-display text-lg md:text-xl font-semibold text-foreground flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-red-400 animate-pulse" />
             <span className="bg-gradient-to-r from-red-400 to-orange-400 text-transparent bg-clip-text">
@@ -454,7 +471,22 @@ export default function Dashboard() {
               </Button>
             </Link>
           </div>
-        </div>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="showdown" className="mt-0">
+            <Suspense
+              fallback={(
+                <Card className="cyber-card flex min-h-[280px] items-center justify-center border-border/70">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </Card>
+              )}
+            >
+              <CompetitorShowdown />
+            </Suspense>
+          </TabsContent>
+        </Tabs>
       )}
 
       {/* Stats Grid — memoized cards */}
@@ -571,7 +603,6 @@ export default function Dashboard() {
                 <li>✓ Thumbnail Prompts (text-based)</li>
                 <li>✓ Guides (markdown)</li>
                 <li>✓ Voiceover transcripts</li>
-                <li>✓ Storyboard descriptions</li>
               </ul>
               <p className="text-xs text-muted-foreground/70 mt-2 border-t border-border/50 pt-2">Note: Audio files must be downloaded from Voiceover Studio</p>
             </div>

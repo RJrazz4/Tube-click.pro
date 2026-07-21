@@ -36,13 +36,28 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { useCloneCrushStore, CompetitorVideo, ScriptRewriteResult } from "@/stores/useCloneCrushStore";
+import { useCloneCrushStore, CompetitorVideo, ProfiledChannel, ScriptRewriteResult } from "@/stores/useCloneCrushStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useTranscriptExtraction, useCloneCrushMutation } from "@/hooks/useSecureQuery";
+import { useSoftGate } from "@/contexts/SoftGateContext";
+
+type ProfileWithKeywords = ProfiledChannel & { extractedKeywords?: string[] };
+
+function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId = 0;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(
+      () => reject(new Error(`Request timed out after ${Math.round(timeoutMs / 1000)} seconds`)),
+      timeoutMs,
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
+}
 
 export default function CloneCrush() {
   const navigate = useNavigate();
+  const { runGuarded } = useSoftGate();
 
   // Zustand State Stores
   const { 
@@ -73,7 +88,6 @@ export default function CloneCrush() {
   const incrementStat = useContentStore((s) => s.incrementStat);
   
   const license = useAuthStore((s) => s.license);
-  const upgradeTier = useAuthStore((s) => s.upgradeTier);
 
   // Local Component States
   const [channelInput, setChannelInput] = useState("");
@@ -111,8 +125,12 @@ export default function CloneCrush() {
   }, [profile]);
 
   // Background auto-discovery of competitors after profiling (Zero-Friction AI Niche Deduction)
-  const autoDiscoverCompetitors = async (prof: any) => {
-    const desc = (prof.description + " " + prof.name).toLowerCase();
+  const autoDiscoverCompetitors = async (prof: ProfileWithKeywords) => {
+    const extractedKeywords = Array.isArray(prof.extractedKeywords)
+      ? prof.extractedKeywords.filter((keyword: unknown) => typeof keyword === "string" && keyword.trim()).slice(0, 8)
+      : [];
+    const keywordContext = extractedKeywords.join(" ");
+    const desc = `${prof.description || ""} ${prof.name || ""} ${keywordContext}`.toLowerCase();
     let deducedNiche = "General YouTube Content";
     if (desc.includes("crypto") || desc.includes("bitcoin") || desc.includes("finance") || desc.includes("trading") || desc.includes("money")) deducedNiche = "Crypto & Finance";
     else if (desc.includes("tech") || desc.includes("coding") || desc.includes("software") || desc.includes("ai") || desc.includes("programming")) deducedNiche = "Tech & Coding";
@@ -121,10 +139,12 @@ export default function CloneCrush() {
     else if (desc.includes("business") || desc.includes("marketing") || desc.includes("startup") || desc.includes("entrepreneur")) deducedNiche = "Business & Wealth";
     else if (desc.includes("gaming") || desc.includes("gameplay") || desc.includes("streamer")) deducedNiche = "Gaming & Esports";
     else if (desc.includes("education") || desc.includes("tutorial") || desc.includes("learn")) deducedNiche = "Educational Tutorials";
+    else if (extractedKeywords.length > 0) deducedNiche = extractedKeywords.slice(0, 4).join(" ");
     else deducedNiche = prof.name || "Trending Creator Content";
 
+    const discoveryDescription = [prof.description, keywordContext].filter(Boolean).join(" ").trim() || deducedNiche;
     setNicheInput(deducedNiche);
-    setCustomDescription(prof.description.slice(0, 150) || deducedNiche);
+    setCustomDescription((prof.description || discoveryDescription).slice(0, 150));
     setIsSearchingCompetitors(true);
     toast.loading(`AI automatically deducing niche ("${deducedNiche}") & auditing live viral velocity...`, { id: "competitors-find" });
 
@@ -132,7 +152,7 @@ export default function CloneCrush() {
       const res = await cloneCrushMutation.mutateAsync({
         action: "competitors",
         niche: deducedNiche,
-        description: prof.description || deducedNiche
+        description: discoveryDescription
       });
 
       if (res.success && res.competitors) {
@@ -163,7 +183,7 @@ export default function CloneCrush() {
   };
 
   // 1. Channel Profile Scraper Call
-  const handleProfileChannel = async () => {
+  const performProfileChannel = async () => {
     const input = channelInput.trim();
     if (!input) {
       toast.error("Please enter a YouTube Channel URL or Handle");
@@ -174,15 +194,21 @@ export default function CloneCrush() {
     toast.loading("Scraping channel profile from YouTube...", { id: "profile-scrape" });
 
     try {
-      const res = await cloneCrushMutation.mutateAsync({
+      const profileRequest = cloneCrushMutation.mutateAsync({
         action: "profile",
         channelUrl: input
       });
+      const res = await withClientTimeout(profileRequest, 15_000);
 
       if (res.success && res.profile) {
-        setProfile(res.profile);
-        toast.success(`Success! Connected to ${res.profile.name}'s Channel Profile`, { id: "profile-scrape" });
-        await autoDiscoverCompetitors(res.profile);
+        const profileResponse = res as typeof res & { extractedKeywords?: string[] };
+        const profiledChannel: ProfileWithKeywords = {
+          ...res.profile,
+          extractedKeywords: profileResponse.extractedKeywords || res.profile.extractedKeywords || [],
+        };
+        setProfile(profiledChannel);
+        toast.success(`Success! Connected to ${profiledChannel.name}'s Channel Profile`, { id: "profile-scrape" });
+        await autoDiscoverCompetitors(profiledChannel);
       } else {
         throw new Error(res.error || "Channel not found");
       }
@@ -206,15 +232,20 @@ export default function CloneCrush() {
     }
   };
 
+  const handleProfileChannel = () => {
+    if (!channelInput.trim()) return performProfileChannel();
+    return runGuarded("profile another channel", performProfileChannel);
+  };
+
   // 3. Double-Loop Loophole Rewriter Execution (Unified Chain-Loop: 1 Click = 4 Assets)
-  const handleCloneAndCrush = async () => {
+  const performCloneAndCrush = async () => {
     if (!selectedVideo) {
       toast.error("Please select a competitor video from the matrix");
       return;
     }
 
     if (selectedVideo.isLocked && license.tier === "free") {
-      toast.error("This recently viral video is locked for Free Tier. Upgrade to Pro to clone this trend!");
+      toast.error("This recently viral video requires Pro. Unlock Pro for free through Referral Rewards.");
       return;
     }
 
@@ -350,6 +381,11 @@ export default function CloneCrush() {
     navigate("/voice");
   };
 
+  const handleCloneAndCrush = () => {
+    if (!selectedVideo || (selectedVideo.isLocked && license.tier === "free")) return performCloneAndCrush();
+    return runGuarded("unlock the next Clone & Crush result", performCloneAndCrush);
+  };
+
   const handleCopyThumbnailPrompt = async () => {
     if (!activeRewrite) return;
     try {
@@ -384,13 +420,7 @@ export default function CloneCrush() {
     }
   };
 
-  const handleSimulateUpgrade = () => {
-    upgradeTier("pro");
-    toast.success("Success! Upgraded to Pro Tier. Matrix fully unlocked!", {
-      icon: "🎉",
-      duration: 4000
-    });
-  };
+  const openReferralRewards = () => navigate("/rewards");
 
   return (
     <div className="space-y-6 md:space-y-8 animate-fade-in pb-12">
@@ -418,8 +448,8 @@ export default function CloneCrush() {
               <p className="text-sm font-bold text-foreground capitalize">{license.tier} Plan</p>
             </div>
             {license.tier === "free" && (
-              <Button size="sm" onClick={handleSimulateUpgrade} className="cyber-button text-[10px] px-3 h-8 font-display bg-primary text-primary-foreground">
-                Upgrade Pro
+              <Button size="sm" onClick={openReferralRewards} className="cyber-button text-[10px] px-3 h-8 font-display bg-primary text-primary-foreground">
+                Unlock Pro for Free
               </Button>
             )}
           </div>
@@ -658,8 +688,8 @@ export default function CloneCrush() {
                         <Lock className="w-4 h-4 text-primary shrink-0" />
                         <p className="text-[10px] font-bold text-foreground truncate">Unlock 2 Additional Hidden Trend Competitors</p>
                       </div>
-                      <Button onClick={handleSimulateUpgrade} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">
-                        Upgrade Pro
+                      <Button onClick={openReferralRewards} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">
+                        Unlock Pro for Free
                       </Button>
                     </div>
                   )}

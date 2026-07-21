@@ -64,14 +64,14 @@ export default function About() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">How It Works</h2>
           <p className="text-muted-foreground leading-relaxed">
-            TubeClick Pro uses a tiered subscription (BYOK) model. You provide your own API keys from providers like Google AI, OpenAI, or ElevenLabs, and our platform provides the interface and tools to use them effectively. This means you only pay for what you use – directly to the API providers – with no middleman fees.
+            TubeClick Pro uses a free Viral Growth Loop instead of paid subscriptions. Invite three creator friends and help one unlock their own Pro access; the qualified chain automatically activates your 7-Day Pro Pass. AI providers are routed securely through our managed server infrastructure.
           </p>
         </section>
 
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">Privacy First</h2>
           <p className="text-muted-foreground leading-relaxed">
-            Your data stays on your device. We don't store your API keys, scripts, or generated content on any server. Everything runs locally in your browser, giving you complete control and privacy over your creative work.
+            Creative history and preferences remain local to your browser where possible. Authentication and referral qualification use secured Supabase records, while provider credentials stay exclusively on managed server infrastructure.
           </p>
         </section>
 

@@ -6,12 +6,12 @@ import {
   Eye, 
   Mic,
   Sparkles,
-  Film,
   Share2,
   TrendingUp,
   Search,
   Settings,
   Zap,
+  Gift,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -19,9 +19,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Zap, label: "Clone & Crush (Auto-Matrix)", path: "/clone-crush" },
+  { icon: Gift, label: "Referral Rewards", path: "/rewards" },
   { icon: Settings, label: "Settings", path: "/settings" },
   { icon: Bot, label: "TubeBot AI", path: "/chat-agent" },
-  { icon: Film, label: "Storyboard", path: "/storyboard" },
   { icon: Mic, label: "Voiceover", path: "/voice" },
   { icon: Share2, label: "Multi-Platform Repurposer", path: "/repurposer" },
   { icon: TrendingUp, label: "Analytics & ROI Predictor", path: "/analytics" },

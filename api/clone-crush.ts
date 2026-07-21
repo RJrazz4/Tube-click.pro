@@ -96,9 +96,48 @@ function cleanChannelUrl(urlOrHandle: string): string {
   return clean;
 }
 
+const SEMANTIC_STOP_WORDS = new Set([
+  'about', 'after', 'again', 'also', 'and', 'are', 'been', 'but', 'can', 'channel',
+  'content', 'for', 'from', 'have', 'here', 'into', 'just', 'more', 'not', 'our',
+  'that', 'the', 'their', 'then', 'there', 'these', 'they', 'this', 'through',
+  'too', 'video', 'videos', 'was', 'welcome', 'were', 'what', 'when', 'where',
+  'which', 'who', 'will', 'with', 'you', 'your', 'youtube',
+]);
+
+function decodeHtmlText(value: string): string {
+  return value
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;|&#34;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+}
+
+/** Extract useful niche terms from the channel description when YouTube exposes no tags. */
+function extractSemanticKeywords(html: string): string[] {
+  const descriptionMatch = html.match(/<meta property="og:description" content="([^"]+)">/i)
+    || html.match(/<meta name="description" content="([^"]+)">/i);
+  if (!descriptionMatch?.[1]) return [];
+
+  const frequencies = new Map<string, number>();
+  const words = decodeHtmlText(descriptionMatch[1]).toLowerCase().match(/[a-z0-9][a-z0-9+#.-]{2,}/g) || [];
+  for (const word of words) {
+    const normalized = word.replace(/^[.-]+|[.-]+$/g, '');
+    if (normalized.length < 3 || SEMANTIC_STOP_WORDS.has(normalized) || /^\d+$/.test(normalized)) continue;
+    frequencies.set(normalized, (frequencies.get(normalized) || 0) + 1);
+  }
+
+  return [...frequencies.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 8)
+    .map(([word]) => word);
+}
+
 async function scrapeChannelProfile(channelUrl: string) {
   const url = cleanChannelUrl(channelUrl);
   const response = await fetch(url, {
+    signal: AbortSignal.timeout(12_000),
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept-Language': 'en-US,en;q=0.9',
@@ -137,8 +176,15 @@ async function scrapeChannelProfile(channelUrl: string) {
   const handle = handleMatch ? `@${handleMatch[1]}` : '@channel';
 
   const name = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : 'Unknown Creator';
-  const description = descMatch ? descMatch[1].trim() : 'No channel description available.';
+  const description = descMatch ? decodeHtmlText(descMatch[1].trim()) : 'No channel description available.';
   const avatar = imageMatch ? imageMatch[1] : 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=60';
+
+  // Prefer YouTube's channel keywords, then derive useful niche terms from the description.
+  const tagsMatch = html.match(/"keywords"\s*:\s*"((?:\\.|[^"\\])*)"/i);
+  const tagKeywords = tagsMatch?.[1]
+    ? tagsMatch[1].replace(/\\"/g, '"').split(',').map((tag) => tag.trim()).filter(Boolean).slice(0, 8)
+    : [];
+  const extractedKeywords = tagKeywords.length > 0 ? tagKeywords : extractSemanticKeywords(html);
 
   // Extract subscriber count from page if available
   const subMatch = html.match(/"subscriberCountText".*?"accessibilityText".*?([\d,\.]+[KMB]?)/i)
@@ -173,6 +219,7 @@ async function scrapeChannelProfile(channelUrl: string) {
     subscriberCount,
     subscriberCountText: subscriberCountText || 'N/A',
     videoCount,
+    extractedKeywords,
   };
 }
 
@@ -410,7 +457,7 @@ export default async function handler(req: Request) {
       if (!channelUrl) return jsonResponse({ error: 'Channel URL or @handle is required' }, 400);
       try {
         const profile = await scrapeChannelProfile(channelUrl);
-        return jsonResponse({ success: true, profile });
+        return jsonResponse({ success: true, profile, extractedKeywords: profile.extractedKeywords });
       } catch (err: any) {
         console.error('[clone-crush:profile] error:', err.message);
         return jsonResponse({

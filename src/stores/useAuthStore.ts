@@ -6,7 +6,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 export type SubscriptionTier = "free" | "pro" | "enterprise";
-export type LicenseStatus = "active" | "expired" | "trial" | "none";
+export type LicenseStatus = "active" | "expired" | "none";
 
 export interface LicenseInfo {
   tier: SubscriptionTier;
@@ -82,7 +82,6 @@ interface AuthState {
   license: LicenseInfo;
   user: UserProfile | null;
   isAuthenticated: boolean;
-  upgradeModalOpen: boolean;
   
   // Daily usage tracking
   dailyUsage: {
@@ -94,13 +93,11 @@ interface AuthState {
   // Actions
   setLicense: (license: Partial<LicenseInfo>) => void;
   setUser: (user: UserProfile | null) => void;
-  setUpgradeModalOpen: (open: boolean) => void;
   updateUsage: () => void;
   updateVoiceUsage: (chars: number) => void;
   resetDailyUsage: () => void;
   checkAccess: (feature: keyof FeatureAccess) => boolean;
   getFeatures: () => FeatureAccess;
-  upgradeTier: (tier: SubscriptionTier) => void;
   logout: () => void;
 }
 
@@ -118,7 +115,6 @@ export const useAuthStore = create<AuthState>()(
       license: DEFAULT_LICENSE,
       user: null,
       isAuthenticated: false,
-      upgradeModalOpen: false,
       dailyUsage: {
         date: getToday(),
         generationsUsed: 0,
@@ -134,8 +130,6 @@ export const useAuthStore = create<AuthState>()(
           user,
           isAuthenticated: user !== null,
         }),
-
-      setUpgradeModalOpen: (open) => set({ upgradeModalOpen: open }),
 
       updateUsage: () => {
         const today = getToday();
@@ -203,16 +197,6 @@ export const useAuthStore = create<AuthState>()(
         return TIER_FEATURES[license.tier];
       },
 
-      upgradeTier: (tier) =>
-        set((state) => ({
-          license: {
-            ...state.license,
-            tier,
-            status: "active",
-            expiresAt: undefined,
-          },
-        })),
-
       logout: () =>
         set({
           user: null,
@@ -248,7 +232,7 @@ export const useCanPerform = () => {
   return (action: keyof FeatureAccess) => {
     const canPerform = features[action] as boolean;
     const withinLimit = dailyUsage.generationsUsed < features.maxGenerationsPerDay;
-    const isActive = license.status === "active" || license.status === "trial";
+    const isActive = license.status === "active";
     
     return canPerform && withinLimit && isActive;
   };

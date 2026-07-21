@@ -73,6 +73,6 @@ export function toTruncationBanner(
     message:
       `The director planned ${plural(body.plannedScenes, "scene")} — ${tierLabel} renders ` +
       `${tierCap} per storyboard. ${upgradeLabel} unlocks ${upgradeCap}.`,
-    ctaLabel: `See ${upgradeLabel} plans`,
+    ctaLabel: "Unlock Pro for Free",
   };
 }

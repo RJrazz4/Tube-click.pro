@@ -119,6 +119,7 @@ export function OrchestratorThumbnails() {
       setResult(response);
     } catch (err) {
       if ((err as { name?: string })?.name === "AbortError") return;
+      setBusy(false);
       setError(toUiError(err));
     } finally {
       setBusy(false);

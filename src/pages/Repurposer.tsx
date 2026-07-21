@@ -12,6 +12,7 @@ import { useContentStore } from "@/stores/useContentStore";
 import { useTranscriptExtraction } from "@/hooks/useSecureQuery";
 import { QK } from "@/api/client/queryKeys";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSoftGate } from "@/contexts/SoftGateContext";
 
 export default function Repurposer() {
   const [inputText, setInputText] = useState("");
@@ -29,10 +30,11 @@ export default function Repurposer() {
   const saveContent = useContentStore(s => s.saveContent);
   const incrementStat = useContentStore(s => s.incrementStat);
   const queryClient = useQueryClient();
+  const { runGuarded } = useSoftGate();
 
   const transcriptMutation = useTranscriptExtraction();
 
-  const handleExtractTranscript = useCallback(async () => {
+  const performExtractTranscript = useCallback(async () => {
     const trimmedUrl = youtubeUrl.trim();
     if (!trimmedUrl) {
       toast.error("Please enter a YouTube URL");
@@ -79,7 +81,15 @@ export default function Repurposer() {
     }
   }, [youtubeUrl, queryClient, transcriptMutation]);
 
-  const handleRepurpose = async () => {
+  const handleExtractTranscript = useCallback(() => {
+    const candidate = youtubeUrl.trim();
+    if (!candidate || (!candidate.includes("youtube.com") && !candidate.includes("youtu.be") && candidate.length < 11)) {
+      return performExtractTranscript();
+    }
+    return runGuarded("extract another transcript", performExtractTranscript);
+  }, [performExtractTranscript, runGuarded, youtubeUrl]);
+
+  const performRepurpose = async () => {
     if (!inputText.trim()) {
       toast.error("Please extract transcript or enter a script/topic");
       return;
@@ -127,6 +137,11 @@ export default function Repurposer() {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleRepurpose = () => {
+    if (!inputText.trim()) return performRepurpose();
+    return runGuarded("see the next repurposed result", performRepurpose);
   };
 
   const handleCopy = async (text: string, tab: string) => {

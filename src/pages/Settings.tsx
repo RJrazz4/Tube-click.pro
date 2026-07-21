@@ -3,32 +3,24 @@
  * Central hub for user account, preferences, licensing, and data management
  */
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   User,
   Shield,
   Palette,
   Database,
   Info,
-  CreditCard,
+  Gift,
   Check,
-  Copy,
   Download,
   Trash2,
   AlertTriangle,
   ExternalLink,
-  Key,
-  Eye,
-  EyeOff,
   Globe,
-  Lock,
   RefreshCw,
   ChevronRight,
   Sparkles,
-  Zap,
   Crown,
-  Building2,
-  CheckCircle2,
-  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,82 +37,8 @@ import {
   useUser,
   useFeatures,
   useDailyUsage,
-  type SubscriptionTier,
 } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
-
-// Pricing tiers configuration
-const PRICING_TIERS = [
-  {
-    tier: "free" as SubscriptionTier,
-    name: "Free",
-    price: "$0",
-    period: "forever",
-    description: "Perfect for getting started",
-    icon: Sparkles,
-    gradient: "from-gray-500 to-gray-600",
-    features: [
-      "10 generations/day",
-      "2 AI Thumbnail Prompts (Text) per batch",
-      "4 storyboard scenes",
-      "60% Glitch Protocol (Vibe-Extract)",
-      "Zero-Cost Hydra Router",
-      "Community support",
-    ],
-    limitations: [
-      "No voiceovers",
-      "No exports",
-      "No 99% Glitch Protocol",
-      "Watermark on exports",
-    ],
-    popular: false,
-  },
-  {
-    tier: "pro" as SubscriptionTier,
-    name: "Pro",
-    price: "$19",
-    period: "/month",
-    description: "For serious content creators",
-    icon: Zap,
-    gradient: "from-neon-purple to-pink-500",
-    features: [
-      "100 generations/day",
-      "4 AI Thumbnail Prompts (Text) per batch (Midjourney/DALL-E ready)",
-      "8 storyboard scenes",
-      "99% Glitch Protocol (Structure Clone)",
-      "Voiceover Studio",
-      "Full export (ZIP, video)",
-      "Advanced analytics",
-      "Priority support",
-    ],
-    limitations: [],
-    popular: true,
-  },
-  {
-    tier: "enterprise" as SubscriptionTier,
-    name: "Enterprise",
-    price: "$99",
-    period: "/month",
-    description: "For teams and agencies",
-    icon: Building2,
-    gradient: "from-neon-cyan to-blue-500",
-    features: [
-      "Unlimited generations",
-      "10 AI Thumbnail Prompts (Text) per batch",
-      "Unlimited scenes",
-      "99% Glitch Protocol + Priority Queue",
-      "Voiceover Studio",
-      "Full export (ZIP, video)",
-      "Advanced analytics",
-      "Priority support",
-      "Custom branding",
-      "Team collaboration",
-      "API access",
-    ],
-    limitations: [],
-    popular: false,
-  },
-];
 
 // Section components
 function GeneralSection() {
@@ -246,25 +164,13 @@ function AccountSection() {
   const license = useLicense();
   const features = useFeatures();
   const dailyUsage = useDailyUsage();
-  const { upgradeTier } = useAuthStore();
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
-  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
-
-  const handleCopyKey = (name: string) => {
-    navigator.clipboard.writeText(apiKeys[name] || "");
-    toast.success(`${name} key copied!`);
-  };
-
-  const handleUpgrade = (tier: SubscriptionTier) => {
-    upgradeTier(tier);
-    toast.success(`Upgraded to ${tier}!`);
-  };
+  const navigate = useNavigate();
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-display font-semibold text-foreground mb-2">Account & Licensing</h2>
-        <p className="text-sm text-muted-foreground">Manage your subscription and API keys</p>
+        <p className="text-sm text-muted-foreground">Manage your subscription and account</p>
       </div>
 
       {/* Current Plan */}
@@ -311,61 +217,11 @@ function AccountSection() {
           </div>
           
           {license.tier === "free" && (
-            <Button onClick={() => handleUpgrade("pro")} className="w-full cyber-button" size="lg">
+            <Button onClick={() => navigate("/rewards")} className="w-full cyber-button" size="lg">
               <Crown className="w-4 h-4 mr-2" />
-              Upgrade to Pro - $19/month
+              Unlock Pro for Free
             </Button>
           )}
-        </CardContent>
-      </Card>
-
-      {/* API Keys */}
-      <Card className="cyber-card border-border">
-        <CardHeader>
-          <CardTitle className="text-base font-display flex items-center gap-2">
-            <Key className="w-4 h-4" />
-            API Keys
-          </CardTitle>
-          <CardDescription className="text-xs">Configure your AI provider keys (stored locally)</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {[
-            { name: "Agnes", key: "agnes", placeholder: "sk-agnes_..." },
-            { name: "HuggingFace", key: "hf", placeholder: "hf_..." },
-            { name: "Together AI", key: "together", placeholder: "tk_..." },
-            { name: "Gemini", key: "gemini", placeholder: "gk_..." },
-          ].map((provider) => (
-            <div key={provider.key} className="space-y-2">
-              <label className="text-sm font-medium text-foreground">{provider.name}</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    type={showKeys[provider.key] ? "text" : "password"}
-                    value={apiKeys[provider.key] || ""}
-                    onChange={(e) => setApiKeys({ ...apiKeys, [provider.key]: e.target.value })}
-                    placeholder={provider.placeholder}
-                    className="bg-secondary/50 border-border pr-10 font-mono text-xs"
-                  />
-                  <button
-                    onClick={() => setShowKeys({ ...showKeys, [provider.key]: !showKeys[provider.key] })}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showKeys[provider.key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <Button variant="outline" size="icon" onClick={() => handleCopyKey(provider.key)}>
-                  <Copy className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
-          
-          <div className="p-3 rounded-lg bg-secondary/50 border border-border">
-            <p className="text-xs text-muted-foreground flex items-center gap-2">
-              <Lock className="w-3 h-3" />
-              Keys are encrypted and stored locally in your browser. They never leave your device.
-            </p>
-          </div>
         </CardContent>
       </Card>
 
@@ -632,8 +488,6 @@ function DataPrivacySection() {
           {[
             { name: "OpenRouter", purpose: "AI text generation", url: "https://openrouter.ai" },
             { name: "Pollinations.ai", purpose: "Free image generation", url: "https://pollinations.ai" },
-            { name: "HuggingFace", purpose: "Free image generation", url: "https://huggingface.co" },
-            { name: "Together AI", purpose: "Free image generation", url: "https://together.ai" },
           ].map((service, i) => (
             <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
               <div>
@@ -766,202 +620,38 @@ function AboutSection() {
   );
 }
 
-function PricingSection() {
-  const license = useLicense();
-  const { upgradeTier, setUpgradeModalOpen } = useAuthStore();
-
-  const handleUpgradeClick = () => {
-    setUpgradeModalOpen(true);
-  };
+function ReferralRewardsSection() {
+  const navigate = useNavigate();
 
   return (
-    <div className="space-y-6 md:space-y-8 py-4">
-      <div className="text-center max-w-lg mx-auto">
-        <h2 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-2 flex items-center justify-center gap-2">
-          <Zap className="w-6 h-6 text-primary fill-primary animate-pulse" />
-          Choose Your Plan
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Enforce your content creation with zero-loophole hard limits. Upgrade to deploy our full stealth viral capability and AI thumbnail prompt generation.
+    <div className="space-y-6 py-4">
+      <div className="mx-auto max-w-2xl text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10">
+          <Crown className="h-7 w-7 text-primary" />
+        </div>
+        <h2 className="font-display text-2xl font-black text-foreground md:text-3xl">Unlock Pro for Free</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          TubeClick Pro has no paid checkout. Complete the qualified referral loop to activate your 7-Day Pro Pass.
         </p>
       </div>
 
-      {/* 2-Tier Side-by-Side Comparison with Dominant Right Card */}
-      <div className="grid gap-8 md:grid-cols-2 max-w-4xl mx-auto items-stretch pt-4">
-        
-        {/* LEFT CARD: FREE PLAN ($0) - Scaled Down & Muted */}
-        <Card className={cn(
-          "cyber-card bg-card/30 border-border/50 p-6 md:p-8 flex flex-col justify-between transition-all duration-300 relative overflow-hidden scale-95 opacity-85 hover:opacity-100",
-          license.tier === "free" && "ring-1 ring-border border-border/80 bg-card/20"
-        )}>
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-display font-bold text-foreground">Free Plan</h3>
-                <p className="text-xs text-muted-foreground">Perfect to test the waters</p>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-display font-bold text-foreground">$0</p>
-                <p className="text-[10px] text-muted-foreground uppercase font-mono">Forever</p>
-              </div>
-            </div>
-
-            <div className="h-px bg-border/40 my-4" />
-
-            <div className="space-y-3.5">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Features Included:</p>
-              <ul className="space-y-2.5 text-xs text-muted-foreground">
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                  <span>10 generations per day</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                  <span>2 AI Thumbnail Prompts (Text) per batch (Copy-paste to Midjourney/DALL-E)</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                  <span>4 storyboard scenes</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                  <span className="text-foreground font-medium">Voiceover: 500 characters per day</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                  <span className="text-foreground font-medium">60% Clone &amp; Crush Loophole</span>
-                </li>
-              </ul>
-
-              <div className="h-px bg-border/20 my-4" />
-
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Limitations:</p>
-              <ul className="space-y-2.5 text-xs text-muted-foreground/60">
-                <li className="flex items-center gap-2.5">
-                  <XCircle className="w-4 h-4 text-destructive/60 shrink-0" />
-                  <span>No Unlimited Voiceovers (Limit: 500 chars)</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <XCircle className="w-4 h-4 text-destructive/60 shrink-0" />
-                  <span>No 99% Glitch Protocol (Structure Clone)</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <XCircle className="w-4 h-4 text-destructive/60 shrink-0" />
-                  <span>Watermarked exports</span>
-                </li>
-              </ul>
-            </div>
+      <Card className="cyber-card mx-auto max-w-3xl overflow-hidden border-primary/30 bg-gradient-to-br from-card via-primary/[0.06] to-cyan-400/[0.04] shadow-[0_0_55px_rgba(139,92,246,0.14)]">
+        <CardContent className="grid gap-4 p-6 md:grid-cols-2 md:p-8">
+          <div className="rounded-2xl border border-primary/20 bg-background/35 p-5">
+            <p className="font-mono text-xs font-bold uppercase tracking-widest text-primary">Condition 1</p>
+            <p className="mt-2 font-display text-lg font-bold">Invite 3 Friends</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">They must create verified accounts through your unique referral link.</p>
           </div>
-
-          <div className="mt-8">
-            {license.tier === "free" ? (
-              <Button disabled className="w-full bg-secondary/80 text-muted-foreground text-xs font-semibold uppercase tracking-wider h-11">
-                Current Plan Active
-              </Button>
-            ) : (
-              <Button onClick={() => upgradeTier("free")} variant="outline" className="w-full border-border hover:bg-secondary/40 text-xs font-semibold uppercase tracking-wider h-11">
-                Downgrade to Free
-              </Button>
-            )}
+          <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.04] p-5">
+            <p className="font-mono text-xs font-bold uppercase tracking-widest text-cyan-300">Condition 2</p>
+            <p className="mt-2 font-display text-lg font-bold">Help 1 Friend Unlock Pro</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">When one invited friend completes their own loop, your pass activates automatically.</p>
           </div>
-        </Card>
-
-        {/* RIGHT CARD: PREMIUM PLAN ($19) - Visually Dominant, Scaled Up & Heavy Glowing Drop-Shadow */}
-        <Card className={cn(
-          "cyber-card bg-card/95 border-2 border-primary/80 p-6 md:p-8 flex flex-col justify-between transition-all duration-300 relative overflow-hidden scale-105 md:scale-[1.08] shadow-[0_0_50px_rgba(var(--primary),0.4)] ring-2 ring-primary/60 z-10"
-        )}>
-          {/* Most Popular Ribbon */}
-          <div className="absolute top-0 right-0 bg-gradient-to-l from-primary via-indigo-600 to-pink-500 text-white text-[9px] font-bold tracking-widest px-4 py-1.5 rounded-bl-xl uppercase shadow-md">
-            Most Popular
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h3 className="text-xl font-display font-bold text-foreground">Premium Plan</h3>
-                  <Sparkles className="w-4 h-4 text-primary fill-primary animate-pulse" />
-                </div>
-                <p className="text-xs text-muted-foreground">Deploy full stealth viral mastery</p>
-              </div>
-              <div className="text-right">
-                <div className="flex items-baseline justify-end">
-                  <span className="text-3xl font-display font-bold text-foreground">$19</span>
-                  <span className="text-xs text-muted-foreground font-mono">/mo</span>
-                </div>
-                <p className="text-[9px] text-primary uppercase font-mono font-bold tracking-wider">Stealth Activated</p>
-              </div>
-            </div>
-
-            <div className="h-px bg-primary/30 my-4" />
-
-            <div className="space-y-3.5">
-              <p className="text-xs font-semibold text-primary uppercase tracking-wider">Unlimited Premium Cues:</p>
-              <ul className="space-y-2.5 text-xs text-foreground/95">
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
-                  <span className="font-semibold text-foreground">Unlimited Cinematic Voiceovers (VectorEngine)</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
-                  <span className="font-semibold text-foreground">99% Glitch Protocol (Extreme Structure Clone)</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
-                  <span className="font-semibold text-foreground">4 High-Converting AI Thumbnail Prompts (Text) per batch (Midjourney/DALL-E ready)</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
-                  <span>100 generations per day (Priority queues)</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
-                  <span>8 storyboard scenes (Uncapped resolution)</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
-                  <span>Full secure exports &amp; advanced analytics</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="mt-8 space-y-3">
-            {license.tier === "pro" || license.tier === "enterprise" ? (
-              <Button disabled className="w-full bg-primary/20 border border-primary/30 text-primary text-xs font-semibold uppercase tracking-wider h-11">
-                Active Premium Creator
-              </Button>
-            ) : (
-              <>
-                <Button 
-                  onClick={handleUpgradeClick} 
-                  className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-95 text-primary-foreground font-display font-bold uppercase tracking-wider text-xs h-12 flex items-center justify-center gap-1.5 shadow-lg active:scale-98 transition-all"
-                >
-                  <Zap className="w-4 h-4 fill-primary-foreground text-primary-foreground" />
-                  Upgrade to Premium
-                </Button>
-
-                {/* Highly visible secondary God Mode trigger button */}
-                <div 
-                  onClick={handleUpgradeClick}
-                  className="relative overflow-hidden rounded-xl border border-dashed border-primary bg-primary/10 hover:bg-primary/20 transition-all duration-300 p-3 text-center cursor-pointer select-none"
-                >
-                  <p className="text-[10px] font-bold text-foreground flex items-center justify-center gap-1">
-                    ⚡️ UNLOCK GOD MODE — JUST ₹99 / $1.19
-                  </p>
-                  <p className="text-[9px] font-semibold text-primary">
-                    🔥 7 Days. FULL POWER. ONE-TIME ACCESS.
-                  </p>
-                  <p className="text-[8px] text-muted-foreground mt-0.5 leading-none">
-                    No auto-pay. Experience the full 90% Stealth Disguise engine for a week.
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-        </Card>
-
-      </div>
+          <Button onClick={() => navigate("/rewards")} className="cyber-button h-12 gap-2 md:col-span-2">
+            <Gift className="h-4 w-4" /> Unlock Pro for Free <ChevronRight className="h-4 w-4" />
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -975,7 +665,7 @@ export default function Settings() {
     { value: "account", label: "Account", icon: Shield },
     { value: "dashboard", label: "Dashboard", icon: Palette },
     { value: "data", label: "Data & Privacy", icon: Database },
-    { value: "pricing", label: "Pricing", icon: CreditCard },
+    { value: "rewards", label: "Referral Rewards", icon: Gift },
     { value: "about", label: "About", icon: Info },
   ];
 
@@ -983,7 +673,7 @@ export default function Settings() {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-display font-bold text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground">Manage your account, preferences, and subscription</p>
+        <p className="text-sm text-muted-foreground">Manage your account, preferences, and referral rewards</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -1026,8 +716,8 @@ export default function Settings() {
           <DataPrivacySection />
         </TabsContent>
         
-        <TabsContent value="pricing">
-          <PricingSection />
+        <TabsContent value="rewards">
+          <ReferralRewardsSection />
         </TabsContent>
         
         <TabsContent value="about">
