@@ -14,6 +14,8 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
 
 interface SoftGateContextValue {
+  /** True until Supabase has restored (or definitively rejected) local session storage. */
+  isAuthLoading: boolean;
   isAuthenticated: boolean;
   runGuarded: <T>(actionLabel: string, action: () => Promise<T> | T) => Promise<T | undefined>;
   requestAuthentication: (actionLabel?: string) => Promise<boolean>;
@@ -29,6 +31,9 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   const license = useAuthStore((state) => state.license);
   const setAppTier = useAppStore((state) => state.setTier);
   const [pending, setPending] = useState<PendingAuth | null>(null);
+  // Never treat the initial false value as a signed-out decision. Supabase
+  // restores persisted tokens asynchronously from localStorage.
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -85,11 +90,44 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   }, [finishPending, license.expiresAt, license.tier, setAppTier, setLicense, setUser]);
 
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => syncSession(data.session));
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      window.setTimeout(() => void syncSession(session), 0);
+    let active = true;
+
+    // Subscribe before reading storage so a sign-in/sign-out that happens while
+    // localStorage is being restored cannot be missed. getSession is still the
+    // source of truth for the initial render.
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      window.setTimeout(() => {
+        if (!active) return;
+        // syncSession updates basic auth synchronously before optional
+        // entitlement work; route guards may proceed as soon as the session is
+        // restored rather than waiting on the referral service.
+        void syncSession(session);
+        setIsAuthLoading(false);
+      }, 0);
     });
-    return () => data.subscription.unsubscribe();
+
+    const initializeSession = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error("[auth] Failed to restore the persisted Supabase session", error);
+        }
+        if (active) void syncSession(data.session);
+      } catch (error) {
+        // A storage or network failure must not leave route guards loading
+        // forever, but it also must not be mistaken for an authenticated user.
+        console.error("[auth] Session initialization failed", error);
+        if (active) void syncSession(null);
+      } finally {
+        if (active) setIsAuthLoading(false);
+      }
+    };
+
+    void initializeSession();
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
   }, [syncSession]);
 
   useEffect(() => {
@@ -172,8 +210,8 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<SoftGateContextValue>(
-    () => ({ isAuthenticated, runGuarded, requestAuthentication }),
-    [isAuthenticated, requestAuthentication, runGuarded],
+    () => ({ isAuthLoading, isAuthenticated, runGuarded, requestAuthentication }),
+    [isAuthLoading, isAuthenticated, requestAuthentication, runGuarded],
   );
 
   return (

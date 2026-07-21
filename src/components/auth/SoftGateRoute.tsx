@@ -5,12 +5,20 @@ import { useSoftGate } from "@/contexts/SoftGateContext";
 import { isGuestWallRequired } from "@/lib/auth/guestAccess";
 
 export function SoftGateRoute({ children }: { children: ReactNode }) {
-  const { requestAuthentication } = useSoftGate();
+  const { isAuthLoading, requestAuthentication } = useSoftGate();
   const location = useLocation();
   const navigate = useNavigate();
   const [blocked, setBlocked] = useState(true);
 
   useEffect(() => {
+    // Do not start the guest-wall decision until Supabase has finished reading
+    // its persisted session. Without this gate, a refresh can redirect a valid
+    // user before getSession restores their token from localStorage.
+    if (isAuthLoading) {
+      setBlocked(true);
+      return;
+    }
+
     let active = true;
     setBlocked(true);
     const check = async () => {
@@ -27,7 +35,7 @@ export function SoftGateRoute({ children }: { children: ReactNode }) {
     };
     void check();
     return () => { active = false; };
-  }, [location.key, navigate, requestAuthentication]);
+  }, [isAuthLoading, location.key, navigate, requestAuthentication]);
 
   return (
     <div className={blocked ? "pointer-events-none select-none blur-sm transition-all" : "transition-all"} aria-hidden={blocked}>
