@@ -1,8 +1,8 @@
 // Secure CORS — Phase A1
 // Production should allow only your Vercel domain + localhost for dev
 const ALLOWED_ORIGINS = [
-  "https://tube-click.pro",
-  "https://www.tube-click.pro",
+  "https://tubeclickpro.in",
+  "https://tubeclickpro.in",
   "https://tubeclickpro.in",
   "http://localhost:8080",
   "http://localhost:3000",

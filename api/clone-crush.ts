@@ -134,93 +134,47 @@ function extractSemanticKeywords(html: string): string[] {
     .map(([word]) => word);
 }
 
-async function scrapeChannelProfile(channelUrl: string) {
-  const url = cleanChannelUrl(channelUrl);
-  const response = await fetch(url, {
-    signal: AbortSignal.timeout(12_000),
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept-Language': 'en-US,en;q=0.9',
-    }
-  });
+async function youtubeApi(path: string, params: Record<string, string>) {
+  const key = process.env.YOUTUBE_API_KEY;
+  if (!key) throw new Error('YOUTUBE_API_KEY is not configured');
+  const query = new URLSearchParams({ ...params, key });
+  const response = await fetch(`https://www.googleapis.com/youtube/v3/${path}?${query}`);
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error?.message || `YouTube API error (${response.status})`);
+  return data;
+}
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch channel page. Status: ${response.status}`);
-  }
+function channelRef(input: string): { id?: string; handle?: string } {
+  const value = input.trim();
+  const id = value.match(/(?:youtube\.com\/(?:channel\/))([A-Za-z0-9_-]{20,})/)?.[1];
+  const handle = value.match(/(?:youtube\.com\/)?(@[A-Za-z0-9._-]+)/)?.[1] || (value.startsWith('@') ? value : `@${value}`);
+  return id ? { id } : { handle };
+}
 
-  const html = await response.text();
+async function youtubeChannelProfile(input: string) {
+  const ref = channelRef(input);
+  let data = await youtubeApi('channels', { part: 'snippet,statistics,brandingSettings', ...(ref.id ? { id: ref.id } : { forHandle: ref.handle! }) });
+  if (!data.items?.length && ref.handle) data = await youtubeApi('search', { part: 'snippet', q: ref.handle, type: 'channel', maxResults: '1' });
+  const item = data.items?.[0];
+  if (!item) throw new Error('YouTube channel was not found');
+  const channelId = item.id?.channelId || item.id;
+  if (channelId && !item.statistics) data = await youtubeApi('channels', { part: 'snippet,statistics,brandingSettings', id: channelId });
+  const channel = data.items?.[0] || item;
+  const stats = channel.statistics || {};
+  return { id: channel.id, url: `https://www.youtube.com/channel/${channel.id}`, name: channel.snippet.title,
+    handle: channel.snippet.customUrl || ref.handle || '', avatar: channel.snippet.thumbnails?.high?.url || channel.snippet.thumbnails?.default?.url,
+    banner: channel.brandingSettings?.image?.bannerExternalUrl || '', description: channel.snippet.description || '', profiledAt: new Date().toISOString(),
+    subscriberCount: Number(stats.subscriberCount || 0), subscriberCountText: Number(stats.subscriberCount || 0).toLocaleString(), videoCount: Number(stats.videoCount || 0), extractedKeywords: [] };
+}
 
-  // Regex extracts
-  const titleMatch = html.match(/<meta property="og:title" content="([^"]+)">/) || html.match(/<title>([^<]+)<\/title>/);
-  const descMatch = html.match(/<meta property="og:description" content="([^"]+)">/) || html.match(/<meta name="description" content="([^"]+)">/);
-  const imageMatch = html.match(/<meta property="og:image" content="([^"]+)">/);
-  
-  // Custom Banner scraper
-  let bannerUrl = '';
-  const bannerRegexes = [
-    /"banner":\s*\{\s*"thumbnails"\s*:\s*\[\s*\{\s*"url"\s*:\s*"([^"]+)"/,
-    /"bannerHeaderRenderer"\s*:\s*\{\s*"banner"\s*:\s*\{\s*"thumbnails"\s*:\s*\[\s*\{\s*"url"\s*:\s*"([^"]+)"/,
-    /"tvBanner"\s*:\s*\{\s*"thumbnails"\s*:\s*\[\s*\{\s*"url"\s*:\s*"([^"]+)"/
-  ];
-
-  for (const regex of bannerRegexes) {
-    const match = html.match(regex);
-    if (match && match[1]) {
-      bannerUrl = match[1].replace(/&amp;/g, '&');
-      break;
-    }
-  }
-
-  // Handle extract
-  const handleMatch = url.match(/@([a-zA-Z0-9_\-\.]+)/);
-  const handle = handleMatch ? `@${handleMatch[1]}` : '@channel';
-
-  const name = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : 'Unknown Creator';
-  const description = descMatch ? decodeHtmlText(descMatch[1].trim()) : 'No channel description available.';
-  const avatar = imageMatch ? imageMatch[1] : 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=60';
-
-  // Prefer YouTube's channel keywords, then derive useful niche terms from the description.
-  const tagsMatch = html.match(/"keywords"\s*:\s*"((?:\\.|[^"\\])*)"/i);
-  const tagKeywords = tagsMatch?.[1]
-    ? tagsMatch[1].replace(/\\"/g, '"').split(',').map((tag) => tag.trim()).filter(Boolean).slice(0, 8)
-    : [];
-  const extractedKeywords = tagKeywords.length > 0 ? tagKeywords : extractSemanticKeywords(html);
-
-  // Extract subscriber count from page if available
-  const subMatch = html.match(/"subscriberCountText".*?"accessibilityText".*?([\d,\.]+[KMB]?)/i)
-    || html.match(/([\d,\.]+[KMB]?)\s*subscribers/i);
-  const subscriberCountText = subMatch ? subMatch[1] : '';
-
-  // Parse subscriber count to number
-  let subscriberCount = 0;
-  if (subscriberCountText) {
-    const cleaned = subscriberCountText.replace(/,/g, '');
-    const m = cleaned.match(/([\d\.]+)\s*[Mm]/);
-    const k = cleaned.match(/([\d\.]+)\s*[Kk]/);
-    if (m) subscriberCount = Math.round(parseFloat(m[1]) * 1000000);
-    else if (k) subscriberCount = Math.round(parseFloat(k[1]) * 1000);
-    else subscriberCount = parseInt(cleaned) || 0;
-  }
-
-  // Extract video count if available
-  const videoMatch = html.match(/([\d,]+)\s*videos/i);
-  const videoCount = videoMatch ? parseInt(videoMatch[1].replace(/,/g, '')) || 0 : 0;
-
-  return {
-    id: `chan_${Math.random().toString(36).substr(2, 9)}`,
-    url,
-    name,
-    handle,
-    avatar,
-    banner: bannerUrl || 'PLACEHOLDER_GRADIENT', // Frontend can generate high-end CSS cyber grid banner if PLACEHOLDER_GRADIENT
-    description,
-    profiledAt: new Date().toISOString(),
-    // Envy Engine — profile metrics for dashboard comparison
-    subscriberCount,
-    subscriberCountText: subscriberCountText || 'N/A',
-    videoCount,
-    extractedKeywords,
-  };
+async function youtubeCompetitors(niche: string) {
+  const data = await youtubeApi('search', { part: 'snippet', q: niche, type: 'video', order: 'date', maxResults: '10', publishedAfter: new Date(Date.now() - 90 * 86400000).toISOString() });
+  const ids = data.items.map((x: any) => x.id.videoId).filter(Boolean).join(',');
+  if (!ids) return [];
+  const details = await youtubeApi('videos', { part: 'snippet,statistics,contentDetails', id: ids });
+  return details.items.map((v: any) => ({ id: v.id, videoId: v.id, title: v.snippet.title, url: `https://www.youtube.com/watch?v=${v.id}`, thumbnail: v.snippet.thumbnails?.high?.url,
+    views: `${Number(v.statistics.viewCount || 0).toLocaleString()} views`, viewsCount: Number(v.statistics.viewCount || 0), publishedAt: v.snippet.publishedAt, publishedDate: v.snippet.publishedAt,
+    channelName: v.snippet.channelTitle, duration: v.contentDetails?.duration, isLocked: false, viralVelocityScore: 0, relevance: 'Live result from YouTube Data API v3' }));
 }
 
 // -------------------------------------------------------------
@@ -456,27 +410,10 @@ export default async function handler(req: Request) {
     if (action === 'profile') {
       if (!channelUrl) return jsonResponse({ error: 'Channel URL or @handle is required' }, 400);
       try {
-        const profile = await scrapeChannelProfile(channelUrl);
+        const profile = await youtubeChannelProfile(channelUrl);
         return jsonResponse({ success: true, profile, extractedKeywords: profile.extractedKeywords });
       } catch (err: any) {
-        console.error('[clone-crush:profile] error:', err.message);
-        return jsonResponse({
-          error: 'Could not profile channel. YouTube is currently rate-limiting or URL is invalid.',
-          detail: err.message,
-          fallback: {
-            id: `chan_fallback_${Date.now()}`,
-            url: channelUrl,
-            name: channelUrl.split('/').pop()?.replace('@', '') || 'My Channel',
-            handle: channelUrl.startsWith('@') ? channelUrl : '@creator',
-            avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=60',
-            banner: 'PLACEHOLDER_GRADIENT',
-            description: 'Custom added channel. Start creating!',
-            profiledAt: new Date().toISOString(),
-            subscriberCount: 0,
-            subscriberCountText: 'N/A',
-            videoCount: 0,
-          }
-        });
+        return jsonResponse({ error: err.message }, 502);
       }
     }
 
@@ -484,159 +421,12 @@ export default async function handler(req: Request) {
     // ACTION: COMPETITORS
     // ---------------------------------------------------------
     if (action === 'competitors') {
-      if (!niche || !description) {
-        return jsonResponse({ error: 'Niche and channel description are required to search competitors.' }, 400);
-      }
-
-      const systemQueryPrompt = `You are a YouTube Growth Strategist. Given a channel niche and bio description, output exactly 3 optimized YouTube search queries designed to find HIGHLY VIRAL, recently trending videos. Output strictly as JSON array: ["query1", "query2", "query3"].`;
-      const userQueryPrompt = `Niche: "${niche}"\nBio: "${description}"\nGenerate search queries:`;
-
-      let queries = [`${niche} viral`, `${niche} strategy`, `${niche} guide`];
+      if (!niche) return jsonResponse({ error: 'Niche is required.' }, 400);
       try {
-        const queryOutcome = await fetchOpenRouterWithRetry({
-          systemInstruction: { parts: [{ text: systemQueryPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: userQueryPrompt }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
-        });
-
-        const queryResContent = extractOpenRouterText(await queryOutcome.res.json());
-        if (queryResContent) {
-          const parsed = JSON.parse(cleanupJson(queryResContent));
-          if (Array.isArray(parsed) && parsed.length === 3) {
-            queries = parsed;
-          }
-        }
-      } catch (err) {
-        console.warn('[clone-crush:queries] Failed to generate queries via LLM, using fallbacks', err);
-      }
-
-      let candidateVideos: RawScrapedVideo[] = [];
-      const searchPromises = queries.map(async (q) => {
-        let results = await fetchPipedSearch(q);
-        if (results.length === 0) {
-          results = await scrapeYoutubeSearch(q);
-        }
-        return results;
-      });
-
-      const allSearchResults = await Promise.all(searchPromises);
-      for (const res of allSearchResults) {
-        candidateVideos = [...candidateVideos, ...res];
-      }
-
-      const uniqueMap = new Map<string, RawScrapedVideo>();
-      for (const video of candidateVideos) {
-        if (video.videoId) {
-          uniqueMap.set(video.videoId, video);
-        }
-      }
-      const uniqueCandidates = Array.from(uniqueMap.values());
-
-      if (uniqueCandidates.length === 0) {
-        return jsonResponse({ error: "Could not find any competitor videos. YouTube proxies are temporarily busy, try again in a moment." }, 404);
-      }
-
-      const ratedCandidates = uniqueCandidates.map((v) => {
-        const { viewsCount, velocity, recencyMultiplier } = calculateRecencyVelocity(v.viewsText, v.publishedText);
-        return {
-          ...v,
-          viewsCount,
-          velocity,
-          recencyMultiplier,
-        };
-      });
-
-      ratedCandidates.sort((a, b) => b.velocity - a.velocity);
-      const topCandidates = ratedCandidates.slice(0, 10);
-
-      const systemCurationPrompt = `You are a YouTube viral trend expert. From the list of recent YouTube video search results, curate exactly 3 videos that are the MOST relevant and viral for a channel focused on niche: "${niche}".
-      Output strictly in this JSON structure:
-      [
-        { "videoId": "string", "relevanceReason": "Short hook explaining why this is perfect" },
-        { "videoId": "string", "relevanceReason": "Short hook explaining why this is perfect" },
-        { "videoId": "string", "relevanceReason": "Short hook explaining why this is perfect" }
-      ]`;
-
-      const candidateSummary = topCandidates.map((c, idx) => 
-        `Index: ${idx}, ID: ${c.videoId}, Title: "${c.title}", Channel: "${c.channelName}", Views: "${c.viewsText}", Uploaded: "${c.publishedText}"`
-      ).join('\n');
-
-      const userCurationPrompt = `Here are the top candidates:\n${candidateSummary}\nSelect the top 3 best matching viral videos.`;
-
-      let selectedIds: { videoId: string; relevanceReason: string }[] = [];
-      try {
-        const curationOutcome = await fetchOpenRouterWithRetry({
-          systemInstruction: { parts: [{ text: systemCurationPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: userCurationPrompt }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.6 },
-        });
-
-        const curationResContent = extractOpenRouterText(await curationOutcome.res.json());
-        if (curationResContent) {
-          selectedIds = JSON.parse(cleanupJson(curationResContent));
-        }
-      } catch (err) {
-        console.error('[clone-crush:curation] LLM curation failed, falling back to top 3 ranked candidates', err);
-      }
-
-      if (!Array.isArray(selectedIds) || selectedIds.length === 0) {
-        selectedIds = topCandidates.slice(0, 3).map((v) => ({
-          videoId: v.videoId,
-          relevanceReason: 'Top viral content in your niche right now.'
-        }));
-      }
-
-      const finalCompetitors = selectedIds.map((selection, index) => {
-        const matchedVideo = ratedCandidates.find((c) => c.videoId === selection.videoId) || ratedCandidates[index] || topCandidates[0];
-        const nicheCpm = getNicheCpm(niche);
-        const estimatedRevenue = Math.round((matchedVideo.viewsCount / 1000) * nicheCpm);
-        const viralVelocityScore = calculateViralVelocityScore(matchedVideo.viewsCount, matchedVideo.recencyMultiplier || 1);
-        const uploadFrequency = estimateUploadFrequency(matchedVideo.publishedText);
-        // Estimate monthly subscriber growth based on velocity (higher velocity = faster growth)
-        const estimatedMonthlySubGrowth = Math.round(matchedVideo.velocity / 100);
-        
-        return {
-          id: matchedVideo.videoId,
-          videoId: matchedVideo.videoId,
-          title: matchedVideo.title,
-          url: `https://www.youtube.com/watch?v=${matchedVideo.videoId}`,
-          thumbnail: matchedVideo.thumbnail || `https://i.ytimg.com/vi/${matchedVideo.videoId}/hqdefault.jpg`,
-          views: matchedVideo.viewsText === 'Recently viral' && matchedVideo.viewsCount > 0 
-            ? `${(matchedVideo.viewsCount / 1000).toFixed(0)}K views` 
-            : matchedVideo.viewsText,
-          viewsCount: matchedVideo.viewsCount,
-          publishedAt: matchedVideo.publishedText,
-          publishedDate: new Date(Date.now() - (matchedVideo.viewsCount % 10) * 24 * 60 * 60 * 1000).toISOString(),
-          channelName: matchedVideo.channelName,
-          duration: matchedVideo.duration || '8:45',
-          isLocked: index > 0,
-          relevance: selection.relevanceReason,
-          // Envy Engine — FOMO metrics
-          estimatedRevenue: `$${estimatedRevenue.toLocaleString()}`,
-          estimatedRevenueNum: estimatedRevenue,
-          viralVelocityScore,
-          uploadFrequency,
-          estimatedMonthlySubGrowth,
-          nicheCpm: `$${nicheCpm}`,
-        };
-      });
-
-      // Calculate aggregate competitor stats for the dashboard "War Room"
-      const totalCompetitorRevenue = finalCompetitors.reduce((sum, c) => sum + c.estimatedRevenueNum, 0);
-      const avgViralScore = Math.round(finalCompetitors.reduce((sum, c) => sum + c.viralVelocityScore, 0) / finalCompetitors.length);
-
-      return jsonResponse({
-        success: true,
-        competitors: finalCompetitors,
-        // Aggregate envy data for dashboard
-        envyMetrics: {
-          totalCompetitorMonthlyRevenue: `$${totalCompetitorRevenue.toLocaleString()}`,
-          totalCompetitorMonthlyRevenueNum: totalCompetitorRevenue,
-          averageViralVelocity: avgViralScore,
-          nicheCpm: `$${getNicheCpm(niche)}`,
-          niche,
-        }
-      });
+        const competitors = await youtubeCompetitors(niche);
+        if (!competitors.length) return jsonResponse({ error: 'No live YouTube videos found.' }, 404);
+        return jsonResponse({ success: true, competitors, envyMetrics: { totalCompetitorMonthlyRevenue: '$0', totalCompetitorMonthlyRevenueNum: 0, averageViralVelocity: 0, nicheCpm: 'N/A', niche } });
+      } catch (err: any) { return jsonResponse({ error: err.message }, 502); }
     }
 
     // ---------------------------------------------------------

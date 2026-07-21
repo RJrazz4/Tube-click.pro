@@ -1,73 +1,64 @@
-# Welcome to your Lovable project
+# TubeClick Pro
 
-## Project info
+> ## The Ultimate Viral Growth Engine & AI Tool Suite for Creators.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+TubeClick Pro is an elite AI operating system for YouTube creators who want to turn attention into momentum. Discover what is working, build better content faster, and scale a repeatable growth engine from one command center.
 
-## How can I edit this code?
+## Live Demo
 
-There are several ways of editing your application.
+**Launch TubeClick Pro:** [https://tubeclickpro.in](https://tubeclickpro.in)
 
-**Use Lovable**
+## The Creator Advantage
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### ⚔️ Clone & Crush AI
 
-Changes made via Lovable will be committed automatically to this repo.
+Profile a real YouTube channel with the YouTube Data API, surface live competitor videos, reverse-engineer winning formats, and transform proven ideas into original scripts, hooks, SEO tags, and thumbnail direction.
 
-**Use your preferred IDE**
+### 🚀 SEO Optimizer
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+Generate high-intent titles, descriptions, and discoverable tag strategies designed around the language your audience is already searching for.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### 🎙️ Voiceover Studio
 
-Follow these steps:
+Turn scripts into polished voiceovers with an AI-assisted workflow built for narration, Shorts, explainers, and long-form creator content.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### 🔁 PLG Viral Referral Loop
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+A privacy-conscious, qualified chain-reaction referral system built for compounding growth. Referrers unlock seven days of Pro only after reaching the qualification threshold: three verified invites, including at least one invite who unlocks Pro.
 
-# Step 3: Install the necessary dependencies.
-npm i
+## Built for Serious Creators
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+- Real-time YouTube channel and competitor intelligence
+- AI-assisted scripts, thumbnails, storyboards, and content workflows
+- Tier-aware product experiences with secure server-side enforcement
+- Supabase-backed authentication, referrals, and entitlements
+- React, TypeScript, Vite, Tailwind CSS, and shadcn/ui
+
+## Quick Start
+
+```bash
+git clone https://github.com/RJrazz4/Tube-click.pro.git
+cd Tube-click.pro
+npm install
+cp .env.example .env
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+For production API access, configure the server-side secrets in `.env`, including `YOUTUBE_API_KEY`, Supabase credentials, and your AI provider keys. Never expose server-only keys with a `VITE_` prefix.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Quality Checks
 
-**Use GitHub Codespaces**
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Product Direction
 
-## What technologies are used for this project?
+TubeClick Pro is built around one principle: creators should not need a full growth team to operate like one. Research, ideation, optimization, production, and referral-led expansion belong in the same high-velocity loop.
 
-This project is built with:
+## License
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+This repository is private and proprietary. All rights reserved by TubeClick Pro.
