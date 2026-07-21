@@ -13,7 +13,7 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
 
 export default function Rewards() {
-  const { isAuthenticated, requestAuthentication } = useSoftGate();
+  const { isAuthLoading, isAuthenticated, requestAuthentication } = useSoftGate();
   const setLicense = useAuthStore((state) => state.setLicense);
   const setAppTier = useAppStore((state) => state.setTier);
   const [profile, setProfile] = useState<ReferralProfile | null>(null);
@@ -39,7 +39,13 @@ export default function Rewards() {
         setLicense({ tier: "pro", status: "active", expiresAt: nextProfile.proTierExpiresAt });
         setAppTier("pro");
       }
-    } catch {
+    } catch (error) {
+      console.error("[rewards] Failed to load referral progress", {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        authenticated: Boolean(data.session),
+        userId: data.session?.user.id,
+      });
       setLoadError(true);
       toast.error("Could not load referral progress. Please try again.");
     } finally {
@@ -67,7 +73,8 @@ export default function Rewards() {
     }
   };
 
-  if (!isAuthenticated && !loading) {
+  // Wait for persisted Supabase auth to hydrate before rendering a sign-in wall.
+  if (!isAuthLoading && !isAuthenticated && !loading) {
     return (
       <div className="mx-auto flex min-h-[65vh] max-w-2xl items-center justify-center">
         <Card className="relative w-full overflow-hidden border-primary/30 bg-card/90 text-center shadow-[0_0_70px_rgba(139,92,246,0.18)] backdrop-blur-2xl">

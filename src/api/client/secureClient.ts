@@ -75,7 +75,13 @@ const VERCEL_ROUTE_MAP: Record<string, string> = {
 };
 
 function getApiEndpoint(functionName: string): { url: string; headers: Record<string, string>; isVercel: boolean } {
-  const useVercelEdge = import.meta.env.VITE_USE_VERCEL_EDGE === "true" || import.meta.env.VITE_API_MODE === "vercel";
+  // Clone & Crush has no Supabase Edge implementation. Routing it through the
+  // generic default can hit a stale, separately deployed function (including
+  // historical mock-profile behavior) instead of api/clone-crush.ts. Keep this
+  // route pinned to Vercel, where YOUTUBE_API_KEY is the only data source.
+  const useVercelEdge = functionName === "clone-crush"
+    || import.meta.env.VITE_USE_VERCEL_EDGE === "true"
+    || import.meta.env.VITE_API_MODE === "vercel";
 
   if (useVercelEdge) {
     const vercelRoute = VERCEL_ROUTE_MAP[functionName] || `/api/${functionName}`;
