@@ -8,6 +8,7 @@ import { WarRoomTicker } from "@/components/ui/WarRoomTicker";
 import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
 import { LiveActiveCounter, LossAversionTicker } from "@/components/ui/LiveActiveCounter";
 import { VideoWallBackground } from "@/components/ui/VideoWallBackground";
+import { NeuralVelocityEngine } from "@/components/ui/NeuralVelocityEngine";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -325,6 +326,12 @@ export default function CloneCrush() {
                   {competitors.some(v=>v.isLocked) && license.tier==="free" && (<div className="mt-3 p-2.5 rounded-lg bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex items-center justify-between gap-2"><div className="flex items-center gap-2 min-w-0"><Lock className="w-4 h-4 text-primary shrink-0" /><p className="text-[10px] font-bold text-foreground truncate">Unlock Hidden Trend Competitors via Referral</p></div><Button onClick={openReferralRewards} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">Unlock Pro ₹0</Button></div>)}
                 </Card>
               </div>
+            </div>
+          )}
+
+          {selectedVideo && (
+            <div className="animate-fade-in">
+              <NeuralVelocityEngine title={selectedVideo.title} niche={nicheInput} />
             </div>
           )}
 
