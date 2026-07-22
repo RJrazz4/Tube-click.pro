@@ -13,7 +13,7 @@
  *   - Dev server running: npm run dev
  */
 
-import { defineConfig } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e/specs",
@@ -23,9 +23,12 @@ export default defineConfig({
   },
   use: {
     baseURL: "http://localhost:5173",
-    viewport: { width: 1280, height: 720 },
     trace: "on-first-retry",
   },
+  projects: [
+    { name: "desktop", use: { viewport: { width: 1280, height: 720 } } },
+    { name: "mobile-chromium", use: { ...devices["iPhone 13"] } },
+  ],
   webServer: {
     command: "npm run dev",
     port: 5173,

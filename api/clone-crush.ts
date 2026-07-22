@@ -41,6 +41,53 @@ function enforceTier(rawTier: unknown): 'free' | 'premium' | 'enterprise' {
   return 'free'; // Default to most restrictive
 }
 
+type AuthenticatedUser = { id: string };
+
+function requiredEnv(name: string, fallback?: string): string {
+  const value = process.env[name] || (fallback ? process.env[fallback] : '') || '';
+  if (!value) throw new Error(`${name} is not configured`);
+  return value.replace(/\/$/, '');
+}
+
+/** Verify a real Supabase session before enabling the paid protocol. */
+async function authenticatedUser(req: Request): Promise<AuthenticatedUser | null> {
+  const authorization = req.headers.get('authorization') || '';
+  if (!authorization.toLowerCase().startsWith('bearer ')) return null;
+  const supabaseUrl = requiredEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
+  const serviceKey = requiredEnv('SUPABASE_SERVICE_ROLE_KEY');
+  const result = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: { apikey: serviceKey, Authorization: authorization },
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!result.ok) return null;
+  const user = await result.json() as AuthenticatedUser;
+  return user?.id ? user : null;
+}
+
+async function hasProEntitlement(userId: string): Promise<boolean> {
+  const supabaseUrl = requiredEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
+  const serviceKey = requiredEnv('SUPABASE_SERVICE_ROLE_KEY');
+  const result = await fetch(`${supabaseUrl}/rest/v1/rpc/get_pro_entitlement`, {
+    method: 'POST',
+    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_user_id: userId }),
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!result.ok) throw new Error('Could not verify Pro entitlement');
+  const payload = await result.json() as { active?: boolean } | Array<{ active?: boolean }>;
+  const entitlement = Array.isArray(payload) ? payload[0] : payload;
+  return entitlement?.active === true;
+}
+
+async function resolveTier(req: Request, requestedTier: unknown): Promise<'free' | 'premium'> {
+  const requested = enforceTier(requestedTier);
+  if (requested !== 'premium' && requested !== 'enterprise') return 'free';
+  const user = await authenticatedUser(req);
+  if (!user) throw new Error('Sign in to use the 99% Glitch Protocol');
+  if (!(await hasProEntitlement(user.id))) throw new Error('An active Pro entitlement is required for the 99% Glitch Protocol');
+  return 'premium';
+}
+
 /**
  * Rate limit map: action → { count, windowStart }
  * Simple in-memory rate limiter per edge instance.
@@ -82,7 +129,7 @@ function checkRateLimit(action: string, ip: string): { allowed: boolean; retryAf
 // YouTube Channel Scraper Helpers
 // -------------------------------------------------------------
 function cleanChannelUrl(urlOrHandle: string): string {
-  let clean = urlOrHandle.trim();
+  const clean = urlOrHandle.trim();
   if (clean.startsWith('@')) {
     return `https://www.youtube.com/${clean}`;
   }
@@ -481,8 +528,21 @@ export default async function handler(req: Request) {
       }, 429);
     }
 
-    // ── Server-side tier enforcement — NEVER trust client-supplied tier ──
-    const tier = enforceTier(bodyResult.data.tier);
+    // Free requests stay anonymous. Paid requests are verified against the
+    // Supabase entitlement RPC; the browser's `tier` value is never authority.
+    let tier: 'free' | 'premium' = 'free';
+    if (action === 'rewrite' || action === 'thumbnail-reverse') {
+      try {
+        tier = await resolveTier(req, bodyResult.data.tier);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Could not verify your plan';
+        const isAuthenticationError = message.startsWith('Sign in');
+        const isEntitlementError = message.startsWith('An active Pro entitlement');
+        const status = isAuthenticationError ? 401 : isEntitlementError ? 403 : 503;
+        const code = isAuthenticationError ? 'AUTH_REQUIRED' : isEntitlementError ? 'PRO_REQUIRED' : 'ENTITLEMENT_UNAVAILABLE';
+        return jsonResponse({ error: message, code }, status);
+      }
+    }
 
     const { channelUrl, niche, description, targetVideoId, originalTranscript, originalTitle } = bodyResult.data;
 

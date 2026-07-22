@@ -22,16 +22,16 @@ export function TopBar() {
   };
 
   return (
-    <header className="fixed top-0 left-20 right-0 h-16 bg-background/80 backdrop-blur-xl border-b border-border z-40 flex items-center justify-between px-6">
+    <header className="fixed top-0 left-20 right-0 z-40 flex h-16 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-xl max-md:left-0 max-md:px-3">
       {/* Logo - triple click triggers ghost admin */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 max-sm:gap-1.5">
         <h1
           className="font-display text-xl font-bold cursor-pointer select-none"
           onClick={handleGhostTrigger}
         >
           <span className="text-glow-purple text-primary">Tube</span>
-          <span className="text-glow-cyan text-accent">Genius</span>
-          <span className="text-foreground ml-1">Neural Engine</span>
+          <span className="text-glow-cyan text-accent max-sm:hidden">Genius</span>
+          <span className="ml-1 text-foreground max-sm:hidden">Neural Engine</span>
         </h1>
         <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-display uppercase tracking-wider">
           Secure
@@ -42,7 +42,7 @@ export function TopBar() {
       <GhostAdminModal open={ghostOpen} onOpenChange={setGhostOpen} />
 
       {/* Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 max-sm:gap-1.5">
         {/* Secure status indicators — no BYOK */}
         <div className="hidden md:flex items-center gap-2 text-xs">
           <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">

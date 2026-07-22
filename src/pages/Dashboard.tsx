@@ -29,9 +29,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useContentStats, useContentActions } from "@/hooks/useContentStats";
 import type { SavedContent } from "@/stores/useContentStore";
-import { exportAllAsZip } from "@/lib/export";
 import { VerificationModal } from "@/components/VerificationModal";
-import { TheLab } from "@/components/lab/TheLab";
+import { DeferredModule } from "@/components/performance/DeferredModule";
+import { WorkflowContinueCard } from "@/components/workflow/WorkflowContinueCard";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
 
 const ViralGrowthPass = lazy(() =>
@@ -40,6 +40,12 @@ const ViralGrowthPass = lazy(() =>
 
 const CompetitorShowdown = lazy(() =>
   import("@/components/showdown/CompetitorShowdown").then((module) => ({ default: module.CompetitorShowdown })),
+);
+
+// The Lab is intentionally deferred: it is below the primary creator workflow
+// and should not compete with mobile FCP or first interaction.
+const TheLab = lazy(() =>
+  import("@/components/lab/TheLab").then((module) => ({ default: module.TheLab })),
 );
 
 const tools = [
@@ -162,6 +168,9 @@ export default function Dashboard() {
   const doExport = useCallback(async () => {
     setIsExporting(true);
     try {
+      // JSZip is a substantial dependency. Load it only after the user requests
+      // an export so mobile startup does not pay for an infrequent action.
+      const { exportAllAsZip } = await import("@/lib/export");
       await exportAllAsZip();
       toast.success("All content exported as ZIP!");
     } catch (error: unknown) {
@@ -334,6 +343,8 @@ export default function Dashboard() {
         </div>
       )}
 
+      <WorkflowContinueCard />
+
       <Suspense fallback={<div className="h-28 animate-pulse rounded-2xl border border-border bg-card/60" />}>
         <ViralGrowthPass />
       </Suspense>
@@ -496,8 +507,12 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* THE LAB — Zeigarnik Effect Retention Engine */}
-      <TheLab />
+      {/* Non-critical product discovery module — deferred until near viewport. */}
+      <DeferredModule minHeight={220} className="content-auto">
+        <Suspense fallback={<div className="h-[220px] rounded-2xl border border-border/50 bg-card/40" />}>
+          <TheLab />
+        </Suspense>
+      </DeferredModule>
 
       {/* Unified 8-Tool Grid — memoized */}
       <div>

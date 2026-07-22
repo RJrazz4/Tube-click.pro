@@ -29,6 +29,7 @@ import {
   DollarSign,
   Flame,
   Gauge,
+  Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,7 @@ import { useContentStore } from "@/stores/useContentStore";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useTranscriptExtraction, useCloneCrushMutation } from "@/hooks/useSecureQuery";
 import { useSoftGate } from "@/contexts/SoftGateContext";
+import { useWorkflowStore } from "@/stores/useWorkflowStore";
 
 type ProfileWithKeywords = ProfiledChannel & { extractedKeywords?: string[] };
 
@@ -88,13 +90,17 @@ export default function CloneCrush() {
   const incrementStat = useContentStore((s) => s.incrementStat);
   
   const license = useAuthStore((s) => s.license);
+  const startWorkflowProfile = useWorkflowStore((s) => s.startProfile);
+  const selectWorkflowCompetitor = useWorkflowStore((s) => s.selectCompetitor);
+  const saveWorkflowPackage = useWorkflowStore((s) => s.saveContentPackage);
+  const startWorkflowHandoff = useWorkflowStore((s) => s.startHandoff);
 
   // Local Component States
   const [channelInput, setChannelInput] = useState("");
   const [nicheInput, setNicheInput] = useState("");
   const [customDescription, setCustomDescription] = useState("");
   const [selectedVideo, setSelectedVideo] = useState<CompetitorVideo | null>(null);
-  const [selectedTier, setSelectedVideoTier] = useState<"free" | "premium">("premium");
+  const [selectedTier, setSelectedVideoTier] = useState<"free" | "premium">(license.tier === "free" ? "free" : "premium");
   const [copiedText, setCopiedText] = useState(false);
   const [activeTab, setActiveTab] = useState("script");
 
@@ -104,6 +110,11 @@ export default function CloneCrush() {
   // Mutations
   const transcriptMutation = useTranscriptExtraction();
   const cloneCrushMutation = useCloneCrushMutation();
+
+  // Never leave the paid protocol selected after an entitlement expires or changes.
+  useEffect(() => {
+    if (license.tier === "free") setSelectedVideoTier("free");
+  }, [license.tier]);
 
   // Populate inputs from profile description/niche if available
   useEffect(() => {
@@ -160,6 +171,13 @@ export default function CloneCrush() {
         setCompetitors(res.competitors, envyData);
         const unlocked = res.competitors.find((v: any) => !v.isLocked) || res.competitors[0];
         setSelectedVideo(unlocked);
+        selectWorkflowCompetitor({
+          videoId: unlocked.videoId,
+          title: unlocked.title,
+          url: unlocked.url,
+          channelName: unlocked.channelName,
+          thumbnail: unlocked.thumbnail,
+        }, deducedNiche);
         toast.success(`Showdown Matrix Ready! Discovered 3 high-velocity competitors.`, { id: "competitors-find" });
 
         // Fetch threat alerts in background (non-blocking)
@@ -207,6 +225,12 @@ export default function CloneCrush() {
           extractedKeywords: profileResponse.extractedKeywords || res.profile.extractedKeywords || [],
         };
         setProfile(profiledChannel);
+        startWorkflowProfile({
+          id: profiledChannel.id,
+          name: profiledChannel.name,
+          handle: profiledChannel.handle,
+          avatar: profiledChannel.avatar,
+        });
         toast.success(`Success! Connected to ${profiledChannel.name}'s Channel Profile`, { id: "profile-scrape" });
         await autoDiscoverCompetitors(profiledChannel);
       } else {
@@ -335,6 +359,13 @@ export default function CloneCrush() {
         });
 
         const promptCount = reverseEngineeredPrompts.length || 1;
+        saveWorkflowPackage({
+          rewriteId: savedRewrite.id,
+          title: rw.rewrittenTitle,
+          fullScript: rw.fullScript,
+          thumbnailPrompt: rw.thumbnailPrompt,
+          seoTags: rw.seoTags || [],
+        });
         saveContent({
           type: "script",
           title: `Chain-Loop Asset Package: ${rw.rewrittenTitle.substring(0, 35)}...`,
@@ -363,9 +394,16 @@ export default function CloneCrush() {
 
   const handleSendToVoiceover = () => {
     if (!activeRewrite) return;
-    sessionStorage.setItem('tubegenius_pending_voice_script', activeRewrite.fullScript);
+    startWorkflowHandoff("voice");
     toast.success("Script loaded into Voiceover Studio!");
     navigate("/voice");
+  };
+
+  const handleSendToRepurposer = () => {
+    if (!activeRewrite) return;
+    startWorkflowHandoff("repurposer");
+    toast.success("Script loaded into Multi-Platform Repurposer!");
+    navigate("/repurposer");
   };
 
   const handleCloneAndCrush = () => {
@@ -615,7 +653,17 @@ export default function CloneCrush() {
                           return (
                             <div
                               key={video.videoId}
-                              onClick={() => !video.isLocked && setSelectedVideo(video)}
+                              onClick={() => {
+                                if (video.isLocked) return;
+                                setSelectedVideo(video);
+                                selectWorkflowCompetitor({
+                                  videoId: video.videoId,
+                                  title: video.title,
+                                  url: video.url,
+                                  channelName: video.channelName,
+                                  thumbnail: video.thumbnail,
+                                }, nicheInput);
+                              }}
                               className={`group relative rounded-xl border p-2 cursor-pointer transition-all duration-300 flex flex-col justify-between bg-secondary/30 ${
                                 isSelected 
                                   ? "border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow" 
@@ -898,7 +946,7 @@ export default function CloneCrush() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
                     <Button 
                       onClick={handleSendToVoiceover} 
                       size="sm" 
@@ -906,6 +954,15 @@ export default function CloneCrush() {
                     >
                       <Mic className="w-3.5 h-3.5 text-primary-foreground shrink-0" />
                       <span>Send to Voiceover</span>
+                    </Button>
+                    <Button
+                      onClick={handleSendToRepurposer}
+                      size="sm"
+                      variant="outline"
+                      className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"
+                    >
+                      <Share2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <span>Repurpose Content</span>
                     </Button>
                     <Button 
                       onClick={handleCopyThumbnailPrompt} 

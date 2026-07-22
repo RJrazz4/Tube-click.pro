@@ -17,6 +17,7 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { NativeSponsorBanner } from "@/components/sponsors/NativeSponsorBanner";
 import { getSponsorForPlacement } from "@/config/sponsors";
 import { useSoftGate } from "@/contexts/SoftGateContext";
+import { useWorkflowStore } from "@/stores/useWorkflowStore";
 
 const voiceSponsor = getSponsorForPlacement("voice");
 
@@ -44,6 +45,8 @@ export default function VoiceStudio() {
   const license = useAuthStore((s) => s.license);
   const dailyUsage = useAuthStore((s) => s.dailyUsage);
   const updateVoiceUsage = useAuthStore((s) => s.updateVoiceUsage);
+  const activeWorkflow = useWorkflowStore((s) => s.activeWorkflow);
+  const completeWorkflowHandoff = useWorkflowStore((s) => s.completeHandoff);
 
   const [text, setText] = useState("");
   const [useElevenLabs, setUseElevenLabs] = useState(true);
@@ -68,11 +71,10 @@ export default function VoiceStudio() {
   const animationRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const pendingScript = sessionStorage.getItem('tubegenius_pending_voice_script');
-    if (pendingScript) {
-      setText(pendingScript);
-      sessionStorage.removeItem('tubegenius_pending_voice_script');
-      toast.success("⚡️ Chain-Loop Script loaded into Voiceover Studio!");
+    const workflowScript = activeWorkflow?.contentPackage?.fullScript;
+    if (workflowScript) {
+      setText((currentText) => currentText || workflowScript);
+      toast.success("⚡️ Workflow script loaded into Voiceover Studio!");
     }
 
     const loadVoices = () => {
@@ -91,7 +93,7 @@ export default function VoiceStudio() {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       if (previewAudio) { previewAudio.pause(); }
     };
-  }, []);
+  }, [activeWorkflow?.id, activeWorkflow?.contentPackage?.fullScript]);
 
   const animateVisualizer = () => {
     const heights = Array(30).fill(0).map(() => 20 + Math.random() * 80);
@@ -173,13 +175,14 @@ export default function VoiceStudio() {
       await audio.play();
 
       incrementStat('voiceoversGenerated');
-      saveContent({ type: 'voiceover', title: `Neural Voice - ${selectedElevenLabsVoice} via VectorEngine`, content: text });
+      saveContent({ type: 'voiceover', title: `Neural Voice - ${selectedElevenLabsVoice} via TubeClick Neural Voice`, content: text });
+      completeWorkflowHandoff("voice");
 
       if (license.tier === "free") {
         updateVoiceUsage(text.length);
       }
 
-      toast.success("Cinematic voiceover generated via VectorEngine secure route!");
+      toast.success("Cinematic voiceover generated via secure voice route!");
 
     } catch (error) {
       toastFriendlyError(error, "Failed to generate voiceover");
@@ -204,6 +207,7 @@ export default function VoiceStudio() {
     speechSynthesis.speak(utterance);
     incrementStat('voiceoversGenerated');
     saveContent({ type: 'voiceover', title: `Browser TTS - ${selectedVoice}`, content: text });
+    completeWorkflowHandoff("voice");
   };
 
   const handleBrowserTTSPlay = () => runGuarded("generate the next voiceover", performBrowserTTSPlay);
@@ -260,7 +264,7 @@ export default function VoiceStudio() {
           Voiceover Studio
           <span className="px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-[10px] border border-green-500/20 ml-2">VectorEngine Secure</span>
         </h1>
-        <p className="text-sm md:text-base text-muted-foreground mt-1">Generate cinematic AI voiceovers with VectorEngine (ElevenLabs white-labeled) via secure edge — static preview MP3s save 80% API calls</p>
+        <p className="text-sm md:text-base text-muted-foreground mt-1">Generate cinematic AI voiceovers with TubeClick Neural Voice via secure edge — static preview MP3s save 80% API calls</p>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
@@ -270,7 +274,7 @@ export default function VoiceStudio() {
           </CardHeader>
           <CardContent className="space-y-4 md:space-y-5">
             <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-              <div className="flex items-center gap-2"><Speaker className="w-4 h-4 text-primary" /><Label className="text-sm font-medium">TubeClick Neural Engine (VectorEngine)</Label></div>
+              <div className="flex items-center gap-2"><Speaker className="w-4 h-4 text-primary" /><Label className="text-sm font-medium">TubeClick Neural Voice</Label></div>
               <Switch checked={useElevenLabs} onCheckedChange={(checked) => { setUseElevenLabs(checked); if (audioUrl) { URL.revokeObjectURL(audioUrl); setAudioUrl(null); } }} />
             </div>
 
@@ -303,7 +307,7 @@ export default function VoiceStudio() {
 
                 <div className="p-2.5 rounded-lg bg-green-500/10 border border-green-500/20 text-[11px] text-green-400 space-y-1">
                   <p className="flex items-center gap-1.5"><Zap className="w-3 h-3" />Preview Strategy: Static MP3s in public/previews/voices/ — 2-3 sec samples, no ElevenLabs call</p>
-                  <p className="text-green-400/70">Final Generate hits VectorEngine secure route: /api/vectorengine-tts (server ELEVENLABS_API_KEY or VECTORENGINE_API_KEY), never client key. Saves 80% API calls for US SaaS margins.</p>
+                  <p className="text-green-400/70">Final generation uses the secure /api/elevenlabs-tts route. Provider credentials remain server-side.</p>
                 </div>
 
                 <div className="space-y-2">
@@ -376,11 +380,11 @@ export default function VoiceStudio() {
 
             <div className="text-center">
               <span className={cn("inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs", isGenerating ? "bg-primary/20 text-primary" : isPlaying ? "bg-green-500/20 text-green-400" : isPaused ? "bg-yellow-500/20 text-yellow-400" : isPreviewPlaying ? "bg-blue-500/20 text-blue-400" : audioUrl ? "bg-blue-500/20 text-blue-400" : "bg-secondary text-muted-foreground")}>
-                <Volume2 className="w-3.5 h-3.5" />{isGenerating ? "Generating via VectorEngine secure..." : isPlaying ? "Playing generated..." : isPreviewPlaying ? `Previewing ${isPreviewPlaying} (0 API calls)` : isPaused ? "Paused" : audioUrl ? "Ready to download MP3" : "Ready — try Preview first (0 API)"}
+                <Volume2 className="w-3.5 h-3.5" />{isGenerating ? "Generating via TubeClick Neural Voice secure..." : isPlaying ? "Playing generated..." : isPreviewPlaying ? `Previewing ${isPreviewPlaying} (0 API calls)` : isPaused ? "Paused" : audioUrl ? "Ready to download MP3" : "Ready — try Preview first (0 API)"}
               </span>
             </div>
 
-            <p className="text-center text-xs text-muted-foreground">{useElevenLabs ? <>✨ VectorEngine (ElevenLabs white-labeled) secure edge — preview static MP3s save 80% API calls, final generation via /api/vectorengine-tts (ELEVENLABS_API_KEY or VECTORENGINE_API_KEY server env)</> : <>🔊 Browser TTS — switch to Neural Engine for MP3 downloads</>}</p>
+            <p className="text-center text-xs text-muted-foreground">{useElevenLabs ? <>✨ TubeClick Neural Voice uses secure server-side generation. Static previews avoid provider calls until final audio is requested.</> : <>🔊 Browser TTS — switch to Neural Engine for MP3 downloads</>}</p>
           </CardContent>
         </Card>
       </div>

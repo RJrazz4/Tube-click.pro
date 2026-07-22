@@ -12,22 +12,20 @@
       "count": 1
     }
   },
-  "api/generate-text.ts": {
+  "api/clone-crush.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "api/generate-thumbnail.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
+      "count": 8
     },
     "no-empty": {
       "count": 1
+    },
+    "no-useless-escape": {
+      "count": 2
     }
   },
-  "api/json2video.ts": {
+  "api/generate-text.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 1
     }
   },
   "api/seo-tags.ts": {
@@ -54,12 +52,6 @@
   "packages/ai/logger.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    },
-    "@typescript-eslint/no-this-alias": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unsafe-function-type": {
-      "count": 1
     }
   },
   "packages/ai/providers/agnes-flash-adapter.ts": {
@@ -78,24 +70,14 @@
       "count": 6
     }
   },
-  "src/api/client/secureClient.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 8
-    }
-  },
-  "src/api/server/imageRouter.ts": {
+  "packages/orchestrator/generator/scene-pipeline.test.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },
-  "src/api/server/json2VideoPayload.ts": {
+  "src/api/client/secureClient.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/api/server/transcriptUtil.ts": {
-    "no-useless-escape": {
-      "count": 4
+      "count": 8
     }
   },
   "src/components/ui/LazyImage.tsx": {
@@ -116,14 +98,9 @@
       "count": 1
     }
   },
-  "src/hooks/useJson2Video.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
   "src/hooks/useSecureQuery.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
+      "count": 5
     }
   },
   "src/lib/export.ts": {
@@ -136,12 +113,14 @@
       "count": 3
     }
   },
+  "src/lib/referrals/client.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
   "src/lib/scriptCleaner.ts": {
     "no-useless-escape": {
       "count": 11
-    },
-    "prefer-const": {
-      "count": 2
     }
   },
   "src/lib/stats.ts": {
@@ -152,6 +131,11 @@
   "src/pages/AdminPanel.tsx": {
     "no-empty": {
       "count": 1
+    }
+  },
+  "src/pages/CloneCrush.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 8
     }
   },
   "src/pages/Dashboard.tsx": {
@@ -166,22 +150,6 @@
   },
   "src/pages/SeoOptimizer.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/pages/StoryboardLegacy.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "prefer-const": {
-      "count": 1
-    }
-  },
-  "src/pages/ThumbnailsLegacy.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-empty": {
       "count": 1
     }
   },
@@ -205,19 +173,6 @@
       "count": 2
     }
   },
-  "supabase/functions/generate-storyboard-image/index.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-empty": {
-      "count": 3
-    }
-  },
-  "supabase/functions/generate-thumbnail/index.ts": {
-    "no-empty": {
-      "count": 2
-    }
-  },
   "supabase/functions/transcript/index.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 3
@@ -227,11 +182,6 @@
     },
     "no-useless-escape": {
       "count": 4
-    }
-  },
-  "supabase/functions/vision-guide/index.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "tailwind.config.ts": {

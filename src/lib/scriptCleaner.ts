@@ -76,7 +76,7 @@ export function cleanScript(script: string): string {
   const cleanedLines = lines
     .map(line => {
       // Remove leading/trailing whitespace
-      let cleanLine = line.trim();
+      const cleanLine = line.trim();
       
       // Remove lines that are now empty or only contain punctuation/dashes
       if (/^[-–—:.\s]*$/.test(cleanLine)) {
@@ -116,7 +116,7 @@ export function extractVoiceoverText(script: string): string {
   const cleaned = cleanScript(script);
   
   // Further simplify for TTS - remove any remaining special characters
-  let voiceover = cleaned
+  const voiceover = cleaned
     // Remove any remaining brackets with content
     .replace(/\[[^\]]*\]/g, '')
     .replace(/\([^\)]*\)/g, '')
