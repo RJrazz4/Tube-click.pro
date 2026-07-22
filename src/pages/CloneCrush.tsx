@@ -94,7 +94,7 @@ export default function CloneCrush() {
   const [nicheInput, setNicheInput] = useState("");
   const [customDescription, setCustomDescription] = useState("");
   const [selectedVideo, setSelectedVideo] = useState<CompetitorVideo | null>(null);
-  const [selectedTier, setSelectedVideoTier] = useState<"free" | "premium">("premium");
+  const [selectedTier, setSelectedVideoTier] = useState<"free" | "premium">(license.tier === "free" ? "free" : "premium");
   const [copiedText, setCopiedText] = useState(false);
   const [activeTab, setActiveTab] = useState("script");
 
@@ -104,6 +104,11 @@ export default function CloneCrush() {
   // Mutations
   const transcriptMutation = useTranscriptExtraction();
   const cloneCrushMutation = useCloneCrushMutation();
+
+  // Never leave the paid protocol selected after an entitlement expires or changes.
+  useEffect(() => {
+    if (license.tier === "free") setSelectedVideoTier("free");
+  }, [license.tier]);
 
   // Populate inputs from profile description/niche if available
   useEffect(() => {

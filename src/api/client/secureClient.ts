@@ -11,6 +11,8 @@
  * Vercel Edge functions are faster for US audience (edge caching, <50ms cold start)
  */
 
+import { supabase } from "@/integrations/supabase/client";
+
 export class EdgeFunctionError extends Error {
   status: number;
   /** Phase E1/E2 machine-readable code (QUOTA_EXCEEDED_DAILY, RATE_LIMITED, ...) */
@@ -120,7 +122,15 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
   }
   lastCall.set(functionName, Date.now());
 
-  const { url, headers } = getApiEndpoint(functionName);
+  const { url, headers: baseHeaders, isVercel } = getApiEndpoint(functionName);
+  const headers = { ...baseHeaders };
+  // Vercel routes do not receive Supabase's browser session automatically.
+  // Forward only the short-lived access token so protected server features can
+  // verify entitlements without trusting a client-supplied plan value.
+  if (isVercel) {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+  }
 
   let lastErr: EdgeFunctionError | null = null;
   let pendingDelayMs: number | null = null; // Phase E2: provider-hinted delay wins
@@ -185,7 +195,12 @@ export async function fetchEdgeFunctionBlob(functionName: string, body: unknown,
   }
   lastCall.set(functionName, Date.now());
 
-  const { url, headers } = getApiEndpoint(functionName);
+  const { url, headers: baseHeaders, isVercel } = getApiEndpoint(functionName);
+  const headers = { ...baseHeaders };
+  if (isVercel) {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+  }
 
   const res = await fetch(url, {
     method: "POST",

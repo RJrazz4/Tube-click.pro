@@ -168,7 +168,7 @@ export function ViralGrowthPass() {
                 <div className="flex items-center gap-3">
                   <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-cyan-300/25 bg-secondary shadow-[0_0_18px_rgba(34,211,238,0.12)]">
                     <img
-                      src="/referral-banner.png"
+                      src="/referral-banner.svg"
                       alt="TubeClick Pro viral growth referral promotion"
                       loading="lazy"
                       className="h-full w-full object-cover"
@@ -180,7 +180,7 @@ export function ViralGrowthPass() {
                       Download and pair it with your copied invite on social media.
                     </p>
                     <Button variant="outline" size="sm" asChild className="mt-2 h-8 gap-1.5 border-cyan-400/30 bg-cyan-400/5 px-3 text-[11px] hover:border-cyan-300/60 hover:bg-cyan-400/10">
-                      <a href="/referral-banner.png" download="tubeclick-pro-referral-banner.png">
+                      <a href="/referral-banner.svg" download="tubeclick-pro-referral-banner.svg">
                         <Download className="h-3.5 w-3.5" />
                         Download Image
                       </a>
