@@ -40,6 +40,21 @@ import {
 } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
 
+// The Supabase token and the auth-store snapshot are deliberately excluded.
+// Clearing preferences/content must never become an implicit sign-out; only the
+// dedicated sign-out action is allowed to destroy a Supabase session.
+const AUTH_STORAGE_KEYS = new Set(["tubegenius-auth-store"]);
+const APP_STORAGE_PREFIXES = ["tubegenius-", "tubeclick-"];
+
+function clearLocalAppData() {
+  Object.keys(localStorage)
+    .filter((key) =>
+      APP_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix)) &&
+      !AUTH_STORAGE_KEYS.has(key),
+    )
+    .forEach((key) => localStorage.removeItem(key));
+}
+
 // Section components
 function GeneralSection() {
   const { user, setUser } = useAuthStore();
@@ -375,10 +390,10 @@ function DataPrivacySection() {
   };
 
   const handleClearData = () => {
-    if (confirm("Are you sure you want to delete all your data? This cannot be undone.")) {
+    if (confirm("Are you sure you want to delete your local app data? This cannot be undone. You will remain signed in.")) {
       setIsClearing(true);
-      localStorage.clear();
-      toast.success("All data cleared!");
+      clearLocalAppData();
+      toast.success("Local app data cleared. Your secure session is still active.");
       window.location.reload();
     }
   };
@@ -417,8 +432,8 @@ function DataPrivacySection() {
               className="h-auto py-4 flex-col gap-2"
             >
               <Trash2 className="w-5 h-5" />
-              <span className="text-sm">Delete All Data</span>
-              <span className="text-xs text-muted-foreground">Permanent removal</span>
+              <span className="text-sm">Delete Local App Data</span>
+              <span className="text-xs text-muted-foreground">Session remains signed in</span>
             </Button>
           </div>
         </CardContent>
