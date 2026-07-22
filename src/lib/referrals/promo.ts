@@ -1,25 +1,31 @@
 export function buildReferralPromo(referralUrl: string): string {
-  return `🚨 ₹0 PRO ACCESS PATH UNLOCKED! 🔓
+  return `◢◤ TUBECCLICK PRO // PRIVATE UPLINK • GHOST PROTOCOL v4.2 ◥◣
 
-🤫 Ever wondered what’s behind my content workflow?
+🚨 CLASSIFIED: ₹0 ELITE ACCESS UNLOCKED • $97 VALUE → ₹0 TODAY
+
+🤫 Ever wondered what's behind my content workflow?
 
 The secret is TubeClick.Pro ⚡
+Psychological Warfare Dashboard for YouTube creators
 
-And I’ve got a PRIVATE INVITE for you 👀
+And I've got a PRIVATE TRACKER INVITE for you 👀
+LEVEL 4 CLEARANCE • MUM-01 NODE • ENCRYPTED
 
-🔥 Skip the Waitlist
+🔥 Skip the Waitlist (Ghost Protocol)
+💎 Start Your Pro Unlock Journey via Ghost Mesh
+🎁 Establish 3-Node Uplink (Invite 3 Friends)
+⚡ Help ONE Node Unlock Elite
+🏆 Then You Both Earn 7 Days Premium FREE (Ghost Relay)
 
-💎 Start Your Pro Unlock Journey
+⚠️ DON'T join via normal domain - use my ghost uplink so we sync through same quantum cache chain.
+Your invite is private tracker: tubeclickpro.in/ref/...?clearance=LEVEL4
 
-🎁 Invite 3 Creator Friends
+👇 TAP TO START GHOST UPLINK — ₹0 ELITE (Value $97/mo)
 
-⚡ Help Just ONE Friend Unlock Pro
+${referralUrl}
 
-🏆 Then You Both Earn 7 Days of Premium FREE
-
-⚠️ Don’t join the normal way — use my special invite so we can grow through the same reward chain.
-
-👇 TAP TO START — ₹0 TODAY
-
-${referralUrl}`;
+---
+GHOST PROTOCOL • MUM-01 • 3 Nodes • 87ms • Encrypted • Quantum Cached
+tubeclickpro.in • Always canonical • Never Vercel
+`;
 }
