@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Share2, Sparkles, Copy, Check, FileText, Youtube, Loader2, Layers, Link2, Download, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +13,7 @@ import { useTranscriptExtraction } from "@/hooks/useSecureQuery";
 import { QK } from "@/api/client/queryKeys";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSoftGate } from "@/contexts/SoftGateContext";
+import { useWorkflowStore } from "@/stores/useWorkflowStore";
 
 export default function Repurposer() {
   const [inputText, setInputText] = useState("");
@@ -31,8 +32,23 @@ export default function Repurposer() {
   const incrementStat = useContentStore(s => s.incrementStat);
   const queryClient = useQueryClient();
   const { runGuarded } = useSoftGate();
+  const activeWorkflow = useWorkflowStore((s) => s.activeWorkflow);
+  const completeWorkflowHandoff = useWorkflowStore((s) => s.completeHandoff);
 
   const transcriptMutation = useTranscriptExtraction();
+
+  // A content package can arrive from Clone & Crush without manual copying.
+  useEffect(() => {
+    const contentPackage = activeWorkflow?.contentPackage;
+    if (!contentPackage) return;
+    setInputText((currentText) => currentText || contentPackage.fullScript);
+    setTranscriptMeta((current) => current || {
+      videoId: activeWorkflow.competitor?.videoId || "workflow-script",
+      wordCount: contentPackage.fullScript.split(/\s+/).filter(Boolean).length,
+      length: contentPackage.fullScript.length,
+      source: "Clone & Crush workflow",
+    });
+  }, [activeWorkflow?.id, activeWorkflow?.contentPackage?.fullScript, activeWorkflow?.competitor?.videoId]);
 
   const performExtractTranscript = useCallback(async () => {
     const trimmedUrl = youtubeUrl.trim();
@@ -124,6 +140,7 @@ export default function Repurposer() {
       setRepurposed({ youtubeDesc, twitterThread, instagramCaption, linkedinPost });
 
       incrementStat('scriptsGenerated');
+      completeWorkflowHandoff("repurposer");
       saveContent({
         type: 'script',
         title: `Repurposed: ${title.substring(0, 40)}${transcriptMeta ? ` [YT:${transcriptMeta.videoId}]` : ''}`,

@@ -63,17 +63,10 @@ const VERCEL_ROUTE_MAP: Record<string, string> = {
   "generate-content": "/api/generate-text",
   "generate-seo": "/api/seo-tags",
   "seo-tags": "/api/seo-tags",
-  "generate-thumbnail": "/api/generate-thumbnail",
-  "generate-storyboard-image": "/api/generate-storyboard-image",
   "analyze-storyboard": "/api/analyze-storyboard",
   "elevenlabs-tts": "/api/elevenlabs-tts",
-  "vectorengine-tts": "/api/vectorengine-tts",
-  "vision-guide": "/api/vision-guide",
   "transcript": "/api/transcript",
   "clone-crush": "/api/clone-crush",
-  // Phase 4 — V1 API routes
-  "v1/storyboard": "/api/v1/storyboard",
-  "v1/thumbnail": "/api/v1/thumbnail",
 };
 
 function getApiEndpoint(functionName: string): { url: string; headers: Record<string, string>; isVercel: boolean } {

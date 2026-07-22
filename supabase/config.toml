@@ -3,20 +3,8 @@ project_id = "cssnxomfkrnjaedoobjj"
 [functions.generate-content]
 verify_jwt = false
 
-[functions.generate-thumbnail]
-verify_jwt = false
-
-[functions.vision-guide]
-verify_jwt = false
-
 [functions.elevenlabs-tts]
 verify_jwt = false
 
 [functions.analyze-storyboard]
-verify_jwt = false
-
-[functions.generate-storyboard-image]
-verify_jwt = false
-
-[functions.render-video]
 verify_jwt = false

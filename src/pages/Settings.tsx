@@ -484,23 +484,11 @@ function DataPrivacySection() {
           <CardTitle className="text-base font-display">Third-Party Services</CardTitle>
           <CardDescription className="text-xs">Services that process your data</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {[
-            { name: "OpenRouter", purpose: "AI text generation", url: "https://openrouter.ai" },
-            { name: "Pollinations.ai", purpose: "Free image generation", url: "https://pollinations.ai" },
-          ].map((service, i) => (
-            <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-              <div>
-                <p className="text-sm font-medium text-foreground">{service.name}</p>
-                <p className="text-xs text-muted-foreground">{service.purpose}</p>
-              </div>
-              <Button variant="ghost" size="sm" asChild>
-                <a href={service.url} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </Button>
-            </div>
-          ))}
+        <CardContent>
+          <div className="rounded-lg bg-secondary/50 p-3">
+            <p className="text-sm font-medium text-foreground">Managed AI processing services</p>
+            <p className="mt-1 text-xs text-muted-foreground">Approved providers process generation requests only when you use an AI feature. See the Privacy Policy for the current processor list.</p>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -551,7 +539,7 @@ function AboutSection() {
               { name: "React Query", desc: "Server State" },
               { name: "Vercel", desc: "Deployment" },
               { name: "Zero-Cost Hydra", desc: "Multi-Provider AI Router" },
-              { name: "Pollinations.ai", desc: "Free Image AI" },
+              { name: "Managed Image Services", desc: "Image Generation" },
             ].map((tech, i) => (
               <div key={i} className="p-3 rounded-lg bg-secondary/50 flex items-center justify-between">
                 <div>

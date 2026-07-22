@@ -129,7 +129,7 @@ function checkRateLimit(action: string, ip: string): { allowed: boolean; retryAf
 // YouTube Channel Scraper Helpers
 // -------------------------------------------------------------
 function cleanChannelUrl(urlOrHandle: string): string {
-  let clean = urlOrHandle.trim();
+  const clean = urlOrHandle.trim();
   if (clean.startsWith('@')) {
     return `https://www.youtube.com/${clean}`;
   }

@@ -87,13 +87,6 @@ export function useContentGeneration() {
   );
 }
 
-// Helper for thumbnails — with smart caching
-export function useThumbnailGeneration() {
-  return useSecureMutation<{ thumbnails: string[] }, { title: string; emotion: string; style: string; aspectRatio: string; count: number; brand?: string }>(
-    "generate-thumbnail"
-  );
-}
-
 // Phase B1 — SEO Tag & Competitor AI via managed secure route
 export function useSeoGeneration() {
   return useSecureMutation<

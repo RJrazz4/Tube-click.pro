@@ -1,19 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Font display swap for performance */
-@font-face {
-  font-family: 'Orbitron';
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Inter';
-  font-display: swap;
-}
 
 @layer base {
   :root {
@@ -248,4 +235,86 @@
      @apply text-muted-foreground hover:text-foreground hover:bg-destructive/20 hover:border-destructive/50;
      @apply transition-all duration-200 active:scale-90 touch-manipulation;
    }
+}
+
+
+/* Mobile performance and ergonomics ------------------------------------------------ */
+.content-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}
+
+.deferred-module-placeholder {
+  min-height: inherit;
+  border-radius: 1rem;
+  background: linear-gradient(110deg, hsl(var(--card)) 8%, hsl(var(--secondary)) 18%, hsl(var(--card)) 33%);
+  background-size: 200% 100%;
+  animation: content-shimmer 1.8s linear infinite;
+}
+
+@keyframes content-shimmer {
+  to { background-position-x: -200%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+  }
+
+  .deferred-module-placeholder {
+    animation: none;
+  }
+}
+
+@media (max-width: 767px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    min-height: 100dvh;
+    overscroll-behavior-y: none;
+  }
+
+  .app-shell {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .mobile-safe-bottom {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* Touch users should never need pixel-perfect taps. Scoped to the product shell
+   so third-party embeds and document content retain their natural dimensions. */
+@media (pointer: coarse) {
+  .app-shell button,
+  .app-shell a {
+    min-height: 44px;
+  }
+
+  .app-shell input,
+  .app-shell textarea,
+  .app-shell [role="combobox"] {
+    min-height: 44px;
+  }
+}
+
+.skip-to-content {
+  position: fixed;
+  top: 0.75rem;
+  left: 50%;
+  z-index: 100;
+  transform: translate(-50%, -160%);
+  border-radius: 0.5rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  padding: 0.65rem 1rem;
+  font-weight: 700;
+  transition: transform 150ms ease;
+}
+
+.skip-to-content:focus {
+  transform: translate(-50%, 0);
 }
