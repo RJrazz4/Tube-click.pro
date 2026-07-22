@@ -8,10 +8,15 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Auth sessions deliberately use durable browser storage. Do not replace this
+// with sessionStorage, a per-tab adapter, or an in-memory adapter: closing the
+// final tab must not sign a user out. Supabase owns this key and rotates the
+// refresh token in-place when auto-refresh runs.
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-  }
+    detectSessionInUrl: true,
+  },
 });

@@ -98,7 +98,6 @@ interface AuthState {
   resetDailyUsage: () => void;
   checkAccess: (feature: keyof FeatureAccess) => boolean;
   getFeatures: () => FeatureAccess;
-  logout: () => void;
 }
 
 const DEFAULT_LICENSE: LicenseInfo = {
@@ -197,11 +196,6 @@ export const useAuthStore = create<AuthState>()(
         return TIER_FEATURES[license.tier];
       },
 
-      logout: () =>
-        set({
-          user: null,
-          isAuthenticated: false,
-        }),
     }),
     {
       name: "tubegenius-auth-store",
