@@ -476,3 +476,94 @@
   0%, 100% { border-color: rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); }
   50% { border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.08); }
 }
+
+/* Phase 5 - Global Premium Polish - Elite Cursor + Holographic Hover */
+.cyber-button, .cyber-button-secondary {
+  cursor: pointer;
+}
+
+.cyber-button:hover {
+  cursor: crosshair;
+}
+
+.glass-strong, .cyber-card, .glass-ghost {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-strong:hover {
+  border-color: rgba(139,92,246,0.25);
+  box-shadow: 0 0 30px rgba(139,92,246,0.12), 0 0 60px rgba(34,211,238,0.06), inset 0 1px 0 rgba(255,255,255,0.08);
+  transform: translateY(-1px);
+}
+
+/* Elite text glow on hover for $100/mo illusion */
+.elite-hover:hover {
+  text-shadow: 0 0 12px rgba(168,85,247,0.6), 0 0 24px rgba(34,211,238,0.3);
+}
+
+/* Custom scrollbar - stealth black + purple */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #020207;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #7C3AED, #22D3EE);
+  border-radius: 4px;
+  border: 1px solid rgba(139,92,246,0.2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #A855F7, #06B6D4);
+  box-shadow: 0 0 10px rgba(139,92,246,0.4);
+}
+
+/* Selection - ghost purple */
+::selection {
+  background: rgba(139,92,246,0.3);
+  color: #fff;
+  text-shadow: 0 0 8px rgba(139,92,246,0.8);
+}
+
+/* Focus visible - premium */
+*:focus-visible {
+  outline: 1px solid rgba(139,92,246,0.5);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(139,92,246,0.1), 0 0 20px rgba(139,92,246,0.2);
+}
+
+/* Phase 5 - Holographic shimmer on elite badges */
+@keyframes holo-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.holo-badge {
+  background: linear-gradient(90deg, rgba(139,92,246,0.1), rgba(34,211,238,0.2), rgba(139,92,246,0.1));
+  background-size: 200% 100%;
+  animation: holo-shimmer 3s linear infinite;
+}
+
+/* Phase 5 - Private tracker link glow */
+.tracker-link {
+  position: relative;
+}
+
+.tracker-link::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: linear-gradient(90deg, #A855F7, #22D3EE);
+  transition: width 0.4s ease;
+}
+
+.tracker-link:hover::after {
+  width: 100%;
+}

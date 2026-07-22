@@ -19,6 +19,8 @@ import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
 import { LiveActiveCounter } from "@/components/ui/LiveActiveCounter";
 import { GhostIntelDrop } from "@/components/ui/GhostIntelDrop";
 import { BroadcastSyncIndicator } from "@/components/ui/BroadcastSyncIndicator";
+import { ParticleBurst } from "@/components/ui/ParticleBurst";
+import { XpGainPopup } from "@/components/ui/XpGainPopup";
 import { VideoWallBackground } from "@/components/ui/VideoWallBackground";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
@@ -31,6 +33,8 @@ export default function Rewards() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [burst, setBurst] = useState(0);
+  const [xpBurst, setXpBurst] = useState(0);
 
   const refresh = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -51,6 +55,21 @@ export default function Rewards() {
   }, [setAppTier, setLicense]);
 
   useEffect(() => { void refresh(); }, [isAuthenticated, refresh]);
+
+  useEffect(() => {
+    if (profile && (profile.verifiedReferrals >= 3 || profile.qualified)) {
+      // Celebration - only once per session
+      try {
+        const key = `ghost_celebrated_${profile.referralCode}`;
+        if (!sessionStorage.getItem(key)) {
+          setBurst(v => v + 1);
+          setXpBurst(v => v + 1);
+          if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+          sessionStorage.setItem(key, "1");
+        }
+      } catch {}
+    }
+  }, [profile]);
 
   const referralUrl = profile ? buildReferralUrl(profile.referralCode) : "";
   const inviteProgress = Math.min(profile?.verifiedReferrals || 0, 3);
@@ -90,6 +109,10 @@ export default function Rewards() {
   return (
     <div className="relative mx-auto max-w-6xl space-y-6 animate-fade-in">
       <VideoWallBackground intensity="low" />
+      <XpGainPopup trigger={xpBurst} xp={50} label="Ghost Nodes XP" />
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] pointer-events-none z-50">
+        <ParticleBurst trigger={burst} />
+      </div>
       <div className="relative z-10 space-y-6">
         <WarRoomTicker />
         <div className="flex flex-wrap items-center gap-3"><LiveActiveCounter /><GhostNodeStatus compact /><BroadcastSyncIndicator compact /><span className="text-[10px] font-mono text-muted-foreground">LEVEL 4 • PRIVATE TRACKER • tubeclickpro.in • Ghost Protocol • Value $97 → ₹0</span></div>

@@ -15,6 +15,8 @@ import { NativeSponsorBanner } from "@/components/sponsors/NativeSponsorBanner";
 import { getSponsorForPlacement } from "@/config/sponsors";
 import { useSoftGate } from "@/contexts/SoftGateContext";
 
+import { PageWrapperGhost } from "@/components/ui/PageWrapperGhost";
+
 const seoSponsor = getSponsorForPlacement("seo");
 
 const StatBadge = memo(function StatBadge({ label, value, color }: { label: string; value: string | number; color?: string }) {
@@ -113,7 +115,8 @@ export default function SeoOptimizer() {
   };
 
   return (
-    <div className="space-y-4 md:space-y-6 animate-fade-in">
+    <PageWrapperGhost intensity="low" showIntel={false}>
+      <div className="space-y-4 md:space-y-6 animate-fade-in">
       <div>
         <h1 className="font-display text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
           <Search className="w-6 h-6 md:w-7 md:h-7 text-accent" />
@@ -127,7 +130,7 @@ export default function SeoOptimizer() {
 
       <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
         {/* Input */}
-        <Card className="cyber-card border-border">
+        <Card className="glass-strong border-border bracket">
           <CardHeader className="pb-3 md:pb-4">
             <CardTitle className="font-display text-base md:text-lg text-foreground flex items-center gap-2">
               <Tag className="w-4 h-4 text-primary" />
@@ -196,7 +199,7 @@ export default function SeoOptimizer() {
         </Card>
 
         {/* Results */}
-        <Card className="cyber-card border-border">
+        <Card className="glass-strong border-border bracket">
           <CardHeader className="pb-3 md:pb-4">
             <CardTitle className="font-display text-base md:text-lg text-foreground flex items-center justify-between">
               <span className="flex items-center gap-2">
@@ -266,6 +269,7 @@ export default function SeoOptimizer() {
       </div>
 
       {seoSponsor && <NativeSponsorBanner {...seoSponsor} />}
-    </div>
+      </div>
+    </PageWrapperGhost>
   );
 }
