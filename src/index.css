@@ -318,3 +318,252 @@
 .skip-to-content:focus {
   transform: translate(-50%, 0);
 }
+
+/* Ghost Protocol v2 - Hardcore Matrix/Stealth Utilities - Lightweight CSS only */
+.ghost-scanline {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255,255,255,0.03) 2px,
+    rgba(255,255,255,0.03) 3px
+  );
+}
+
+.ghost-grid {
+  background-image: 
+    linear-gradient(rgba(124,58,237,0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34,211,238,0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.ghost-grid::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(2,2,7,0.6) 100%);
+}
+
+.glass-strong {
+  backdrop-filter: blur(28px) saturate(1.4);
+  background: rgba(2, 2, 7, 0.82);
+  border: 1px solid rgba(139,92,246,0.15);
+  box-shadow: 
+    0 0 40px rgba(139,92,246,0.08),
+    0 0 80px rgba(34,211,238,0.04),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.glass-ghost {
+  backdrop-filter: blur(20px);
+  background: rgba(15,15,20,0.6);
+  border: 1px dashed rgba(34,211,238,0.2);
+  position: relative;
+}
+
+.glass-ghost::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(139,92,246,0.05) 0%, rgba(34,211,238,0.03) 100%);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.bracket {
+  position: relative;
+}
+
+.bracket::before,
+.bracket::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: rgba(139,92,246,0.4);
+  border-style: solid;
+  pointer-events: none;
+}
+
+.bracket::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+  border-top-left-radius: 8px;
+}
+
+.bracket::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 2px 2px 0;
+  border-bottom-right-radius: 8px;
+}
+
+.text-glitch:hover {
+  animation: glitch 0.3s ease-in-out;
+}
+
+@keyframes glitch {
+  0% { text-shadow: 0.05em 0 0 #00fffc, -0.05em -0.025em 0 #fc00ff; }
+  15% { text-shadow: 0.05em 0 0 #00fffc, -0.05em -0.025em 0 #fc00ff; }
+  16% { text-shadow: -0.05em -0.025em 0 #00fffc, 0.025em 0.025em 0 #fc00ff; }
+  49% { text-shadow: -0.05em -0.025em 0 #00fffc, 0.025em 0.025em 0 #fc00ff; }
+  50% { text-shadow: 0.025em 0.05em 0 #00fffc, 0.05em 0 0 #fc00ff; }
+  99% { text-shadow: 0.025em 0.05em 0 #00fffc, 0.05em 0 0 #fc00ff; }
+  100% { text-shadow: -0.05em 0 0 #00fffc, -0.05em -0.025em 0 #fc00ff; }
+}
+
+.noise {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+.bg-radial-vignette {
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(2,2,7,0.8) 100%);
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Matrix boot cursor */
+.ghost-boot {
+  position: relative;
+}
+
+.ghost-boot::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  background: linear-gradient(90deg, transparent, rgba(2,2,7,0.9));
+  pointer-events: none;
+}
+
+/* War Room Ticker - lightweight marquee */
+.war-room-ticker {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Ghost mesh active pulse */
+@keyframes ghost-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+}
+
+.ghost-active-pulse {
+  animation: ghost-pulse 2s ease-in-out infinite;
+}
+
+/* Referral artifact hover glitch */
+.referral-artifact {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.referral-artifact:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 0 50px rgba(34,211,238,0.25), 0 0 90px rgba(139,92,246,0.15);
+}
+
+/* Loss ticker pulse */
+.loss-ticker {
+  animation: loss-pulse 2s ease-in-out infinite;
+}
+
+@keyframes loss-pulse {
+  0%, 100% { border-color: rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); }
+  50% { border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.08); }
+}
+
+/* Phase 5 - Global Premium Polish - Elite Cursor + Holographic Hover */
+.cyber-button, .cyber-button-secondary {
+  cursor: pointer;
+}
+
+.cyber-button:hover {
+  cursor: crosshair;
+}
+
+.glass-strong, .cyber-card, .glass-ghost {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-strong:hover {
+  border-color: rgba(139,92,246,0.25);
+  box-shadow: 0 0 30px rgba(139,92,246,0.12), 0 0 60px rgba(34,211,238,0.06), inset 0 1px 0 rgba(255,255,255,0.08);
+  transform: translateY(-1px);
+}
+
+/* Elite text glow on hover for $100/mo illusion */
+.elite-hover:hover {
+  text-shadow: 0 0 12px rgba(168,85,247,0.6), 0 0 24px rgba(34,211,238,0.3);
+}
+
+/* Custom scrollbar - stealth black + purple */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #020207;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #7C3AED, #22D3EE);
+  border-radius: 4px;
+  border: 1px solid rgba(139,92,246,0.2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #A855F7, #06B6D4);
+  box-shadow: 0 0 10px rgba(139,92,246,0.4);
+}
+
+/* Selection - ghost purple */
+::selection {
+  background: rgba(139,92,246,0.3);
+  color: #fff;
+  text-shadow: 0 0 8px rgba(139,92,246,0.8);
+}
+
+/* Focus visible - premium */
+*:focus-visible {
+  outline: 1px solid rgba(139,92,246,0.5);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(139,92,246,0.1), 0 0 20px rgba(139,92,246,0.2);
+}
+
+/* Phase 5 - Holographic shimmer on elite badges */
+@keyframes holo-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.holo-badge {
+  background: linear-gradient(90deg, rgba(139,92,246,0.1), rgba(34,211,238,0.2), rgba(139,92,246,0.1));
+  background-size: 200% 100%;
+  animation: holo-shimmer 3s linear infinite;
+}
+
+/* Phase 5 - Private tracker link glow */
+.tracker-link {
+  position: relative;
+}
+
+.tracker-link::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: linear-gradient(90deg, #A855F7, #22D3EE);
+  transition: width 0.4s ease;
+}
+
+.tracker-link:hover::after {
+  width: 100%;
+}

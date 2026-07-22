@@ -17,6 +17,8 @@ import { cleanScript } from "@/lib/scriptCleaner";
 import { useNavigate } from "react-router-dom";
 import { useSoftGate } from "@/contexts/SoftGateContext";
 
+import { PageWrapperGhost } from "@/components/ui/PageWrapperGhost";
+
 interface GeneratedContent {
   titles: string[];
   hooks: string[];
@@ -287,7 +289,8 @@ ${generatedContent.description || 'N/A'}
   };
 
   return (
-    <div className="h-[calc(100vh-8rem)] animate-fade-in">
+    <PageWrapperGhost intensity="low" showIntel={false}>
+      <div className="h-[calc(100vh-12rem)] animate-fade-in">
       <div className="mb-4 md:mb-6">
         <h1 className="font-display text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
           <Bot className="w-6 h-6 md:w-7 md:h-7 text-primary" />
@@ -692,5 +695,6 @@ ${generatedContent.description || 'N/A'}
         </Card>
       </div>
     </div>
+    </PageWrapperGhost>
   );
 }
