@@ -6,12 +6,14 @@ import { GhostRedirectOverlay } from "@/components/ui/GhostRedirectOverlay";
 import { CommandPaletteGhost } from "@/components/ui/CommandPaletteGhost";
 import { GlobalMatrixLayer } from "@/components/ui/GlobalMatrixLayer";
 import { VideoWallBackground } from "@/components/ui/VideoWallBackground";
+import { useCanonicalMeta } from "@/hooks/useCanonicalMeta";
 
 interface MainLayoutProps {
   children: ReactNode;
 }
 
 export function MainLayout({ children }: MainLayoutProps) {
+  useCanonicalMeta();
   return (
     <div className="app-shell min-h-[100dvh] bg-background flex flex-col relative">
       <GlobalMatrixLayer />

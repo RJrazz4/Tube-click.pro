@@ -5,6 +5,7 @@ import { GhostNodeStatus } from "./GhostNodeStatus";
 import { LiveActiveCounter } from "./LiveActiveCounter";
 import { BroadcastSyncIndicator } from "./BroadcastSyncIndicator";
 import { GhostIntelDrop } from "./GhostIntelDrop";
+import { ViralOverdriveMiniBanner } from "@/components/referrals/ViralOverdriveMiniBanner";
 
 /**
  * PageWrapperGhost - Phase 5 Global Polish Wrapper
@@ -35,6 +36,7 @@ export function PageWrapperGhost({ children, intensity = "low", showTicker = tru
           </div>
         )}
         {showIntel && <GhostIntelDrop />}
+        <ViralOverdriveMiniBanner />
         {children}
       </div>
     </div>
