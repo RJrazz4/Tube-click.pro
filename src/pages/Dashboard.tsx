@@ -18,6 +18,8 @@ import { VideoWallBackground } from "@/components/ui/VideoWallBackground";
 import { WarRoomTicker } from "@/components/ui/WarRoomTicker";
 import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
 import { LiveActiveCounter, LossAversionTicker } from "@/components/ui/LiveActiveCounter";
+import { GhostIntelDrop } from "@/components/ui/GhostIntelDrop";
+import { BroadcastSyncIndicator } from "@/components/ui/BroadcastSyncIndicator";
 
 const ViralGrowthPass = lazy(() => import("@/components/referrals/ViralGrowthPass").then(m => ({ default: m.ViralGrowthPass })));
 const CompetitorShowdown = lazy(() => import("@/components/showdown/CompetitorShowdown").then(m => ({ default: m.CompetitorShowdown })));
@@ -108,8 +110,10 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-center gap-3">
           <LiveActiveCounter />
           <GhostNodeStatus compact />
+          <BroadcastSyncIndicator compact />
           {wideningGap && wideningGap.dailyLoss > 0 && <LossAversionTicker dailyLoss={wideningGap.dailyLoss} />}
         </div>
+        <GhostIntelDrop />
 
         {profile ? (
           <div className="relative overflow-hidden rounded-2xl glass-strong border-primary/20 min-h-[160px] md:min-h-[200px] bracket">

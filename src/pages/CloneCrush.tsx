@@ -9,6 +9,10 @@ import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
 import { LiveActiveCounter, LossAversionTicker } from "@/components/ui/LiveActiveCounter";
 import { VideoWallBackground } from "@/components/ui/VideoWallBackground";
 import { NeuralVelocityEngine } from "@/components/ui/NeuralVelocityEngine";
+import { ParticleBurst } from "@/components/ui/ParticleBurst";
+import { GhostIntelDrop } from "@/components/ui/GhostIntelDrop";
+import { BroadcastSyncIndicator } from "@/components/ui/BroadcastSyncIndicator";
+import { XpGainPopup } from "@/components/ui/XpGainPopup";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -57,6 +61,9 @@ export default function CloneCrush() {
   const [activeTab, setActiveTab] = useState("script");
   const [logSteps, setLogSteps] = useState<{ label: string; status: "pending" | "processing" | "success" | "rerouting" | "error"; meta?: string }[]>([]);
   const [showBoot, setShowBoot] = useState(true);
+  const [burstTrigger, setBurstTrigger] = useState(0);
+  const [xpTrigger, setXpTrigger] = useState(0);
+  const [showIntelDrop, setShowIntelDrop] = useState(true);
 
   const transcriptMutation = useTranscriptExtraction();
   const cloneCrushMutation = useCloneCrushMutation();
@@ -206,7 +213,11 @@ export default function CloneCrush() {
         saveContent({ type: "script", title: `Chain-Loop: ${rw.rewrittenTitle.substring(0,35)}...`, content: `GLITCH ${rw.glitchIntensity||60}% | TITLE: ${rw.rewrittenTitle} | HOOK: ${rw.glitchHook} | SCRIPT: ${rw.fullScript} | PROMPTS: ${reverseEngineeredPrompts.length>0?reverseEngineeredPrompts.join('\\n'):rw.thumbnailPrompt} | GUIDE: ${rw.editingGuide}`, metadata: { platform: "YouTube", style: selectedTier === "premium" ? "99% Glitch" : "60% Standard" } });
         incrementStat("scriptsGenerated");
         steps[6].status = "success"; steps[6].meta = "5 ASSETS • SECURED"; setLogSteps([...steps]);
-        toast.success(`🚀 ${selectedTier==="premium"?"99% GLITCH":"60% Standard"} Chain-Loop Secured via Ghost Node • ${promptCount} prompts`);
+        setBurstTrigger(v => v + 1);
+        setXpTrigger(v => v + 1);
+        if (navigator.vibrate) navigator.vibrate([20, 30, 20]);
+        try { const s = JSON.parse(localStorage.getItem("ghost_streak_v2") || "{}"); const xp = (s.xp || 0) + 30; const streak = s.streak || 1; localStorage.setItem("ghost_streak_v2", JSON.stringify({ ...s, xp, streak, lastDate: new Date().toDateString() })); } catch {}
+        toast.success(`🚀 ${selectedTier==="premium"?"99% GLITCH":"60% Standard"} Chain-Loop Secured via Ghost Node • ${promptCount} prompts • +30 XP`);
       } else throw new Error(rewriteRes.error || "Compilation interference");
     } catch (err: any) {
       const rerouted = steps.map(s => s.status==="processing" ? { ...s, status:"rerouting" as const, meta:"GHOST RELAY"} : s);
@@ -232,8 +243,16 @@ export default function CloneCrush() {
         <div className="flex flex-wrap items-center gap-3">
           <LiveActiveCounter compact />
           <GhostNodeStatus compact />
+          <BroadcastSyncIndicator compact />
           {wideningGap && wideningGap.dailyLoss>0 && <LossAversionTicker dailyLoss={wideningGap.dailyLoss} />}
         </div>
+        {showIntelDrop && <GhostIntelDrop />}
+      </div>
+
+      {/* Dopamine overlays */}
+      <XpGainPopup trigger={xpTrigger} xp={30} label="XP • Ghost Chain-Loop" />
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] pointer-events-none z-50">
+        <ParticleBurst trigger={burstTrigger} />
       </div>
 
       <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">

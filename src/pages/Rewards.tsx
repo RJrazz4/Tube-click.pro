@@ -17,6 +17,8 @@ import { GhostStreak } from "@/components/referrals/GhostStreak";
 import { WarRoomTicker } from "@/components/ui/WarRoomTicker";
 import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
 import { LiveActiveCounter } from "@/components/ui/LiveActiveCounter";
+import { GhostIntelDrop } from "@/components/ui/GhostIntelDrop";
+import { BroadcastSyncIndicator } from "@/components/ui/BroadcastSyncIndicator";
 import { VideoWallBackground } from "@/components/ui/VideoWallBackground";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
@@ -90,7 +92,8 @@ export default function Rewards() {
       <VideoWallBackground intensity="low" />
       <div className="relative z-10 space-y-6">
         <WarRoomTicker />
-        <div className="flex flex-wrap items-center gap-3"><LiveActiveCounter /><GhostNodeStatus compact /><span className="text-[10px] font-mono text-muted-foreground">LEVEL 4 • PRIVATE TRACKER • tubeclickpro.in • Ghost Protocol • Value $97 → ₹0</span></div>
+        <div className="flex flex-wrap items-center gap-3"><LiveActiveCounter /><GhostNodeStatus compact /><BroadcastSyncIndicator compact /><span className="text-[10px] font-mono text-muted-foreground">LEVEL 4 • PRIVATE TRACKER • tubeclickpro.in • Ghost Protocol • Value $97 → ₹0</span></div>
+        <GhostIntelDrop />
 
         <section className="relative overflow-hidden rounded-3xl glass-strong border-primary/30 p-6 shadow-[0_0_70px_rgba(139,92,246,0.15)] md:p-8 bracket">
           <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
