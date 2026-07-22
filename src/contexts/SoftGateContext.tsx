@@ -126,7 +126,7 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
     void initializeSession();
     return () => {
       active = false;
-      listener.subscription.unsubscribe();
+      listener?.subscription?.unsubscribe();
     };
   }, [syncSession]);
 
