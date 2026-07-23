@@ -4,7 +4,18 @@ import { isTemporaryHost, getCanonicalRoot } from "@/lib/domain/canonical";
 /**
  * Ghost Redirect Overlay - If user lands on vercel.app, auto-redirect to tubeclickpro.in
  * Premium illusion: "REDIRECTING TO SECURE DOMAIN" terminal
+ * 
+ * CRITICAL: Skip redirect on /auth/callback to preserve OAuth hash fragment (access_token)
+ * during Supabase popup auth flow. The hash contains the token and must reach the
+ * AuthCallback page for detectSessionInUrl to work.
  */
+
+// Auth routes that must NEVER be redirected - they rely on URL hash for tokens
+const AUTH_ROUTES = ["/auth/callback", "/auth/"];
+
+function isAuthRoute(pathname: string): boolean {
+  return AUTH_ROUTES.some(route => pathname === route || pathname.startsWith(route));
+}
 
 export function GhostRedirectOverlay() {
   const [show, setShow] = useState(false);
@@ -13,11 +24,19 @@ export function GhostRedirectOverlay() {
   useEffect(() => {
     try {
       const host = window.location.hostname;
+      const pathname = window.location.pathname;
+      
+      // Never redirect auth routes - they need the URL hash intact for OAuth tokens
+      if (isAuthRoute(pathname)) {
+        return;
+      }
+      
       if (isTemporaryHost(host) && !host.includes("tubeclickpro.in")) {
         setShow(true);
         const interval = setInterval(() => setCountdown(c => c - 1), 1000);
         const timeout = setTimeout(() => {
           const canonical = getCanonicalRoot();
+          // Preserve full URL including hash fragment (critical for auth tokens)
           const path = window.location.pathname + window.location.search + window.location.hash;
           window.location.href = `${canonical}${path}`;
         }, 3200);
