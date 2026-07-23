@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
+import { getCanonicalRoot } from "@/lib/domain/canonical";
 import { consumeGuestPreview, loadProEntitlement, RegistrationRequiredError } from "@/lib/auth/guestAccess";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
@@ -136,7 +137,14 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const receiveAuth = (event: MessageEvent) => {
       const isAuthComplete = event.data === "tc-auth-complete" || event.data?.type === "tc-auth-complete";
-      if (event.origin !== window.location.origin || !isAuthComplete) return;
+      if (!isAuthComplete) return;
+      const canonicalOrigin = getCanonicalRoot();
+      if (event.origin !== window.location.origin) {
+        // The OAuth session belongs to canonicalOrigin. Do not attempt to read
+        // temporary-host storage; navigate there so the canonical client owns it.
+        window.location.assign(`${canonicalOrigin}${window.location.pathname}${window.location.search}`);
+        return;
+      }
       void supabase.auth.getSession().then(({ data }) => syncSession(data.session));
     };
     window.addEventListener("message", receiveAuth);
