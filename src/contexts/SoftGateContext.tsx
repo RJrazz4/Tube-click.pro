@@ -132,7 +132,8 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const receiveAuth = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin || event.data !== "tc-auth-complete") return;
+      const isAuthComplete = event.data === "tc-auth-complete" || event.data?.type === "tc-auth-complete";
+      if (event.origin !== window.location.origin || !isAuthComplete) return;
       void supabase.auth.getSession().then(({ data }) => syncSession(data.session));
     };
     window.addEventListener("message", receiveAuth);
