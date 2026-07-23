@@ -34,7 +34,10 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   // Never treat the initial false value as a signed-out decision. Supabase
   // restores persisted tokens asynchronously from localStorage.
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Hydrate the presentation layer from the durable app snapshot immediately.
+  // Supabase remains the source of truth, but this prevents a returning user
+  // from seeing a signed-out header while its local refresh token is restored.
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(useAuthStore.getState().user));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"signup" | "login">("signup");
