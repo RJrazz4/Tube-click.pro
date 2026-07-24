@@ -46,6 +46,10 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   const [authError, setAuthError] = useState("");
   const pendingRef = useRef<PendingAuth | null>(null);
   const pendingPromiseRef = useRef<Promise<boolean> | null>(null);
+  // Keep the exact WindowProxy returned by window.open so callback messages can
+  // be bound to the popup that this provider created, rather than trusting an
+  // arbitrary window that knows the message shape.
+  const authPopupRef = useRef<Window | null>(null);
 
   const finishPending = useCallback((authenticated: boolean) => {
     const current = pendingRef.current;
@@ -68,14 +72,22 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
 
     setIsAuthenticated(true);
     const user = session.user;
+    const metadata = user.user_metadata ?? {};
+    const displayName = [metadata.full_name, metadata.name, metadata.user_name]
+      .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+    const avatar = [metadata.avatar_url, metadata.picture]
+      .find((value): value is string => typeof value === "string" && value.trim().length > 0);
     setUser({
       id: user.id,
       email: user.email,
-      name: typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : user.email?.split("@")[0],
-      avatar: typeof user.user_metadata?.avatar_url === "string" ? user.user_metadata.avatar_url : undefined,
+      name: displayName || user.email?.split("@")[0],
+      avatar,
       createdAt: user.created_at,
       lastActive: new Date().toISOString(),
     });
+    // Authentication is complete now; entitlement is an independent follow-up
+    // request and must not hold the sign-in dialog or guarded action open.
+    finishPending(true);
 
     try {
       const entitlement = await loadProEntitlement();
@@ -89,8 +101,6 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
     } catch {
       // Authentication remains valid even if entitlement sync is temporarily unavailable.
     }
-
-    finishPending(true);
   }, [finishPending, license.expiresAt, license.tier, setAppTier, setLicense, setUser]);
 
   useEffect(() => {
@@ -138,14 +148,35 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
     const receiveAuth = (event: MessageEvent) => {
       const isAuthComplete = event.data === "tc-auth-complete" || event.data?.type === "tc-auth-complete";
       if (!isAuthComplete) return;
-      const canonicalOrigin = getCanonicalRoot();
-      if (event.origin !== window.location.origin) {
-        // The OAuth session belongs to canonicalOrigin. Do not attempt to read
-        // temporary-host storage; navigate there so the canonical client owns it.
-        window.location.assign(`${canonicalOrigin}${window.location.pathname}${window.location.search}`);
+
+      const canonicalRoot = getCanonicalRoot();
+      const callbackOrigin = new URL(canonicalRoot).origin;
+      // Never accept an auth signal from Google, Supabase, or another page. If
+      // this provider opened a popup, also require the message to come from that
+      // exact WindowProxy. The callback sends no credentials in the message.
+      if (event.origin !== callbackOrigin) return;
+      if (!authPopupRef.current || event.source !== authPopupRef.current) return;
+      authPopupRef.current = null;
+
+      if (window.location.origin !== callbackOrigin) {
+        // Browser storage is origin-scoped. The callback persisted the session
+        // on the canonical origin, so a preview deployment must move there
+        // before trying to read it.
+        window.location.assign(`${canonicalRoot}${window.location.pathname}${window.location.search}`);
         return;
       }
-      void supabase.auth.getSession().then(({ data }) => syncSession(data.session));
+
+      // The callback only posts after initialize() has persisted the session.
+      // Reading it here makes the UI update deterministic even where the
+      // browser's BroadcastChannel notification is delayed or unavailable.
+      void supabase.auth.getSession().then(({ data, error }) => {
+        if (error || !data.session) {
+          console.error("[auth] OAuth completed without a readable session", error);
+          setAuthError("Sign-in completed, but the session could not be restored. Please try again.");
+          return;
+        }
+        void syncSession(data.session);
+      });
     };
     window.addEventListener("message", receiveAuth);
     return () => window.removeEventListener("message", receiveAuth);
@@ -191,6 +222,8 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       if (!data.url) throw new Error("Google authentication could not be started");
       const popup = window.open(data.url, "tubeclick-google-auth", "popup=yes,width=520,height=720");
       if (!popup) throw new Error("Pop-up blocked. Allow pop-ups and try again.");
+      authPopupRef.current = popup;
+      popup.focus();
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Google authentication failed");
     } finally {
