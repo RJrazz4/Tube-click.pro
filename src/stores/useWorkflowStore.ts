@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 export type WorkflowStage = "profile" | "competitor-analysis" | "content-package" | "production" | "complete";
-export type WorkflowDestination = "voice" | "repurposer";
+export type WorkflowDestination = "voice" | "repurposer" | "tubebot";
 
 export interface WorkflowProfile {
   id: string;

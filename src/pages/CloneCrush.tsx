@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
-  Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, Award, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio,
+  Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, Award, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio, Bot,
 } from "lucide-react";
 import { GhostBootSequence } from "@/components/ui/GhostBootSequence";
 import { WarRoomTicker } from "@/components/ui/WarRoomTicker";
@@ -33,6 +33,18 @@ function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
     timeoutId = window.setTimeout(() => reject(new Error(`Request timed out after ${Math.round(timeoutMs / 1000)} seconds`)), timeoutMs);
   });
   return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
+}
+
+const VIRAL_VIEW_THRESHOLD = 50_000;
+function clientViewCount(video: any): number {
+  if (typeof video?.viewsCount === "number") return video.viewsCount;
+  const text = String(video?.views || video?.viewsText || "").toLowerCase().replace(/,/g, "");
+  const match = text.match(/([\d.]+)\s*(billion|million|thousand|b|m|k)?/);
+  if (!match) return 0;
+  const base = parseFloat(match[1]);
+  const suffix = match[2] || "";
+  const multiplier = suffix.startsWith("b") ? 1_000_000_000 : suffix.startsWith("m") ? 1_000_000 : (suffix.startsWith("k") || suffix.startsWith("thousand")) ? 1_000 : 1;
+  return Number.isFinite(base) ? Math.round(base * multiplier) : 0;
 }
 
 export default function CloneCrush() {
@@ -112,14 +124,16 @@ export default function CloneCrush() {
     try {
       const res = await cloneCrushMutation.mutateAsync({ action: "competitors", niche: deducedNiche, description: discoveryDescription });
       if (res.success && res.competitors) {
+        const viralCompetitors = res.competitors.filter((v: any) => clientViewCount(v) >= VIRAL_VIEW_THRESHOLD);
+        if (viralCompetitors.length === 0) throw new Error("No 50k+ viral competitors found");
         const envyData = (res as any).envyMetrics || null;
-        setCompetitors(res.competitors, envyData);
-        const unlocked = res.competitors.find((v: any) => !v.isLocked) || res.competitors[0];
+        setCompetitors(viralCompetitors, envyData);
+        const unlocked = viralCompetitors.find((v: any) => !v.isLocked) || viralCompetitors[0];
         setSelectedVideo(unlocked);
         selectWorkflowCompetitor({ videoId: unlocked.videoId, title: unlocked.title, url: unlocked.url, channelName: unlocked.channelName, thumbnail: unlocked.thumbnail }, deducedNiche);
         const isGhost = (res as any).ghostReconstructed;
-        toast.success(isGhost ? `Ghost Matrix Reconstructed! ${res.competitors.length} competitors via MUM-01 mesh` : `Showdown Matrix Ready! ${res.competitors.length} live competitors`, { id: "competitors-find" });
-        cloneCrushMutation.mutateAsync({ action: "threat-alerts", competitors: res.competitors, userSubscribers: prof.subscriberCount || 0 }).then((alertRes: any) => {
+        toast.success(isGhost ? `Ghost Matrix Reconstructed! ${viralCompetitors.length} viral competitors via MUM-01 mesh` : `Showdown Matrix Ready! ${viralCompetitors.length} 50k+ live competitors`, { id: "competitors-find" });
+        cloneCrushMutation.mutateAsync({ action: "threat-alerts", competitors: viralCompetitors, userSubscribers: prof.subscriberCount || 0 }).then((alertRes: any) => {
           if (alertRes.success) setThreatAlerts(alertRes.alerts || [], alertRes.wideningGap || null);
         }).catch(() => {});
       } else throw new Error(res.error || "No competitors");
@@ -180,10 +194,10 @@ export default function CloneCrush() {
 
       let transcriptData: any;
       try {
-        transcriptData = await (transcriptMutation.mutateAsync as any)({ url: selectedVideo.url, title: selectedVideo.title });
-      } catch {
-        steps[2].status = "rerouting"; steps[2].meta = "GHOST RECONSTRUCT"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,700));
-        transcriptData = { transcript: `Ghost reconstructed scaffold for ${selectedVideo.title}: High-retention script about ${nicheInput}. Hook, open loop, value, payoff loop.`, source: "ghost-local" };
+        transcriptData = await withClientTimeout((transcriptMutation.mutateAsync as any)({ url: selectedVideo.url, title: selectedVideo.title }), 8_000);
+      } catch (err: any) {
+        steps[2].status = "rerouting"; steps[2].meta = err?.code === "TIMEOUT" || /timed out|timeout/i.test(err?.message || "") ? "TIMEOUT • SYNTH" : "GHOST RECONSTRUCT"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,350));
+        transcriptData = { transcript: `Ghost reconstructed scaffold for ${selectedVideo.title}: High-retention script about ${nicheInput}. Hook, open loop, value, payoff loop.`, source: "ghost-local", ghostNode: "LOCAL-SYNTH" };
       }
 
       if (!transcriptData?.transcript || transcriptData.transcript.length < 10) {
@@ -193,14 +207,14 @@ export default function CloneCrush() {
       steps[2].status = "success"; steps[2].meta = transcriptData.source?.includes("ghost") ? `${transcriptData.ghostNode || "MUM-01"} • SYNTH` : "LIVE CAPTIONS"; steps[3].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,300));
       steps[3].status = "success"; steps[4].status = "processing"; setLogSteps([...steps]);
 
-      const rewriteRes = await cloneCrushMutation.mutateAsync({ action: "rewrite", targetVideoId: selectedVideo.videoId, originalTranscript: transcriptData.transcript, originalTitle: selectedVideo.title, niche: nicheInput, tier: selectedTier });
+      const rewriteRes = await withClientTimeout(cloneCrushMutation.mutateAsync({ action: "rewrite", targetVideoId: selectedVideo.videoId, originalTranscript: transcriptData.transcript, originalTitle: selectedVideo.title, niche: nicheInput, tier: selectedTier }), 55_000);
       steps[4].status = "success"; steps[5].status = "processing"; setLogSteps([...steps]);
 
       if (rewriteRes.success && rewriteRes.rewrite) {
         const rw = rewriteRes.rewrite;
         let reverseEngineeredPrompts: string[] = []; let reverseEngineeredSource: any = null;
         try {
-          const reverseRes = await cloneCrushMutation.mutateAsync({ action: "thumbnail-reverse", glitchTitle: rw.rewrittenTitle, niche: nicheInput, tier: selectedTier });
+          const reverseRes = await withClientTimeout(cloneCrushMutation.mutateAsync({ action: "thumbnail-reverse", glitchTitle: rw.rewrittenTitle, niche: nicheInput, tier: selectedTier }), 18_000);
           const reverseData = reverseRes as any;
           if (reverseData.success && reverseData.thumbnailPrompts) { reverseEngineeredPrompts = reverseData.thumbnailPrompts; reverseEngineeredSource = reverseData.sourceVideo || null; }
         } catch {}
@@ -229,6 +243,7 @@ export default function CloneCrush() {
 
   const handleSendToVoiceover = () => { if (!activeRewrite) return; startWorkflowHandoff("voice"); toast.success("Script loaded into Voiceover Studio!"); navigate("/voice"); };
   const handleSendToRepurposer = () => { if (!activeRewrite) return; startWorkflowHandoff("repurposer"); toast.success("Script loaded into Repurposer!"); navigate("/repurposer"); };
+  const handleSendToTubeBot = () => { if (!activeRewrite) return; startWorkflowHandoff("tubebot"); toast.success("Chain-Loop loaded into TubeBot Agent!"); navigate("/chat-agent"); };
   const handleCloneAndCrush = () => { if (!selectedVideo || (selectedVideo.isLocked && license.tier==="free")) return performCloneAndCrush(); return runGuarded("unlock next Clone & Crush result", performCloneAndCrush); };
   const handleCopyThumbnailPrompt = async () => { if (!activeRewrite) return; try { await navigator.clipboard.writeText(activeRewrite.thumbnailPrompt || "Cinematic thumbnail"); toast.success("Thumbnail prompt copied!"); } catch { toast.error("Copy failed"); } };
   const handleCopySeoTags = async () => { if (!activeRewrite) return; try { await navigator.clipboard.writeText((activeRewrite.seoTags||[]).join(", ")); toast.success("SEO tags copied!"); } catch { toast.error("Copy failed"); } };
@@ -419,7 +434,7 @@ export default function CloneCrush() {
               <CardHeader className="pb-3 border-b border-border/40"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[9px] font-mono tracking-widest uppercase">Chain-Loop Master • Ghost Secured</span><CardTitle className="font-display text-base text-foreground mt-2 line-clamp-2">{activeRewrite.rewrittenTitle}</CardTitle><p className="text-[10px] text-muted-foreground truncate mt-1">Based on: {activeRewrite.targetVideoTitle} • MUM-01</p></div><Button variant="outline" size="icon" onClick={handleCopyScript} className="shrink-0 border-border hover:border-primary/40 text-muted-foreground hover:text-primary active:scale-95"><Copy className="w-4 h-4" /></Button></div></CardHeader>
               <CardContent className="pt-5 space-y-5">
                 <div className="p-4 rounded-xl glass-ghost border-primary/30 space-y-3"><div className="flex items-center justify-between"><p className="text-xs font-display font-bold text-foreground flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-primary animate-pulse" />Chain-Loop Complete: 5 Assets</p><span className="text-[10px] bg-primary text-primary-foreground font-mono font-bold px-2 py-0.5 rounded-full uppercase">No-Click Handoff</span></div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><Button onClick={handleSendToVoiceover} size="sm" className="cyber-button text-xs h-9 font-display gap-1.5 justify-start px-3"><Mic className="w-3.5 h-3.5 shrink-0" /><span>Send to Voiceover</span></Button><Button onClick={handleSendToRepurposer} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Share2 className="w-3.5 h-3.5 text-primary shrink-0" /><span>Repurpose</span></Button><Button onClick={handleCopyThumbnailPrompt} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Image className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy Thumb Prompt</span></Button><Button onClick={handleCopySeoTags} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Search className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy SEO</span></Button></div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><Button onClick={handleSendToVoiceover} size="sm" className="cyber-button text-xs h-9 font-display gap-1.5 justify-start px-3"><Mic className="w-3.5 h-3.5 shrink-0" /><span>Send to Voiceover</span></Button><Button onClick={handleSendToTubeBot} size="sm" className="cyber-button text-xs h-9 font-display gap-1.5 justify-start px-3"><Bot className="w-3.5 h-3.5 shrink-0" /><span>Send to TubeBot</span></Button><Button onClick={handleSendToRepurposer} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Share2 className="w-3.5 h-3.5 text-primary shrink-0" /><span>Repurpose</span></Button><Button onClick={handleCopyThumbnailPrompt} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Image className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy Thumb Prompt</span></Button><Button onClick={handleCopySeoTags} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Search className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy SEO</span></Button></div>
                 </div>
                 <div className="flex items-center gap-3"><div className="flex-1"><div className="flex items-center justify-between mb-1"><span className="text-[10px] font-display font-bold text-foreground uppercase tracking-wider">Glitch Intensity</span><span className={`text-xs font-mono font-bold ${(activeRewrite.glitchIntensity||60)>=90?'text-red-400':'text-yellow-400'}`}>{activeRewrite.glitchIntensity||60}%</span></div><div className="h-2 bg-secondary rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-1000 ${(activeRewrite.glitchIntensity||60)>=90?'bg-gradient-to-r from-red-600 via-red-400 to-orange-400':'bg-gradient-to-r from-yellow-600 via-yellow-400 to-green-400'}`} style={{width:`${activeRewrite.glitchIntensity||60}%`}} /></div></div>{activeRewrite.glitchTechniques && <div className="flex flex-wrap gap-1">{activeRewrite.glitchTechniques.map((tech:any,i:number)=><span key={i} className="text-[8px] font-mono bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded">{tech}</span>)}</div>}</div>
                 <div className="relative rounded-xl border border-destructive/30 bg-destructive/5 p-4 overflow-hidden shadow-sm"><div className="absolute top-0 right-0 w-20 h-20 bg-destructive/10 rounded-full blur-xl" /><div className="flex items-start gap-3 relative z-10"><ShieldAlert className="w-5 h-5 text-destructive shrink-0 mt-0.5" /><div><p className="text-xs font-bold text-destructive font-display uppercase tracking-wider">15s Glitch Hook ({(activeRewrite.glitchIntensity||60)>=90?'EXTREME':'Standard'})</p><p className="text-xs text-foreground mt-1.5 leading-relaxed font-medium italic">"{activeRewrite.glitchHook}"</p></div></div></div>

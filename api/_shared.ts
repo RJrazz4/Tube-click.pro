@@ -81,12 +81,35 @@ export interface OpenRouterFetchOutcome {
   failedOver: boolean;
 }
 
-/** OPENROUTER_API_KEYS=sk-or-1,sk-or-2,... → trimmed, deduped array. Throws a clear config error when empty. */
+/**
+ * Normalized OpenRouter key resolution (RC-4 fix).
+ *
+ * Accepts, in priority order:
+ *   1. OPENROUTER_API_KEYS=k1,k2,k3   (preferred plural/comma form)
+ *   2. OPENROUTER_API_KEY=k1            (legacy singular alias)
+ *   3. OPENROUTER_API_KEY_1/2/3...      (numbered form — common 3-key setup)
+ *
+ * Whichever form is present, returns a trimmed, de-duplicated array. Throws a
+ * clear, actionable config error when no usable key is found — so a mis-set
+ * variable name can never silently disable rotation.
+ */
 export function openRouterKeys(): string[] {
-  const raw = (process.env.OPENROUTER_API_KEYS || "").trim();
-  const unique = [...new Set(raw.split(",").map(k => k.trim()).filter(Boolean))];
+  const env = process.env;
+  const collected: string[] = [];
+  const plural = (env.OPENROUTER_API_KEYS || "").trim();
+  if (plural) {
+    collected.push(...plural.split(","));
+  } else {
+    const singular = (env.OPENROUTER_API_KEY || "").trim();
+    if (singular) collected.push(singular);
+    for (let i = 1; i <= 20; i++) {
+      const numbered = (env[`OPENROUTER_API_KEY_${i}`] || "").trim();
+      if (numbered) collected.push(numbered);
+    }
+  }
+  const unique = [...new Set(collected.map(k => k.trim()).filter(Boolean))];
   if (!unique.length) {
-    throw new Error("OPENROUTER_API_KEYS not configured on server. Set a comma-separated list of OpenRouter keys (key1,key2,key3) in the Vercel project env vars.");
+    throw new Error("OPENROUTER_API_KEYS not configured on server. Set a comma-separated list (OPENROUTER_API_KEYS=key1,key2,key3), a single OPENROUTER_API_KEY, or numbered OPENROUTER_API_KEY_1/2/3 in the Vercel project env vars.");
   }
   return unique;
 }
@@ -175,20 +198,34 @@ export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<Op
     const orBody = toOpenRouterBody(geminiStyleBody, model);
     lastOrBody = orBody;
 
-    keysLoop: for (let ki = 0; ki < keys.length; ki++) {
+        keysLoop: for (let ki = 0; ki < keys.length; ki++) {
       keysTried++;
       for (let attempt = 0; attempt < 2; attempt++) {
-        lastRes = await fetch(OPENROUTER_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${keys[ki]}`,
-            // Phase F2: env-driven attribution headers — no literal <YOUR_SITE_*> placeholders
-            "X-Title": process.env.OPENROUTER_SITE_TITLE || "TubeClick Pro",
-            ...(process.env.OPENROUTER_SITE_URL ? { "HTTP-Referer": process.env.OPENROUTER_SITE_URL } : {}),
-          },
-          body: JSON.stringify(orBody),
-        });
+        // Phase F3: per-attempt hard timeout — a hung/slow upstream can never
+        // pin this loop (and the client) indefinitely. Bounded generously so
+        // legitimately slow-but-working requests still complete.
+        const PER_ATTEMPT_TIMEOUT_MS = Math.max(2000, parseInt(process.env.OPENROUTER_ATTEMPT_TIMEOUT_MS || "15000", 10) || 15000);
+        const attemptTimer = timeoutSignal(PER_ATTEMPT_TIMEOUT_MS);
+        try {
+          lastRes = await fetch(OPENROUTER_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${keys[ki]}`,
+              // Phase F2: env-driven attribution headers — no literal <YOUR_SITE_*> placeholders
+              "X-Title": process.env.OPENROUTER_SITE_TITLE || "TubeClick Pro",
+              ...(process.env.OPENROUTER_SITE_URL ? { "HTTP-Referer": process.env.OPENROUTER_SITE_URL } : {}),
+            },
+            body: JSON.stringify(orBody),
+            signal: attemptTimer.signal,
+          });
+        } catch (fetchErr) {
+          const reason = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+          console.error(`[openrouter] upstream fetch failed (timeout/network) model=${model} key#${ki + 1}/${keys.length}: ${reason} — rotating to next key`);
+          break; // transient transport failure → next key
+        } finally {
+          attemptTimer.clear();
+        }
         lastModel = model;
 
         const failedOver = attempted.length > 1 || keysTried > 1;
@@ -225,10 +262,15 @@ export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<Op
     }
   }
 
+  if (!lastRes) {
+    // Every (model, key) attempt failed at the transport layer (timeout /
+    // connection refused). Surface a clean error instead of dereferencing null.
+    throw new Error("OpenRouter unreachable: every key/model attempt failed at the network layer (timeout or connection refused).");
+  }
   if (lastOrBody) {
     console.error(`[openrouter] ALL keys x models exhausted — last outbound snapshot: ${JSON.stringify(lastOrBody).slice(0, 1200)}`);
   }
-  return { res: lastRes!, model: lastModel, attempted, failedOver: attempted.length > 1 || keysTried > 1 };
+  return { res: lastRes, model: lastModel, attempted, failedOver: attempted.length > 1 || keysTried > 1 };
 }
 
 export function cleanupJson(value: string) {
