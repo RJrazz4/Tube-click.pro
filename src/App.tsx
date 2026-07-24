@@ -10,6 +10,7 @@ import { SoftGateProvider } from "@/contexts/SoftGateContext";
 import { SoftGateRoute } from "@/components/auth/SoftGateRoute";
 import { AppErrorBoundary } from "@/components/ui/AppErrorBoundary";
 import { ConnectionStatus } from "@/components/ui/ConnectionStatus";
+import { Analytics as VercelAnalytics } from "@vercel/analytics/react";
 
 // Eager load the dashboard for instant first paint
 import Index from "./pages/Index";
@@ -89,6 +90,7 @@ const App = () => (
       </SoftGateProvider>
     </TooltipProvider>
     </QueryClientProvider>
+    <VercelAnalytics />
   </AppErrorBoundary>
 );
 
