@@ -18,6 +18,8 @@ import { useNavigate } from "react-router-dom";
 import { useSoftGate } from "@/contexts/SoftGateContext";
 
 import { PageWrapperGhost } from "@/components/ui/PageWrapperGhost";
+import { useWorkflowStore } from "@/stores/useWorkflowStore";
+import { buildTubeBotSeed, type TubeBotSeed } from "@/lib/workflow/chainLoopSeed";
 
 interface GeneratedContent {
   titles: string[];
@@ -88,6 +90,22 @@ export default function ChatAgent() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { runGuarded } = useSoftGate();
+  const activeWorkflow = useWorkflowStore((s) => s.activeWorkflow);
+  const [pendingSeed, setPendingSeed] = useState<TubeBotSeed | null>(null);
+  const consumedWorkflowId = useRef<string | null>(null);
+
+  // Master Plan Phase 4 — auto-consume a Chain-Loop → TubeBot handoff.
+  // Prefill the topic and surface the incoming payload once per workflow,
+  // so the user reviews it before hitting Send (no silent auto-generation).
+  useEffect(() => {
+    if (!activeWorkflow) return;
+    if (consumedWorkflowId.current === activeWorkflow.id) return;
+    const seed = buildTubeBotSeed(activeWorkflow);
+    if (!seed) return;
+    consumedWorkflowId.current = activeWorkflow.id;
+    setTopic((current) => (current.trim() ? current : seed.topic));
+    setPendingSeed(seed);
+  }, [activeWorkflow]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -141,6 +159,7 @@ export default function ChatAgent() {
         platform,
         style,
         language,
+        ...(pendingSeed ? { context: pendingSeed.context } : {}),
       });
 
       // Validate response structure
@@ -311,6 +330,31 @@ ${generatedContent.description || 'N/A'}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col p-3 md:p-4 overflow-hidden">
+            {pendingSeed && (
+              <div className="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-3 animate-fade-in">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      Chain-Loop payload received
+                      <span className="text-[9px] font-mono uppercase tracking-wider bg-primary/15 text-primary px-1.5 py-0.5 rounded-full">TubeBot</span>
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{pendingSeed.summary}</p>
+                    <p className="text-[10px] text-primary/80 mt-1">Topic pre-filled — review, then hit Send to build on this intel.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPendingSeed(null)}
+                    className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="Dismiss Chain-Loop payload"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
             {/* Settings */}
             <div className="grid grid-cols-3 gap-2 md:gap-3 mb-4">
               <div className="space-y-1.5">

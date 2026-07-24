@@ -1,4 +1,4 @@
-import { ArrowRight, Clapperboard, FileText, Mic, RotateCcw, Share2, X } from "lucide-react";
+import { ArrowRight, Bot, Clapperboard, FileText, Mic, RotateCcw, Share2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { useWorkflowStore, type WorkflowDestination } from "@/stores/useWorkflow
 const DESTINATION = {
   voice: { label: "Continue in Voiceover", route: "/voice", icon: Mic },
   repurposer: { label: "Continue in Repurposer", route: "/repurposer", icon: Share2 },
+  tubebot: { label: "Continue in TubeBot", route: "/chat-agent", icon: Bot },
 } satisfies Record<WorkflowDestination, { label: string; route: string; icon: typeof Mic }>;
 
 export function WorkflowContinueCard() {

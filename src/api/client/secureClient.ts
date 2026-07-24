@@ -112,7 +112,11 @@ const VERCEL_ROUTE_MAP: Record<string, string> = {
 };
 
 function getApiEndpoint(functionName: string): { url: string; headers: Record<string, string>; isVercel: boolean } {
+  // generate-content (TubeBot) is hard-pinned to Vercel/OpenRouter so the 3+
+  // server keys + rotation are ALWAYS on the chat path (Master Plan Phase 1).
+  // clone-crush/transcript are already pinned; the rest follow the env flag.
   const useVercelEdge = functionName === "clone-crush" || functionName === "transcript"
+    || functionName === "generate-content"
     || import.meta.env.VITE_USE_VERCEL_EDGE === "true"
     || import.meta.env.VITE_API_MODE === "vercel";
 
@@ -138,6 +142,7 @@ const MIN_INTERVAL = 600; // reduced from 1200 for snappier feel
 
 function requestTimeoutMs(functionName: string, body: unknown): number {
   const action = body && typeof body === "object" && "action" in body ? String((body as any).action || "") : "";
+  if (functionName === "generate-content") return 22_000; // server maxDuration 25s — client sits just under (Master Plan)
   if (functionName === "transcript") return 8_000;
   if (functionName === "clone-crush") {
     if (action === "profile") return 15_000;
