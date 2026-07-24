@@ -24,11 +24,34 @@ describe("Supabase session persistence hardening", () => {
     expect(clientSource).toMatch(/detectSessionInUrl:\s*true/);
   });
 
-  it("uses the canonical origin for OAuth callbacks", async () => {
+  it("serves BrowserRouter deep links so the registered production callback can mount", async () => {
+    const deployment = JSON.parse(await readFile(join(root, "vercel.json"), "utf8"));
+    const appSource = await readFile(join(root, "src/App.tsx"), "utf8");
+
+    expect(deployment.rewrites).toContainEqual({
+      source: "/(.*)",
+      destination: "/index.html",
+    });
+    expect(appSource).toMatch(/<Route path="\/auth\/callback" element={<AuthCallback \/>} \/>/);
+  });
+
+  it("uses the canonical callback and validates both popup origin and source", async () => {
     const contextSource = await readFile(join(root, "src/contexts/SoftGateContext.tsx"), "utf8");
 
     expect(contextSource).toMatch(/redirectTo:\s*`\$\{getCanonicalRoot\(\)\}\/auth\/callback`/);
-    expect(contextSource).toMatch(/event\.origin !== window\.location\.origin/);
+    expect(contextSource).toMatch(/event\.origin !== callbackOrigin/);
+    expect(contextSource).toMatch(/event\.source !== authPopupRef\.current/);
+    expect(contextSource).toMatch(/supabase\.auth\.getSession\(\)/);
+  });
+
+  it("lets Supabase consume callback credentials exactly once", async () => {
+    const callbackSource = await readFile(join(root, "src/pages/AuthCallback.tsx"), "utf8");
+
+    expect(callbackSource).toMatch(/supabase\.auth\.initialize\(\)/);
+    expect(callbackSource).toMatch(/supabase\.auth\.getSession\(\)/);
+    expect(callbackSource).not.toMatch(/exchangeCodeForSession\s*\(/);
+    expect(callbackSource).not.toMatch(/\.setSession\s*\(/);
+    expect(callbackSource).not.toMatch(/document\.referrer/);
   });
 
   it("has no blanket localStorage wipe that could remove the Supabase refresh token", async () => {
