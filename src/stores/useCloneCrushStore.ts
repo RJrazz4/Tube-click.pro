@@ -96,6 +96,28 @@ export interface EnvyMetrics {
   niche: string;
 }
 
+const VIRAL_VIEW_THRESHOLD = 50_000;
+
+function parseViews(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
+  if (typeof value !== "string") return null;
+  const normalized = value.toLowerCase().replace(/,/g, "").trim();
+  const match = normalized.match(/([\d.]+)\s*(billion|million|thousand|b|m|k)?\s*views?/) || normalized.match(/([\d.]+)\s*(billion|million|thousand|b|m|k)/);
+  if (!match) return null;
+  const base = parseFloat(match[1]);
+  if (!Number.isFinite(base)) return null;
+  const suffix = (match[2] || "").toLowerCase();
+  const multiplier = suffix.startsWith("b") ? 1_000_000_000 : suffix.startsWith("m") ? 1_000_000 : (suffix.startsWith("k") || suffix.startsWith("thousand")) ? 1_000 : 1;
+  return Math.round(base * multiplier);
+}
+
+function viralOnly(competitors: CompetitorVideo[]): CompetitorVideo[] {
+  return competitors.filter((competitor) => {
+    const count = typeof competitor.viewsCount === "number" ? competitor.viewsCount : parseViews(competitor.views);
+    return typeof count === "number" && count >= VIRAL_VIEW_THRESHOLD;
+  });
+}
+
 interface CloneCrushState {
   // Channel Profile
   profile: ProfiledChannel | null;
@@ -153,8 +175,8 @@ export const useCloneCrushStore = create<CloneCrushState>()(
       setProfile: (profile) => set({ profile }),
       setIsProfiling: (isProfiling) => set({ isProfiling }),
 
-      setCompetitors: (competitors, envyMetrics = null) => set({ 
-        competitors, 
+      setCompetitors: (competitors, envyMetrics = null) => set({
+        competitors: viralOnly(competitors),
         competitorsFetchedAt: new Date().toISOString(),
         envyMetrics,
       }),
@@ -200,10 +222,15 @@ export const useCloneCrushStore = create<CloneCrushState>()(
     }),
     {
       name: "tubegenius-clone-crush-store",
+      version: 2,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState: any) => ({
+        ...persistedState,
+        competitors: Array.isArray(persistedState?.competitors) ? viralOnly(persistedState.competitors) : [],
+      }),
       partialize: (state) => ({
         profile: state.profile,
-        competitors: state.competitors,
+        competitors: viralOnly(state.competitors),
         competitorsFetchedAt: state.competitorsFetchedAt,
         rewrites: state.rewrites,
       }),

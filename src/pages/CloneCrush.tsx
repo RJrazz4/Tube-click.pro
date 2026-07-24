@@ -35,6 +35,18 @@ function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
   return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
 }
 
+const VIRAL_VIEW_THRESHOLD = 50_000;
+function clientViewCount(video: any): number {
+  if (typeof video?.viewsCount === "number") return video.viewsCount;
+  const text = String(video?.views || video?.viewsText || "").toLowerCase().replace(/,/g, "");
+  const match = text.match(/([\d.]+)\s*(billion|million|thousand|b|m|k)?/);
+  if (!match) return 0;
+  const base = parseFloat(match[1]);
+  const suffix = match[2] || "";
+  const multiplier = suffix.startsWith("b") ? 1_000_000_000 : suffix.startsWith("m") ? 1_000_000 : (suffix.startsWith("k") || suffix.startsWith("thousand")) ? 1_000 : 1;
+  return Number.isFinite(base) ? Math.round(base * multiplier) : 0;
+}
+
 export default function CloneCrush() {
   const navigate = useNavigate();
   const { runGuarded } = useSoftGate();
@@ -112,14 +124,16 @@ export default function CloneCrush() {
     try {
       const res = await cloneCrushMutation.mutateAsync({ action: "competitors", niche: deducedNiche, description: discoveryDescription });
       if (res.success && res.competitors) {
+        const viralCompetitors = res.competitors.filter((v: any) => clientViewCount(v) >= VIRAL_VIEW_THRESHOLD);
+        if (viralCompetitors.length === 0) throw new Error("No 50k+ viral competitors found");
         const envyData = (res as any).envyMetrics || null;
-        setCompetitors(res.competitors, envyData);
-        const unlocked = res.competitors.find((v: any) => !v.isLocked) || res.competitors[0];
+        setCompetitors(viralCompetitors, envyData);
+        const unlocked = viralCompetitors.find((v: any) => !v.isLocked) || viralCompetitors[0];
         setSelectedVideo(unlocked);
         selectWorkflowCompetitor({ videoId: unlocked.videoId, title: unlocked.title, url: unlocked.url, channelName: unlocked.channelName, thumbnail: unlocked.thumbnail }, deducedNiche);
         const isGhost = (res as any).ghostReconstructed;
-        toast.success(isGhost ? `Ghost Matrix Reconstructed! ${res.competitors.length} competitors via MUM-01 mesh` : `Showdown Matrix Ready! ${res.competitors.length} live competitors`, { id: "competitors-find" });
-        cloneCrushMutation.mutateAsync({ action: "threat-alerts", competitors: res.competitors, userSubscribers: prof.subscriberCount || 0 }).then((alertRes: any) => {
+        toast.success(isGhost ? `Ghost Matrix Reconstructed! ${viralCompetitors.length} viral competitors via MUM-01 mesh` : `Showdown Matrix Ready! ${viralCompetitors.length} 50k+ live competitors`, { id: "competitors-find" });
+        cloneCrushMutation.mutateAsync({ action: "threat-alerts", competitors: viralCompetitors, userSubscribers: prof.subscriberCount || 0 }).then((alertRes: any) => {
           if (alertRes.success) setThreatAlerts(alertRes.alerts || [], alertRes.wideningGap || null);
         }).catch(() => {});
       } else throw new Error(res.error || "No competitors");
@@ -180,10 +194,10 @@ export default function CloneCrush() {
 
       let transcriptData: any;
       try {
-        transcriptData = await (transcriptMutation.mutateAsync as any)({ url: selectedVideo.url, title: selectedVideo.title });
-      } catch {
-        steps[2].status = "rerouting"; steps[2].meta = "GHOST RECONSTRUCT"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,700));
-        transcriptData = { transcript: `Ghost reconstructed scaffold for ${selectedVideo.title}: High-retention script about ${nicheInput}. Hook, open loop, value, payoff loop.`, source: "ghost-local" };
+        transcriptData = await withClientTimeout((transcriptMutation.mutateAsync as any)({ url: selectedVideo.url, title: selectedVideo.title }), 8_000);
+      } catch (err: any) {
+        steps[2].status = "rerouting"; steps[2].meta = err?.code === "TIMEOUT" || /timed out|timeout/i.test(err?.message || "") ? "TIMEOUT • SYNTH" : "GHOST RECONSTRUCT"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,350));
+        transcriptData = { transcript: `Ghost reconstructed scaffold for ${selectedVideo.title}: High-retention script about ${nicheInput}. Hook, open loop, value, payoff loop.`, source: "ghost-local", ghostNode: "LOCAL-SYNTH" };
       }
 
       if (!transcriptData?.transcript || transcriptData.transcript.length < 10) {
@@ -193,14 +207,14 @@ export default function CloneCrush() {
       steps[2].status = "success"; steps[2].meta = transcriptData.source?.includes("ghost") ? `${transcriptData.ghostNode || "MUM-01"} • SYNTH` : "LIVE CAPTIONS"; steps[3].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,300));
       steps[3].status = "success"; steps[4].status = "processing"; setLogSteps([...steps]);
 
-      const rewriteRes = await cloneCrushMutation.mutateAsync({ action: "rewrite", targetVideoId: selectedVideo.videoId, originalTranscript: transcriptData.transcript, originalTitle: selectedVideo.title, niche: nicheInput, tier: selectedTier });
+      const rewriteRes = await withClientTimeout(cloneCrushMutation.mutateAsync({ action: "rewrite", targetVideoId: selectedVideo.videoId, originalTranscript: transcriptData.transcript, originalTitle: selectedVideo.title, niche: nicheInput, tier: selectedTier }), 55_000);
       steps[4].status = "success"; steps[5].status = "processing"; setLogSteps([...steps]);
 
       if (rewriteRes.success && rewriteRes.rewrite) {
         const rw = rewriteRes.rewrite;
         let reverseEngineeredPrompts: string[] = []; let reverseEngineeredSource: any = null;
         try {
-          const reverseRes = await cloneCrushMutation.mutateAsync({ action: "thumbnail-reverse", glitchTitle: rw.rewrittenTitle, niche: nicheInput, tier: selectedTier });
+          const reverseRes = await withClientTimeout(cloneCrushMutation.mutateAsync({ action: "thumbnail-reverse", glitchTitle: rw.rewrittenTitle, niche: nicheInput, tier: selectedTier }), 18_000);
           const reverseData = reverseRes as any;
           if (reverseData.success && reverseData.thumbnailPrompts) { reverseEngineeredPrompts = reverseData.thumbnailPrompts; reverseEngineeredSource = reverseData.sourceVideo || null; }
         } catch {}

@@ -136,7 +136,59 @@ const RETRY_DELAYS = [800, 2000, 5000]; // faster than before, plus jitter
 const lastCall = new Map<string, number>();
 const MIN_INTERVAL = 600; // reduced from 1200 for snappier feel
 
+function requestTimeoutMs(functionName: string, body: unknown): number {
+  const action = body && typeof body === "object" && "action" in body ? String((body as any).action || "") : "";
+  if (functionName === "transcript") return 8_000;
+  if (functionName === "clone-crush") {
+    if (action === "profile") return 15_000;
+    if (action === "competitors") return 12_000;
+    if (action === "thumbnail-reverse") return 18_000;
+    if (action === "rewrite") return 55_000;
+    if (action === "threat-alerts") return 10_000;
+  }
+  return 45_000;
+}
+
+function makeAbortError(message: string): Error {
+  try {
+    return new DOMException(message, "AbortError");
+  } catch {
+    const err = new Error(message);
+    err.name = "AbortError";
+    return err;
+  }
+}
+
+function withTimeoutSignal(externalSignal: AbortSignal | undefined, timeoutMs: number): { signal: AbortSignal; cleanup: () => void } {
+  const controller = new AbortController();
+  const onAbort = () => {
+    if (!controller.signal.aborted) controller.abort(externalSignal?.reason || makeAbortError("Request aborted"));
+  };
+  if (externalSignal?.aborted) onAbort();
+  else externalSignal?.addEventListener("abort", onAbort, { once: true });
+
+  const timer = globalThis.setTimeout(() => {
+    if (!controller.signal.aborted) controller.abort(makeAbortError(`Request timed out after ${Math.round(timeoutMs / 1000)} seconds`));
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      globalThis.clearTimeout(timer);
+      externalSignal?.removeEventListener("abort", onAbort);
+    },
+  };
+}
+
+function isAbortError(err: unknown): boolean {
+  const name = err instanceof Error ? err.name.toLowerCase() : "";
+  const msg = err instanceof Error ? err.message.toLowerCase() : String(err || "").toLowerCase();
+  return name.includes("abort") || name.includes("timeout") || msg.includes("aborted") || msg.includes("timed out") || msg.includes("timeout");
+}
+
 function isNetworkFailure(err: unknown, res?: Response): boolean {
+  if (err instanceof EdgeFunctionError) return false;
+  if (isAbortError(err)) return true;
   if (!res) return true;
   if (err instanceof TypeError) return true;
   const msg = err instanceof Error ? err.message.toLowerCase() : "";
@@ -171,19 +223,22 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
   let lastErr: EdgeFunctionError | null = null;
   let pendingDelayMs: number | null = null;
 
-  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+  const maxAttempts = functionName === "transcript" ? 0 : RETRY_DELAYS.length;
+
+  for (let attempt = 0; attempt <= maxAttempts; attempt++) {
     if (attempt > 0) {
       const base = pendingDelayMs ?? RETRY_DELAYS[attempt - 1];
       pendingDelayMs = null;
       await sleepWithJitter(base);
     }
 
+    const timeout = withTimeoutSignal(signal, requestTimeoutMs(functionName, body));
     try {
       const res = await fetch(url, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
-        signal,
+        signal: timeout.signal,
       });
 
       const parsed = await readResponseBody(res);
@@ -210,8 +265,9 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
       const code = (parsed as any)?.code;
       if (typeof code === 'string') {
         // If provider tells us to wait, honor once then give ghost cache a chance
-        if (typeof lastErr.retryAfter === 'number' && lastErr.retryAfter > 0 && attempt === 0) {
-          pendingDelayMs = Math.min(lastErr.retryAfter, 30) * 1000;
+        if (typeof lastErr.retryAfter === 'number' && lastErr.retryAfter > 0 && attempt === 0 && attempt < maxAttempts) {
+          // Never let provider Retry-After pin the UI in PENDING; one short, bounded retry is enough.
+          pendingDelayMs = Math.min(lastErr.retryAfter, functionName === "clone-crush" ? 3 : 8) * 1000;
           continue;
         }
         // QUOTA_EXCEEDED_DAILY - try ghost cache before throwing
@@ -229,7 +285,7 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
       }
 
       const retryable = res.status === 429 || res.status >= 500;
-      if (!retryable || attempt === RETRY_DELAYS.length) {
+      if (!retryable || attempt === maxAttempts) {
         if (cached) {
           console.warn(`[ghost-cache] Fallback to cache after ${attempt} attempts for ${functionName}`);
           return cached.data;
@@ -237,16 +293,25 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
         throw lastErr;
       }
     } catch (err: any) {
+      const aborted = isAbortError(err);
       const isNet = isNetworkFailure(err);
       lastErr = err instanceof EdgeFunctionError ? err : new EdgeFunctionError(
-        isNet ? "Ghost tunnel interference detected - re-establishing secure uplink..." : (err?.message || "Network ghost detected"),
+        aborted ? (err?.message || "Ghost relay timed out - rerouting to fallback...") : isNet ? "Ghost tunnel interference detected - re-establishing secure uplink..." : (err?.message || "Network ghost detected"),
         0,
-        { code: isNet ? "NETWORK" : "UNKNOWN" }
+        { code: aborted ? "TIMEOUT" : isNet ? "NETWORK" : "UNKNOWN" }
       );
 
-      // Network failure - always retry + fallback to cache
+      if (aborted) {
+        if (cached) {
+          console.warn(`[ghost-cache] Timeout, serving ${functionName} from quantum cache`);
+          return cached.data;
+        }
+        throw lastErr;
+      }
+
+      // Network failure - retry within bounded attempt budget + fallback to cache
       if (isNet) {
-        if (attempt < RETRY_DELAYS.length) continue;
+        if (attempt < maxAttempts) continue;
         if (cached) {
           console.warn(`[ghost-cache] Network down, serving ${functionName} from quantum cache`);
           return cached.data;
@@ -254,13 +319,15 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
       }
 
       if (err instanceof EdgeFunctionError && (err.status === 401 || err.status === 403)) throw err;
-      if (attempt >= RETRY_DELAYS.length) {
+      if (attempt >= maxAttempts) {
         if (cached) {
           console.warn(`[ghost-cache] Final fallback to cache for ${functionName}`);
           return cached.data;
         }
         throw lastErr;
       }
+    } finally {
+      timeout.cleanup();
     }
   }
 
