@@ -24,6 +24,13 @@ describe("Supabase session persistence hardening", () => {
     expect(clientSource).toMatch(/detectSessionInUrl:\s*true/);
   });
 
+  it("uses the canonical origin for OAuth callbacks", async () => {
+    const contextSource = await readFile(join(root, "src/contexts/SoftGateContext.tsx"), "utf8");
+
+    expect(contextSource).toMatch(/redirectTo:\s*`\$\{getCanonicalRoot\(\)\}\/auth\/callback`/);
+    expect(contextSource).toMatch(/event\.origin !== window\.location\.origin/);
+  });
+
   it("has no blanket localStorage wipe that could remove the Supabase refresh token", async () => {
     const files = await sourceFiles(join(root, "src"));
     const sources = await Promise.all(files.map((file) => readFile(file, "utf8")));
