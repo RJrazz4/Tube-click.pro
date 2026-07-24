@@ -20,6 +20,8 @@ import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
 import { LiveActiveCounter, LossAversionTicker } from "@/components/ui/LiveActiveCounter";
 import { GhostIntelDrop } from "@/components/ui/GhostIntelDrop";
 import { BroadcastSyncIndicator } from "@/components/ui/BroadcastSyncIndicator";
+import { LocalInsightPanel } from "@/components/intelligence/LocalInsightPanel";
+import { LocalSignalBoard } from "@/components/intelligence/LocalSignalBoard";
 
 const ViralGrowthPass = lazy(() => import("@/components/referrals/ViralGrowthPass").then(m => ({ default: m.ViralGrowthPass })));
 const CompetitorShowdown = lazy(() => import("@/components/showdown/CompetitorShowdown").then(m => ({ default: m.CompetitorShowdown })));
@@ -159,6 +161,11 @@ export default function Dashboard() {
         )}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">{statDefs.map(stat=> <StatCard key={stat.key} label={stat.label} value={stat.value} icon={stat.icon} color={stat.color} />)}</div>
+
+        <div className="grid xl:grid-cols-2 gap-5">
+          <LocalInsightPanel />
+          <LocalSignalBoard />
+        </div>
 
         <DeferredModule minHeight={220} className="content-auto"><Suspense fallback={<div className="h-[220px] rounded-2xl border border-border/50 bg-card/40" />}><TheLab /></Suspense></DeferredModule>
 

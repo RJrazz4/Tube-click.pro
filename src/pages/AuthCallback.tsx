@@ -3,6 +3,7 @@ import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { getCanonicalRoot } from "@/lib/domain/canonical";
 
 /**
  * OAuth returns here in a popup. Supabase normally consumes the URL itself,
@@ -18,7 +19,11 @@ export default function AuthCallback() {
     let timer: number | undefined;
 
     const notifyParentAndClose = () => {
-      window.opener?.postMessage({ type: "tc-auth-complete" }, window.location.origin);
+      // The opener can be a temporary Vercel deployment. Send the signal back to
+      // its actual origin; the opener will move to canonical rather than trying
+      // to read a session from the wrong origin's storage.
+      const openerOrigin = document.referrer ? new URL(document.referrer).origin : getCanonicalRoot();
+      window.opener?.postMessage({ type: "tc-auth-complete", canonicalOrigin: getCanonicalRoot() }, openerOrigin);
       timer = window.setTimeout(() => window.close(), 500);
     };
 

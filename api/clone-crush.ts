@@ -212,9 +212,9 @@ function generateSyntheticProfile(input: string) {
 // -------------------------------------------------------------
 async function youtubeApi(path: string, params: Record<string, string>) {
   const rawKeys = process.env.YOUTUBE_API_KEY?.trim() || "";
-  if (!rawKeys) throw new Error('GHOST_RECONSTRUCT');
+  if (!rawKeys) throw new Error('YOUTUBE_API_KEY is not configured');
   const keys = rawKeys.split(",").map(k => k.trim()).filter(Boolean);
-  if (keys.length === 0) throw new Error('GHOST_RECONSTRUCT');
+  if (keys.length === 0) throw new Error('YOUTUBE_API_KEY is not configured');
   let lastError: Error | null = null;
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
@@ -235,7 +235,7 @@ async function youtubeApi(path: string, params: Record<string, string>) {
       continue;
     }
   }
-  throw lastError || new Error('GHOST_RECONSTRUCT');
+  throw new Error(`YouTube Data API requests failed for all ${keys.length} configured keys: ${lastError?.message || 'unknown error'}`);
 }
 
 type ChannelReference = { id: string } | { handle: string } | { query: string };
@@ -414,20 +414,7 @@ export default async function handler(req: Request) {
         return jsonResponse({ success: true, profile, extractedKeywords: profile.extractedKeywords, ghostNode: 'YT-API', reconstructed: false });
       } catch (err: any) {
         const msg = err?.message || '';
-        if (msg.includes('GHOST_RECONSTRUCT') || msg.toLowerCase().includes('quota') || msg.includes('not configured')) {
-          console.warn(`[ghost] Profile fallback to synthetic for input: ${channelUrl}`);
-          const ghostProfile = generateSyntheticProfile(channelUrl);
-          return jsonResponse({
-            success: true,
-            profile: ghostProfile,
-            extractedKeywords: ghostProfile.extractedKeywords,
-            ghostReconstructed: true,
-            ghostNode: 'MUM-01',
-            clearance: 'LEVEL 4',
-            intelSource: 'Ghost scrape reconstruction • Encrypted uplink'
-          });
-        }
-        return jsonResponse({ error: err.message }, 502);
+        return jsonResponse({ error: err.message || 'YouTube profile lookup failed' }, 502);
       }
     }
 

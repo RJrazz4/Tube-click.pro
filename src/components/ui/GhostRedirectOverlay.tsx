@@ -5,9 +5,9 @@ import { isTemporaryHost, getCanonicalRoot } from "@/lib/domain/canonical";
  * Ghost Redirect Overlay - If user lands on vercel.app, auto-redirect to tubeclickpro.in
  * Premium illusion: "REDIRECTING TO SECURE DOMAIN" terminal
  * 
- * CRITICAL: Skip redirect on /auth/callback to preserve OAuth hash fragment (access_token)
- * during Supabase popup auth flow. The hash contains the token and must reach the
- * AuthCallback page for detectSessionInUrl to work.
+ * OAuth is now initiated with the canonical callback URL. The callback is therefore
+ * never processed on a temporary host, avoiding the domain-isolated localStorage
+ * session split that previously logged users out after the relay.
  */
 
 // Auth routes that must NEVER be redirected - they rely on URL hash for tokens

@@ -66,7 +66,16 @@ export function CommandPaletteGhost() {
             </CommandGroup>
             <CommandGroup heading="Quick Actions • Ghost Mesh" className="text-[10px] font-mono">
               <CommandItem onSelect={() => { setOpen(false); navigator.clipboard.writeText("tubeclickpro.in"); }} className="text-xs font-mono">Copy Canonical Domain • tubeclickpro.in</CommandItem>
-              <CommandItem onSelect={() => { setOpen(false); localStorage.clear(); location.reload(); }} className="text-xs font-mono text-amber-300">Purge Quantum Cache • Ghost Reset • MUM-01</CommandItem>
+              <CommandItem onSelect={() => {
+                setOpen(false);
+                // Only remove Tube Click Pro's own cache entries. Never clear
+                // Supabase's persisted session or unrelated application data.
+                for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+                  const key = localStorage.key(i);
+                  if (key?.startsWith("tc-cache:")) localStorage.removeItem(key);
+                }
+                window.dispatchEvent(new CustomEvent("tc-cache-purged"));
+              }} className="text-xs font-mono text-amber-300">Purge Local Cache • Keep Session • MUM-01</CommandItem>
             </CommandGroup>
           </CommandList>
           <div className="border-t border-border/20 px-3 py-2 flex items-center justify-between text-[9px] font-mono text-muted-foreground">

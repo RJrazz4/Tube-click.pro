@@ -24,6 +24,8 @@ import { XpGainPopup } from "@/components/ui/XpGainPopup";
 import { VideoWallBackground } from "@/components/ui/VideoWallBackground";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
+import { ReferralMilestones } from "@/components/referrals/ReferralMilestones";
+import { ReferralShareActions } from "@/components/referrals/ReferralShareActions";
 
 export default function Rewards() {
   const { isAuthLoading, isAuthenticated, requestAuthentication } = useSoftGate();
@@ -158,6 +160,7 @@ export default function Rewards() {
                   <strong className="flex items-center gap-1.5"><Activity className="w-4 h-4" />Ghost Protocol Loophole • $97 → ₹0 Heist:</strong> Invite 3 nodes via private tracker link <span className="font-mono text-cyan-300">tubeclickpro.in/ref/...?clearance=LEVEL4</span>. When 1 node unlocks Elite via their own referral, you both get 7 Days Premium FREE via MUM-01 ghost relay! Help them grow to grow yourself. Quantum cache ensures zero loss. This is how you legally steal $97/mo tool for ₹0.
                 </div>
                 {profile.proTierExpiresAt && <ProExpiryCountdown expiresAt={profile.proTierExpiresAt} />}
+                <ReferralMilestones profile={profile} />
               </CardContent>
             </Card>
             <div className="grid md:grid-cols-2 gap-4">
@@ -179,7 +182,7 @@ export default function Rewards() {
                   <span className="text-[8px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded">$97→₹0</span>
                 </div>
               </div>
-              <Button onClick={copyInvite} className="cyber-button h-11 w-full gap-2 font-mono text-xs"><Copy className="h-4 w-4" />{copied ? "Ghost Uplink Copied • MUM-01 Synced" : "Copy Ghost Uplink + Private Tracker Promo"}</Button>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><Button onClick={copyInvite} className="cyber-button h-11 w-full gap-2 font-mono text-xs"><Copy className="h-4 w-4" />{copied ? "Link copied" : "Copy referral link"}</Button><ReferralShareActions url={referralUrl} /></div>
               <ReferralPromoArtifact referralCode={profile.referralCode} />
               <div className="rounded-lg bg-secondary/30 border border-border/40 p-2.5">
                 <p className="text-[10px] font-mono font-bold text-primary flex items-center gap-1.5"><DollarSign className="w-3 h-3" />Value Anchor • $100/mo Illusion</p>
