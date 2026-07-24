@@ -8,6 +8,8 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { createAppQueryClient } from "@/lib/cache/queryClient";
 import { SoftGateProvider } from "@/contexts/SoftGateContext";
 import { SoftGateRoute } from "@/components/auth/SoftGateRoute";
+import { AppErrorBoundary } from "@/components/ui/AppErrorBoundary";
+import { ConnectionStatus } from "@/components/ui/ConnectionStatus";
 
 // Eager load the dashboard for instant first paint
 import Index from "./pages/Index";
@@ -43,7 +45,9 @@ const PageLoader = () => (
 );
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
+  <AppErrorBoundary>
+    <ConnectionStatus />
+    <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner 
@@ -84,7 +88,8 @@ const App = () => (
         </BrowserRouter>
       </SoftGateProvider>
     </TooltipProvider>
-  </QueryClientProvider>
+    </QueryClientProvider>
+  </AppErrorBoundary>
 );
 
 export default App;
