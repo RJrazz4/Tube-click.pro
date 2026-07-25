@@ -20,6 +20,35 @@ export interface FriendlyError {
 }
 
 const CODE_MAP: Record<string, { title: string; message: string; action?: string }> = {
+  VOICE_BAD_REQUEST: {
+    title: "Voice settings need adjustment",
+    message: "Check the script length and voice controls, then try again.",
+  },
+  VOICE_NOT_CONFIGURED: {
+    title: "Voiceover is not configured",
+    message: "Voice generation is temporarily unavailable because the voice provider is not configured.",
+    action: "Please try browser playback or contact the workspace administrator.",
+  },
+  VOICE_TIMEOUT: {
+    title: "Voice provider timed out",
+    message: "The voice provider took too long to respond. Your script is safe—please try again.",
+  },
+  VOICE_UPSTREAM_ERROR: {
+    title: "Voice provider unavailable",
+    message: "The voice provider could not be reached. Please try again shortly.",
+  },
+  VOICE_AUTH_FAILED: {
+    title: "Voice configuration issue",
+    message: "The voice provider rejected the server credentials. This is a workspace configuration issue.",
+  },
+  VOICE_RATE_LIMITED: {
+    title: "Voice provider is busy",
+    message: "The voice provider is rate-limiting requests. Please wait a moment and try again.",
+  },
+  VOICE_PROVIDER_ERROR: {
+    title: "Voice generation failed",
+    message: "The voice provider rejected this request. Please try again with a shorter script.",
+  },
   QUOTA_EXCEEDED_DAILY: {
     title: "Daily AI quota reached",
     message: "Today's AI usage limit is exhausted. The quota resets around midnight Pacific time (PT) — your work is saved locally, so you can safely come back then.",

@@ -125,6 +125,13 @@ const VERCEL_ROUTE_MAP: Record<string, string> = {
   "clone-crush": "/api/clone-crush",
 };
 
+function makeRequestId(): string {
+  try {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  } catch { /* fall through */ }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function getApiEndpoint(functionName: string): { url: string; headers: Record<string, string>; isVercel: boolean } {
   // Chat (generate-content), clone-crush, and transcript are hard-pinned to
   // Vercel so they always use the orchestrator's key rotation and timeouts.
@@ -234,7 +241,7 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
   lastCall.set(functionName, Date.now());
 
   const { url, headers: baseHeaders, isVercel } = getApiEndpoint(functionName);
-  const headers = { ...baseHeaders };
+  const headers: Record<string, string> = { ...baseHeaders, "x-request-id": makeRequestId() };
   if (isVercel) {
     try {
       const { data } = await supabase.auth.getSession();
@@ -372,7 +379,7 @@ export async function fetchEdgeFunctionBlob(functionName: string, body: unknown,
   lastCall.set(functionName, Date.now());
 
   const { url, headers: baseHeaders, isVercel } = getApiEndpoint(functionName);
-  const headers = { ...baseHeaders };
+  const headers: Record<string, string> = { ...baseHeaders, "x-request-id": makeRequestId() };
   if (isVercel) {
     const { data } = await supabase.auth.getSession();
     if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
@@ -381,18 +388,30 @@ export async function fetchEdgeFunctionBlob(functionName: string, body: unknown,
   let lastErr: EdgeFunctionError | null = null;
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
     if (attempt > 0) await sleepWithJitter(RETRY_DELAYS[attempt - 1]);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs(functionName, body));
+    const abortFromCaller = () => controller.abort(signal?.reason);
+    if (signal) signal.addEventListener("abort", abortFromCaller, { once: true });
     try {
-      const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal });
+      const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal: controller.signal });
       if (!res.ok) {
         const parsed = await readResponseBody(res);
         const msg = extractMessage(parsed, res.status);
         throw new EdgeFunctionError(msg, res.status, errorMeta(parsed));
+      }
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("audio/") && !contentType.includes("application/octet-stream")) {
+        const parsed = await readResponseBody(res);
+        throw new EdgeFunctionError(extractMessage(parsed, res.status), res.status, errorMeta(parsed));
       }
       return await res.blob();
     } catch (err: any) {
       lastErr = err instanceof EdgeFunctionError ? err : new EdgeFunctionError(err?.message || "Blob fetch failed", 0, { code: "NETWORK" });
       if (attempt >= RETRY_DELAYS.length) throw lastErr;
       if (!isNetworkFailure(err)) throw lastErr;
+    } finally {
+      clearTimeout(timeoutId);
+      if (signal) signal.removeEventListener("abort", abortFromCaller);
     }
   }
   throw lastErr || new EdgeFunctionError("Blob failed", 500);

@@ -8,7 +8,7 @@
  */
 export const config = { runtime: 'edge' };
 
-import { corsHeaders, requireEnv, jsonResponse, safeJsonBody } from './_shared.js';
+import { corsHeaders, requireEnv, jsonResponse, safeJsonBody, timeoutSignal } from './_shared.js';
 
 const VOICES: Record<string, string> = {
   'george': 'JBFqnCBsd6RMkjVDRZzb',
@@ -35,31 +35,52 @@ export default async function handler(req: Request) {
     const body = await safeJsonBody(req);
     if (body.error) return jsonResponse({ error: body.error }, 400);
     const { text, voiceId, stability, similarityBoost, speed } = body.data;
-    if (!text || !text.trim()) return jsonResponse({ error: 'Text required' }, 400);
-    if (text.length > 5000) return jsonResponse({ error: 'Max 5000 chars' }, 400);
+    if (!text || !text.trim()) return jsonResponse({ error: 'Text required', code: 'VOICE_BAD_REQUEST' }, 400);
+    if (text.length > 5000) return jsonResponse({ error: 'Max 5000 chars', code: 'VOICE_BAD_REQUEST' }, 400);
+    if (typeof stability === 'number' && (stability < 0 || stability > 1)) return jsonResponse({ error: 'Stability must be between 0 and 1', code: 'VOICE_BAD_REQUEST' }, 400);
+    if (typeof speed === 'number' && (speed < 0.7 || speed > 1.2)) return jsonResponse({ error: 'Speed must be between 0.7 and 1.2', code: 'VOICE_BAD_REQUEST' }, 400);
 
-    const apiKey = requireEnv('ELEVENLABS_API_KEY');
-    const resolved = VOICES[voiceId?.toLowerCase()] || voiceId || VOICES['george'];
+    let apiKey: string;
+    try {
+      apiKey = requireEnv('ELEVENLABS_API_KEY');
+    } catch {
+      return jsonResponse({ error: 'Voice generation is not configured.', code: 'VOICE_NOT_CONFIGURED' }, 503);
+    }
+    const resolved = VOICES[voiceId?.toLowerCase()] || VOICES['george'];
+    const upstream = timeoutSignal(25_000);
 
-    const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${resolved}?output_format=mp3_44100_128`, {
-      method: 'POST',
-      headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text,
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: {
-          stability: stability ?? 0.5,
-          similarity_boost: similarityBoost ?? 0.75,
-          style: 0.5,
-          use_speaker_boost: true,
-          speed: speed ?? 1.0,
-        },
-      }),
-    });
+    let elRes: Response;
+    try {
+      elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${resolved}?output_format=mp3_44100_128`, {
+        method: 'POST',
+        headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_multilingual_v2',
+          voice_settings: {
+            stability: stability ?? 0.5,
+            similarity_boost: similarityBoost ?? 0.75,
+            style: 0.5,
+            use_speaker_boost: true,
+            speed: speed ?? 1.0,
+          },
+        }),
+        signal: upstream.signal,
+      });
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === 'AbortError';
+      return jsonResponse({
+        error: timedOut ? 'Voice provider timed out. Please try again.' : 'Voice provider could not be reached.',
+        code: timedOut ? 'VOICE_TIMEOUT' : 'VOICE_UPSTREAM_ERROR',
+      }, timedOut ? 504 : 502);
+    } finally {
+      upstream.clear();
+    }
 
     if (!elRes.ok) {
-      const err = await elRes.text();
-      return jsonResponse({ error: err || `ElevenLabs ${elRes.status}` }, elRes.status);
+      const status = elRes.status;
+      const code = status === 401 || status === 403 ? 'VOICE_AUTH_FAILED' : status === 429 ? 'VOICE_RATE_LIMITED' : 'VOICE_PROVIDER_ERROR';
+      return jsonResponse({ error: 'Voice provider rejected the request.', code }, status >= 500 ? 502 : status);
     }
 
     const buf = await elRes.arrayBuffer();

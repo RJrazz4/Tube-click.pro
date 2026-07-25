@@ -47,12 +47,22 @@ function readNumber(name: string, fallback: number): number {
 }
 
 function readList(name: string, fallback: string[]): string[] {
-  const raw = process.env[name];
+  const raw = process.env[name]?.trim();
   if (!raw) return fallback;
-  return raw
+
+  // Accept only the documented CSV format. A JSON array here would be sent
+  // as one malformed model identifier and produce misleading MODEL_NOT_FOUND
+  // errors from the gateway.
+  if (raw.startsWith("[") || raw.endsWith("]")) {
+    console.warn(`[ai-gateway] Ignoring invalid ${name}: expected comma-separated model IDs`);
+    return fallback;
+  }
+
+  const values = raw
     .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+    .map((s) => s.trim().replace(/^['"]|['"]$/g, ""))
+    .filter((s) => /^[a-z0-9][a-z0-9._/-]*$/i.test(s));
+  return [...new Set(values)].length ? [...new Set(values)] : fallback;
 }
 
 export class GatewayConfigError extends Error {
@@ -91,7 +101,9 @@ export function gatewayModel(customFetch?: typeof fetch) {
   // Record<string,string> in this release), so we read env at build time.
   // Runtime overrides are uncommon and env-changes require a cold start.
   const staticHeaders: Record<string, string> = {
-    "x-vercel-ai-gateway-fallbacks": JSON.stringify(fallbacks),
+    // Gateway fallback header is a comma-separated model list. Sending JSON
+    // here makes the gateway treat the entire array as one invalid model ID.
+    "x-vercel-ai-gateway-fallbacks": fallbacks.join(","),
     "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "https://tubeclickpro.in",
     "X-Title": process.env.OPENROUTER_SITE_TITLE || "TubeClick Pro",
   };
