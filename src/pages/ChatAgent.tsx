@@ -20,6 +20,7 @@ import { useSoftGate } from "@/contexts/SoftGateContext";
 import { PageWrapperGhost } from "@/components/ui/PageWrapperGhost";
 import { useWorkflowStore } from "@/stores/useWorkflowStore";
 import { buildTubeBotSeed, type TubeBotSeed } from "@/lib/workflow/chainLoopSeed";
+import { getChannelMemory } from "@/lib/channelMemory";
 
 interface GeneratedContent {
   titles: string[];
@@ -29,6 +30,12 @@ interface GeneratedContent {
   description: string;
   strategyBrief?: string;
   experimentPlan?: string[];
+  agentAudit?: {
+    score: number;
+    critique: string;
+    iterations: number;
+    selfHealed: boolean;
+  };
 }
 
 interface Message {
@@ -97,6 +104,7 @@ export default function ChatAgent() {
   const clearWorkflow = useWorkflowStore((s) => s.clearWorkflow);
   const [pendingSeed, setPendingSeed] = useState<TubeBotSeed | null>(null);
   const [autoRunTriggered, setAutoRunTriggered] = useState(false);
+  const autoTrigger = autoRunTriggered || pendingSeed !== null;
   const consumedWorkflowId = useRef<string | null>(null);
   const autoRunStarted = useRef(false);
 
@@ -192,11 +200,13 @@ export default function ChatAgent() {
         : `🎯 Analyzing your topic and generating ${languageLabel} content...`;
       setMessages((prev) => [...prev, { role: "assistant", content: thinkingMsg }]);
 
+      const channelMemory = getChannelMemory();
       const data = await fetchEdgeFunctionJson<GeneratedContent>("generate-content", {
         topic: trimmedTopic,
         platform,
         style,
         language,
+        channelMemory,
         ...(seedForRun?.context ? { context: seedForRun.context } : {}),
       });
 
@@ -216,6 +226,7 @@ export default function ChatAgent() {
         description: data.description || '',
         strategyBrief: data.strategyBrief || '',
         experimentPlan: Array.isArray(data.experimentPlan) ? data.experimentPlan.filter((v): v is string => typeof v === 'string').slice(0, 3) : [],
+        agentAudit: data.agentAudit,
       };
 
       setGeneratedContent(processedContent);
@@ -258,9 +269,11 @@ ${(processedContent.experimentPlan || []).join('\n')}
 
       setMessages((prev) => {
         const updated = [...prev];
+        const audit = processedContent.agentAudit;
+        const auditText = audit ? `\n\n🛡️ Agentic Audit Score: ${audit.score}/100 (${audit.selfHealed ? 'Self-healed & refined' : 'Passed primary pass'})` : "";
         updated[updated.length - 1] = {
           role: "assistant",
-          content: `✅ ${languageLabel} content generated!\n\n📊 Generated:\n• ${processedContent.titles.length} viral titles\n• ${processedContent.hooks.length} hooks\n• Clean script (${processedContent.script.length} chars)\n• ${processedContent.hashtags.length} hashtags\n• ${processedContent.experimentPlan?.length || 0} growth experiments\n\nCheck the tabs on the right and use the saved strategy brief to guide publishing!`
+          content: `✅ ${languageLabel} content generated!\n\n📊 Generated:\n• ${processedContent.titles.length} viral titles\n• ${processedContent.hooks.length} hooks\n• Clean script (${processedContent.script.length} chars)\n• ${processedContent.hashtags.length} hashtags\n• ${processedContent.experimentPlan?.length || 0} growth experiments${auditText}\n\nCheck the tabs on the right and use the saved strategy brief to guide publishing!`
         };
         return updated;
       });
@@ -573,8 +586,8 @@ ${generatedContent.description || 'N/A'}
               )}
             </ScrollArea>
 
-            {/* Input Form — hidden during automated Chain-Loop runs */}
-            {!(autoRunTriggered || (pendingSeed && isGenerating)) ? (
+            {/* Input Form — forced return null when autoTrigger is active */}
+            {autoTrigger ? null : (
               <form onSubmit={handleSubmit} className="flex gap-2">
                 <Input
                   value={topic}
@@ -596,15 +609,18 @@ ${generatedContent.description || 'N/A'}
                   )}
                 </Button>
               </form>
-            ) : (
+            )}
+
+            {/* Auto-generating status indicator when autoTrigger is active */}
+            {autoTrigger && (
               <div className="flex items-center justify-center gap-2 h-11 md:h-12 rounded-xl bg-primary/5 border border-primary/30 text-primary text-xs md:text-sm font-medium">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Auto-generating from Chain-Loop payload — sit tight…
+                Auto-generating from Chain-Loop payload — input hidden…
               </div>
             )}
 
-            {/* Character count — only during manual entry */}
-            {!autoRunTriggered && topic.length > 0 && (
+            {/* Character count — only when input is active */}
+            {!autoTrigger && topic.length > 0 && (
               <p className="text-xs text-muted-foreground mt-1.5 text-right">
                 {topic.length}/500 characters
               </p>
