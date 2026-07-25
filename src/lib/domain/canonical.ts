@@ -10,18 +10,19 @@ const CANONICAL_DOMAIN = "https://tubeclickpro.in";
 const CANONICAL_HOST = "tubeclickpro.in";
 
 // Hosts that are considered temporary/bypass and should be rewritten to canonical
+// NOTE: localhost / 127.0.0.1 must NEVER trigger the global redirect overlay - they are
+// local dev / e2e environments. Only true deployment previews should redirect.
 const TEMP_HOSTS = [
   "vercel.app",
   "netlify.app",
-  "localhost",
-  "127.0.0.1",
-  "preview",
-  "temp",
-  "webcontainer",
 ];
 
 export function isTemporaryHost(hostname: string): boolean {
   const lower = hostname.toLowerCase();
+  // Explicitly allow local development - never treat as temporary host
+  if (lower === "localhost" || lower === "127.0.0.1" || lower.endsWith(".localhost")) {
+    return false;
+  }
   return TEMP_HOSTS.some(h => lower.includes(h));
 }
 

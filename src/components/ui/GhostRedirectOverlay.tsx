@@ -31,6 +31,11 @@ export function GhostRedirectOverlay() {
       if (isAuthRoute(pathname)) {
         return;
       }
+
+      // Never show overlay on localhost / dev - it freezes the UI with backdrop-blur
+      if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost")) {
+        return;
+      }
       
       if (isTemporaryHost(host) && !host.includes("tubeclickpro.in")) {
         setShow(true);
@@ -49,7 +54,7 @@ export function GhostRedirectOverlay() {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#020207]/90 backdrop-blur-xl flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] bg-[#020207]/90 flex items-center justify-center p-4">
       <div className="w-full max-w-md rounded-2xl glass-strong border-primary/20 p-6 text-center space-y-4 bracket">
         <div className="w-12 h-12 mx-auto rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />

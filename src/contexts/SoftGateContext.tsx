@@ -263,7 +263,7 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
     <SoftGateContext.Provider value={value}>
       {children}
       <Dialog open={Boolean(pending)} onOpenChange={(open) => { if (!open) finishPending(false); }}>
-        <DialogContent className="overflow-hidden border-primary/30 bg-card/95 p-0 shadow-[0_0_70px_rgba(139,92,246,0.22)] backdrop-blur-2xl sm:max-w-[460px]">
+        <DialogContent className="overflow-hidden border-primary/30 bg-card/95 p-0 shadow-[0_0_70px_rgba(139,92,246,0.22)] sm:max-w-[460px]">
           <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
           <div className="relative border-b border-border/60 bg-gradient-to-br from-primary/10 via-transparent to-cyan-400/5 p-6 pb-5">
             <div className="mb-4 inline-flex rounded-2xl border border-primary/25 bg-primary/10 p-3">
