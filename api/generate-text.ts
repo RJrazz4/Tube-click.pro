@@ -1,97 +1,62 @@
 /**
  * Vercel Edge Function — POST /api/generate-text
  *
- * TubeBot text generation. This is the canonical chat/content-text path;
- * it delegates to `api/_ai.ts`, which in turn uses the orchestrator's
- * `OpenRouterClient` for key rotation, per-attempt timeouts, retry
- * budget, and model failover. Runtime: Edge (low-latency global POPs).
+ * TubeBot text generation powered by the Multi-Agent Adversarial Pipeline
+ * (WriterAgent + CriticAgent with automated self-correction).
+ * Runtime: Edge (low-latency global POPs).
  */
 
 export const config = {
   runtime: "edge",
-  // Vercel hard cap. The internal deadline (17s by default) stays well
-  // inside this budget so the function always returns a typed response
-  // rather than being severed mid-flight.
   maxDuration: 25,
 };
 
 import {
   jsonResponse,
-  cleanupJson,
   corsHeaders,
   safeJsonBody,
   sanitizeThrownError,
 } from "./_shared.js";
-import { generateChatJson, ChatGenerationError } from "./_ai.js";
-
-function normalize(arr: unknown, fallback: string[]) {
-  if (!Array.isArray(arr)) return fallback;
-  const n = arr.filter((v): v is string => typeof v === "string").map(v => v.trim()).filter(Boolean);
-  return n.length ? n : fallback;
-}
+import { runAgenticPipeline } from "./_agenticEngine.js";
+import { ChatGenerationError } from "./_ai.js";
 
 export default async function handler(req: Request) {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
   try {
-    // Parse request body with explicit error handling
     const body = await safeJsonBody(req);
     if (body.error) return jsonResponse({ error: body.error }, 400);
-    const { topic, platform, style, language = "hinglish", context } = body.data;
+    const { topic, platform, style, language = "hinglish", context, channelMemory } = body.data;
 
     if (!topic || topic.trim().length < 3) return jsonResponse({ error: "Topic min 3 chars" }, 400);
     if (topic.length > 500) return jsonResponse({ error: "Topic max 500 chars" }, 400);
 
     const sanitized = topic.trim().slice(0, 500);
 
-    let langInstr = "";
-    switch (language.toLowerCase()) {
-      case "hindi": langInstr = "Write EVERYTHING in pure Hindi (Devanagari)."; break;
-      case "english": langInstr = "Write everything in fluent English."; break;
-      default: langInstr = "Write EVERYTHING in Cinematic Hinglish (Romanized Hindi + English blend)."; break;
-    }
-
-    const systemPrompt = `You are an institutional-grade YouTube growth strategist, not a generic copywriter.
-${langInstr}
-Use a clear evidence-to-action process: identify the viewer's urgent desire or tension, the competitive gap, the unique promise, the first-30-second retention mechanism, and the proof/payoff required. Avoid recycled cliches, vague claims, fake data, and interchangeable titles. Every title must make a distinct promise; every hook must create an open loop that the script closes. Optimize for viewer value and measurable experimentation, not empty virality.
-Return exact JSON only: { "titles": [...5 distinct title families], "hooks": [...10 mechanisms], "script": "60s voiceover with a strong opening, escalating value beats, proof/payoff, and specific CTA; narration only", "hashtags": [...10 relevant], "description": "SEO description with clear promise and audience fit", "strategyBrief": "one concise paragraph explaining audience tension, differentiation, and retention plan", "experimentPlan": ["three measurable title/thumbnail or opening tests"] }`;
-
-    // Optional Chain-Loop handoff context (free-text): when present, instruct
-    // the model to BUILD ON the supplied intel rather than start from scratch.
-    const contextBlock =
-      typeof context === "string" && context.trim().length > 0
-        ? `\n\nIncoming intel from a completed Chain-Loop package — use this as the creative foundation. Expand and rework it into fresh, original assets; do not merely repeat it:\n"""${context.trim().slice(0, 4000)}"""`
-        : "";
-
-    const userPrompt = `Topic: ${sanitized}
-Platform: ${platform}
-Style: ${style}
-Language: ${language}
-Before drafting, reason privately about audience intent, saturation risk, differentiation, click promise, retention beats, and the single action the viewer should take. Then generate the requested assets. Do not invent competitor metrics or claim guaranteed performance.${contextBlock}`;
-
-    const outcome = await generateChatJson({ systemPrompt, userPrompt });
-
-    let parsed: any;
-    try {
-      parsed = JSON.parse(cleanupJson(outcome.content));
-    } catch {
-      parsed = { titles: [`🔥 ${sanitized}`], hooks: ["Start with truth"], script: outcome.content, hashtags: ["#viral"], description: sanitized };
-    }
+    const agentResult = await runAgenticPipeline({
+      topic: sanitized,
+      platform: platform || "YouTube",
+      style: style || "Dramatic",
+      language,
+      context,
+      channelMemory,
+    });
 
     return jsonResponse({
-      model: outcome.model,
-      ...(outcome.failedOver ? { modelFailover: outcome.modelsAttempted } : {}),
-      titles: normalize(parsed.titles, [`🔥 ${sanitized}`]).slice(0, 5),
-      hooks: normalize(parsed.hooks, ["Hook"]).slice(0, 10),
-      script: typeof parsed.script === "string" ? parsed.script.trim() : outcome.content,
-      hashtags: normalize(parsed.hashtags, ["#viral"]).slice(0, 10),
-      description: typeof parsed.description === "string" ? parsed.description.trim() : sanitized,
-      strategyBrief: typeof parsed.strategyBrief === "string" ? parsed.strategyBrief.trim() : "Audience tension and differentiation were evaluated from the supplied topic.",
-      experimentPlan: normalize(parsed.experimentPlan, ["Test two title promises against the same thumbnail", "Test a faster first-30-second payoff", "Compare proof-led versus curiosity-led openings"]).slice(0, 3),
+      model: agentResult.model,
+      modelsAttempted: agentResult.modelsAttempted,
+      agentAudit: agentResult.agentAudit,
+      titles: agentResult.titles,
+      hooks: agentResult.hooks,
+      script: agentResult.script,
+      hashtags: agentResult.hashtags,
+      description: agentResult.description,
+      strategyBrief: agentResult.strategyBrief,
+      experimentPlan: agentResult.experimentPlan,
     });
   } catch (e: unknown) {
-    console.error("[generate-text] error:", e);
+    console.error("[generate-text:agentic] error:", e);
     if (e instanceof ChatGenerationError) {
       return jsonResponse(
         {

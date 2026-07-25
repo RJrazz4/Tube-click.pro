@@ -136,10 +136,18 @@ function getApiEndpoint(functionName: string): { url: string; headers: Record<st
   // Chat (generate-content), clone-crush, and transcript are hard-pinned to
   // Vercel so they always use the orchestrator's key rotation and timeouts.
   // All other endpoints follow the VITE_USE_VERCEL_EDGE / VITE_API_MODE flags.
-  const useVercelEdge = functionName === "clone-crush" || functionName === "transcript"
-    || functionName === "generate-content"
-    || import.meta.env.VITE_USE_VERCEL_EDGE === "true"
-    || import.meta.env.VITE_API_MODE === "vercel";
+  const useVercelEdge =
+    Boolean(VERCEL_ROUTE_MAP[functionName]) ||
+    functionName === "clone-crush" ||
+    functionName === "transcript" ||
+    functionName === "generate-content" ||
+    functionName === "elevenlabs-tts" ||
+    functionName === "generate-seo" ||
+    functionName === "seo-tags" ||
+    functionName === "analyze-storyboard" ||
+    typeof window !== "undefined" ||
+    import.meta.env.VITE_USE_VERCEL_EDGE === "true" ||
+    import.meta.env.VITE_API_MODE === "vercel";
 
   if (useVercelEdge) {
     const vercelRoute = VERCEL_ROUTE_MAP[functionName] || `/api/${functionName}`;
