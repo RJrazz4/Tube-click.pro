@@ -1,22 +1,32 @@
 {
+  /*
+   * TypeScript config for Node-side tooling (Vite config, scripts).
+   * Strict mode is enabled because this surface is small and
+   * build/tooling bugs are disproportionately expensive.
+   */
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2023"],
     "module": "ESNext",
-    "skipLibCheck": true,
-
-    /* Bundler mode */
     "moduleResolution": "bundler",
+    "moduleDetection": "force",
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
-    "moduleDetection": "force",
     "noEmit": true,
+    "skipLibCheck": true,
 
-    /* Linting */
     "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "tailwind.config.ts",
+    "eslint.config.js",
+    "postcss.config.js",
+    "scripts/**/*.ts",
+    "scripts/**/*.mjs"
+  ]
 }

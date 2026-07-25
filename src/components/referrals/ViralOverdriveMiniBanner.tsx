@@ -6,9 +6,12 @@ import { loadReferralProfile } from "@/lib/referrals/client";
 import { buildReferralUrl } from "@/lib/domain/canonical";
 
 /**
- * Viral Overdrive Mini Banner - Shows on all tool pages as subtle reminder
- * Zero-budget, localStorage dismissal, lightweight
- * Converts tool users into referral loop
+ * Mini referral banner.
+ *
+ * Shown on tool pages to remind signed-in users of their referral
+ * progress. Dismissible (dismissal persisted to localStorage for 24h);
+ * surfaces only after the user has been on the page for several seconds
+ * to avoid intruding on the initial experience.
  */
 
 export function ViralOverdriveMiniBanner() {

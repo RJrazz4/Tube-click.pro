@@ -1,8 +1,21 @@
 import type { Config } from "tailwindcss";
 
-export default {
+/**
+ * Tailwind CSS configuration.
+ *
+ * - Theme tokens (colors, radii, fonts) are defined as CSS custom properties
+ *   in `src/index.css` so they can be themed at runtime without a rebuild.
+ * - Content paths cover the Vite source tree and standard framework locations
+ *   for shadcn/ui compatibility.
+ * - `tailwindcss-animate` provides Radix-accordion keyframes and transition
+ *   utilities used by the shadcn component set.
+ */
+const config: Config = {
   darkMode: ["class"],
-  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  content: [
+    "./index.html",
+    "./src/**/*.{ts,tsx}",
+  ],
   prefix: "",
   theme: {
     container: {
@@ -13,11 +26,13 @@ export default {
       },
     },
     extend: {
+      // Typography: Inter for body/UI; Orbitron for display headings.
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
-        display: ['Orbitron', 'sans-serif'],
+        sans: ["Inter", "sans-serif"],
+        display: ["Orbitron", "sans-serif"],
       },
       colors: {
+        // Semantic palette — driven by CSS variables in src/index.css.
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -51,6 +66,7 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Sidebar tokens (shadcn/ui sidebar pattern).
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -61,6 +77,7 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        // Brand neon accents.
         neon: {
           purple: "hsl(var(--neon-purple))",
           cyan: "hsl(var(--neon-cyan))",
@@ -76,6 +93,7 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       keyframes: {
+        // shadcn/ui accordion transitions.
         "accordion-down": {
           from: { height: "0" },
           to: { height: "var(--radix-accordion-content-height)" },
@@ -84,6 +102,7 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        // App-level motion primitives.
         "fade-in": {
           "0%": { opacity: "0", transform: "translateY(10px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
@@ -113,3 +132,5 @@ export default {
   },
   plugins: [require("tailwindcss-animate")],
 } satisfies Config;
+
+export default config;

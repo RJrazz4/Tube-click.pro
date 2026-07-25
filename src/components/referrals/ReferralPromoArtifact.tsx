@@ -8,10 +8,13 @@ interface ArtifactProps {
 }
 
 /**
- * Referral Promo Artifact - GHOST PROTOCOL v2
- * Pure CSS/SVG + Canvas matrix rain, no external broken image dependency
- * $100/mo illusion: looks like classified keycard from cyberpunk dystopia
- * Zero-budget: SVG + CSS animations + free QR API (qrserver) + canvas rain
+ * Referral promo artifact.
+ *
+ * A branded share-card SVG with a canvas-based digital rain backdrop and
+ * an embedded QR code that points to the user's referral URL. Rendered
+ * entirely client-side using CSS/SVG/canvas; QR codes are generated via
+ * the free qrserver.com endpoint so no backend image service is required.
+ * Supports download as SVG or PNG.
  */
 
 export function ReferralPromoArtifact({ referralCode, className = "", showQR = true }: ArtifactProps) {

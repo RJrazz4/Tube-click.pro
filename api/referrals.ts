@@ -1,6 +1,11 @@
 /**
- * Phase 5 referral API — server-only attribution, HMAC anti-fraud signals,
- * signed HttpOnly cookies, and atomic Supabase reward RPCs.
+ * Vercel Edge — /api/referrals
+ *
+ * Referral attribution, share-link signing, and reward coordination.
+ * Uses signed HttpOnly cookies (HMAC under REFERRAL_SIGNING_SECRET),
+ * server-side Supabase RPCs for atomic chain evaluation, and Row-Level
+ * Security on the referral tables. No client is trusted with grant
+ * state. Runtime: Edge.
  */
 export const config = { runtime: 'edge' };
 

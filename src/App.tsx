@@ -16,7 +16,7 @@ import { Analytics as VercelAnalytics } from "@vercel/analytics/react";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
-// Lazy load heavy tool pages to reduce initial bundle — Phase A1 Performance
+// Lazy-load heavy tool pages to keep the initial bundle small.
 const ChatAgent = lazy(() => import("./pages/ChatAgent"));
 const VoiceStudio = lazy(() => import("./pages/VoiceStudio"));
 const Repurposer = lazy(() => import("./pages/Repurposer"));

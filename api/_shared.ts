@@ -1,5 +1,10 @@
 /**
- * Shared helpers for Vercel Edge Functions — secure, server-only keys
+ * Shared helpers for Vercel Edge and Node functions.
+ *
+ * All functions in this module run server-side only; nothing here is
+ * shipped to the browser. Helpers cover CORS, request parsing, timeout
+ * signals, error classification, and the OpenRouter key-rotation fetch
+ * used by older routes.
  */
 
 export const corsHeaders = {
@@ -46,18 +51,19 @@ export function requireEnv(key: string): string {
 }
 
 /* ------------------------------------------------------------------ *
- * Phase F1 — OpenRouter configuration (OpenAI-compatible chat completions)
- * Provider migration: direct Gemini REST → OpenRouter with API-key rotation.
+ * OpenRouter configuration (OpenAI-compatible chat completions).
+ * Default model and fallbacks can be overridden per environment.
  * ------------------------------------------------------------------ */
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-/** Primary model (OpenRouter path) — override via OPENROUTER_MODEL */
+/** Primary model; override with OPENROUTER_MODEL. */
 export const OPENROUTER_MODEL = "google/gemini-2.5-flash";
-/** Fallback chain (CSV) — override via OPENROUTER_MODEL_FALLBACKS */
+/** Default fallback chain; override with OPENROUTER_MODEL_FALLBACKS (comma-separated). */
 export const OPENROUTER_MODEL_FALLBACKS = ["google/gemini-2.5-flash-lite"];
-/* NOTE (Phase F2, live-verified via https://openrouter.ai/api/v1/models on 2026-07-17):
- * The 2.0 model paths are RETIRED on OpenRouter and every request 400s.
- * 2.5-flash / 2.5-flash-lite are the direct successors (same tier, support
- * response_format + temperature, 1M context). */
+/*
+ * Note: Gemini 2.0 model paths are retired on OpenRouter; 2.5-flash and
+ * 2.5-flash-lite are the direct successors (same tier, support
+ * response_format + temperature, 1M context window).
+ */
 
 export function extractGeminiText(data: any) {
   return data?.candidates?.[0]?.content?.parts
@@ -67,31 +73,31 @@ export function extractGeminiText(data: any) {
 }
 
 /* ------------------------------------------------------------------ *
- * Phase F1 — OpenRouter fetching: API-KEY ROTATION + model fallback
+ * OpenRouter fetch: key rotation + model failover.
  * ------------------------------------------------------------------ */
 
 export interface OpenRouterFetchOutcome {
-  /** Final Response (ok, or the last error if everything failed) */
+  /** Final Response (ok, or the last error if everything failed). */
   res: Response;
-  /** OpenRouter model id that produced `res` (e.g. "google/gemini-2.0-flash-lite") */
+  /** OpenRouter model id that produced the response. */
   model: string;
-  /** Models attempted, in order — key material is NEVER recorded */
+  /** Models attempted, in order — no key material is ever recorded. */
   attempted: string[];
-  /** True when key rotation and/or model failover actually happened */
+  /** True when key rotation and/or model failover fired. */
   failedOver: boolean;
 }
 
 /**
- * Normalized OpenRouter key resolution (RC-4 fix).
+ * Resolve OpenRouter API keys from environment.
  *
- * Accepts, in priority order:
- *   1. OPENROUTER_API_KEYS=k1,k2,k3   (preferred plural/comma form)
- *   2. OPENROUTER_API_KEY=k1            (legacy singular alias)
- *   3. OPENROUTER_API_KEY_1/2/3...      (numbered form — common 3-key setup)
+ * Accepted forms, in priority order:
+ *   1. OPENROUTER_API_KEYS=k1,k2,k3   (preferred, comma-separated)
+ *   2. OPENROUTER_API_KEY=k1          (singleton legacy alias)
+ *   3. OPENROUTER_API_KEY_1..N        (numbered form)
  *
- * Whichever form is present, returns a trimmed, de-duplicated array. Throws a
- * clear, actionable config error when no usable key is found — so a mis-set
- * variable name can never silently disable rotation.
+ * Returns a trimmed, de-duplicated array. Throws a descriptive error when
+ * no usable key is configured, so a mis-named variable cannot silently
+ * disable rotation.
  */
 export function openRouterKeys(): string[] {
   const env = process.env;
@@ -165,21 +171,25 @@ export function extractOpenRouterText(data: any): string {
 
 const sleepMsOR = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-/** Error classes where sleeping is useless — rotating key/model IS the fix */
+/** Error categories where backoff is useless and rotating key/model is the remedy. */
 const OR_ROTATE_CODES = new Set(["RATE_LIMITED", "QUOTA_EXCEEDED_DAILY", "INSUFFICIENT_CREDITS", "API_KEY_INVALID"]);
 
 /**
- * Fetch OpenRouter with API-KEY ROTATION and MODEL FAILOVER.
+ * Fetch OpenRouter with key rotation and model failover.
  *
- * Policy (Phase F1 spec):
- *  1. Model loop (chain of models), inner KEY loop (rotation): for each model, try key1, key2, ...
- *  2. 429 quota/rate-limit, 402 insufficient credits, 401/403 invalid key → rotate to the
- *     next key INSTANTLY; when every key is spent → next model, keys reset.
- *  3. Provider Retry-After header → honored ONCE per (model,key) if it fits the budget.
- *  4. 5xx → one short backoff on the same key, then rotate.
- *  5. Non-429 4xx (bad request) → identical across keys/models → fail fast (1 request).
- *  Total sleep bounded by AI_RETRY_BUDGET_MS (default 12000) to stay inside edge maxDuration.
- *  Key material is never logged or returned — rotation logs reference key index only.
+ * Policy:
+ *  1. Outer loop walks the model chain; inner loop rotates through keys.
+ *  2. 429/402/401/403 rotate to the next key immediately; once every key
+ *     is exhausted, advance to the next model and reset the key cursor.
+ *  3. A Retry-After hint is honored once per (model, key) if it fits
+ *     within the retry budget.
+ *  4. 5xx triggers one short backoff on the same key, then rotation.
+ *  5. Non-429 4xx errors (bad request) are identical across keys and
+ *     models, so they fail fast on the first attempt.
+ *
+ * Total sleep is bounded by AI_RETRY_BUDGET_MS (default 12000) so the
+ * function returns inside the edge runtime limit. Logs reference keys
+ * by index only — no key material is ever written.
  */
 export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<OpenRouterFetchOutcome> {
   const keys = openRouterKeys();
@@ -201,9 +211,8 @@ export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<Op
         keysLoop: for (let ki = 0; ki < keys.length; ki++) {
       keysTried++;
       for (let attempt = 0; attempt < 2; attempt++) {
-        // Phase F3: per-attempt hard timeout — a hung/slow upstream can never
-        // pin this loop (and the client) indefinitely. Bounded generously so
-        // legitimately slow-but-working requests still complete.
+        // Per-attempt hard timeout ensures a slow or hung upstream cannot
+        // stall the loop (and the client) indefinitely.
         const PER_ATTEMPT_TIMEOUT_MS = Math.max(2000, parseInt(process.env.OPENROUTER_ATTEMPT_TIMEOUT_MS || "15000", 10) || 15000);
         const attemptTimer = timeoutSignal(PER_ATTEMPT_TIMEOUT_MS);
         try {
@@ -212,7 +221,8 @@ export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<Op
             headers: {
               "Content-Type": "application/json",
               "Authorization": `Bearer ${keys[ki]}`,
-              // Phase F2: env-driven attribution headers — no literal <YOUR_SITE_*> placeholders
+              // OpenRouter attribution headers (driven by env; no placeholder
+              // values are sent when the site URL is unconfigured).
               "X-Title": process.env.OPENROUTER_SITE_TITLE || "TubeClick Pro",
               ...(process.env.OPENROUTER_SITE_URL ? { "HTTP-Referer": process.env.OPENROUTER_SITE_URL } : {}),
             },
@@ -254,8 +264,8 @@ export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<Op
           continue;
         }
 
-        // Phase F2: log the exact (auth-free) outbound payload on fatal errors so
-        // Vercel logs show precisely what the provider rejected — speeds up future 400 audits.
+        // Log a redacted outbound snapshot on fatal errors so Vercel logs
+        // show the payload shape the provider rejected (aids future audits).
         console.error(`[openrouter] fatal on model=${model} key#${ki + 1} — outbound snapshot: ${JSON.stringify(orBody).slice(0, 1200)}`);
         return { res: lastRes, model, attempted, failedOver: attempted.length > 1 || keysTried > 1 };
       }
@@ -263,12 +273,12 @@ export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<Op
   }
 
   if (!lastRes) {
-    // Every (model, key) attempt failed at the transport layer (timeout /
-    // connection refused). Surface a clean error instead of dereferencing null.
+    // Every (model, key) attempt failed at the transport layer (timeout or
+    // connection refused); surface a clean error instead of dereferencing null.
     throw new Error("OpenRouter unreachable: every key/model attempt failed at the network layer (timeout or connection refused).");
   }
   if (lastOrBody) {
-    console.error(`[openrouter] ALL keys x models exhausted — last outbound snapshot: ${JSON.stringify(lastOrBody).slice(0, 1200)}`);
+    console.error(`[openrouter] All keys × models exhausted — last outbound snapshot: ${JSON.stringify(lastOrBody).slice(0, 1200)}`);
   }
   return { res: lastRes, model: lastModel, attempted, failedOver: attempted.length > 1 || keysTried > 1 };
 }
@@ -278,12 +288,13 @@ export function cleanupJson(value: string) {
 }
 
 /* ------------------------------------------------------------------ *
- * Phase 1 — Upstream provider error normalization
- * Never leak raw provider payloads (Google/Gemini JSON blobs, HTML, or
- * internals) to clients. The envelope stays BACKWARD COMPATIBLE:
- * `error` remains a friendly STRING (existing clients keep working);
- * the new machine-readable `code` (+ optional retryAfter/action) is
- * added for the upgraded client arriving in Phase 3.
+ * Upstream provider error normalization.
+ *
+ * Raw provider payloads (Gemini JSON blobs, HTML, stack traces) are
+ * never surfaced to clients. The response envelope is backward
+ * compatible: `error` remains a human-friendly string, and a
+ * machine-readable `code` (with optional `retryAfter` / `action`) is
+ * added for newer clients.
  * ------------------------------------------------------------------ */
 
 export interface NormalizedProviderError {

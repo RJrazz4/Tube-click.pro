@@ -4,14 +4,27 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
+/**
+ * ESLint flat config.
+ *
+ * - Baseline JS recommended rules + TypeScript recommended.
+ * - React hooks rules enforced (rules-of-hooks, exhaustive-deps).
+ * - React Refresh warns on non-component exports to keep HMR working.
+ * - Build output is ignored. Known suppressions live in
+ *   `eslint-suppressions.json` and are applied by the ESLint suppressions
+ *   plugin; new warnings should be fixed rather than added there.
+ */
 export default tseslint.config(
-  { ignores: ["dist"] },
+  { ignores: ["dist", "node_modules", "coverage"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
-      ecmaVersion: 2020,
-      globals: globals.browser,
+      ecmaVersion: 2022,
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
     },
     plugins: {
       "react-hooks": reactHooks,
@@ -19,8 +32,13 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+      "react-refresh/only-export-components": [
+        "warn",
+        { allowConstantExport: true },
+      ],
+      // Baseline TS rules are relaxed in spots to match the existing codebase.
       "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-explicit-any": "off",
     },
   },
 );

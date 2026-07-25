@@ -1,21 +1,17 @@
 /**
- * Vercel Edge Function — /api/generate-text
- * TubeBot AI Agent text generation.
+ * Vercel Edge Function — POST /api/generate-text
  *
- * Phase F3 (Master Plan): the SINGLE, authoritative chat-text path. Backed by
- * api/_ai.ts → packages/orchestrator OpenRouterClient (KeyPool rotation +
- * per-attempt timeouts + retry budget + model failover). Server keys only,
- * read from process.env; runtime edge (fastest for the US audience).
- *
- * maxDuration 25s (approved budget). The internal AI deadline (17s) sits well
- * inside it so the function always returns a typed response — never a dropped
- * connection ("Ghost tunnel interference").
+ * TubeBot text generation. This is the canonical chat/content-text path;
+ * it delegates to `api/_ai.ts`, which in turn uses the orchestrator's
+ * `OpenRouterClient` for key rotation, per-attempt timeouts, retry
+ * budget, and model failover. Runtime: Edge (low-latency global POPs).
  */
 
 export const config = {
   runtime: "edge",
-  // Approved hard cap. Keeps the edge function from being severed mid-flight,
-  // which previously surfaced to users as a transport-level failure.
+  // Vercel hard cap. The internal deadline (17s by default) stays well
+  // inside this budget so the function always returns a typed response
+  // rather than being severed mid-flight.
   maxDuration: 25,
 };
 

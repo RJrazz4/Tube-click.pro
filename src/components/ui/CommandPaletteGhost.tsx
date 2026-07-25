@@ -5,9 +5,11 @@ import { Zap, Terminal, Cpu, Radio, Gift, Search, Flame, Ghost } from "lucide-re
 import { useNavigate } from "react-router-dom";
 
 /**
- * Command Palette Ghost - Elite tool signature (Raycast / Linear feel)
- * Uses cmdk already in deps, zero extra cost
- * Ctrl+K / Cmd+K opens palette with ghost commands
+ * Global command palette (Ctrl/Cmd+K).
+ *
+ * Raycast/Linear-style quick launcher backed by the `cmdk` library that
+ * is already a dependency. Provides keyboard navigation to every major
+ * tool surface.
  */
 
 const COMMANDS = [

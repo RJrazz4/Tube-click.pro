@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 
 /**
- * Ghost Node Status - Shows fake edge nodes, latency, load
- * Zero-budget, vanilla intervals, lightweight CSS animations
- * Makes $0 infra look like $10k multi-region mesh
+ * Decorative "edge node" status strip.
+ *
+ * Renders a small list of notional PoPs (Mumbai, Delhi, Bangalore) with
+ * simulated latency values, driven by `setInterval`. Pure presentation;
+ * no network calls.
  */
 
 const NODES = [

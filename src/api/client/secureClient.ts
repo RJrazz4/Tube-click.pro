@@ -1,9 +1,21 @@
 /**
- * TubeClick Pro — Ghost Protocol v2 Secure Client
- * Phase 1: Quantum Cache + Ghost Relay Mesh
- * Zero-budget resilience: never shows "Failed to fetch" raw.
- * Every request has 3-layer fallback: live -> retry -> quantum ghost cache.
- * Makes the app feel like $100/mo edge CDN.
+ * Secure API client for TubeClick Pro server functions.
+ *
+ * Responsibilities:
+ *   - Route calls to the correct backend (Vercel Edge or Supabase Edge)
+ *     based on endpoint and environment configuration.
+ *   - Inject the Supabase bearer token on authenticated Vercel requests.
+ *   - Enforce per-endpoint client-side timeouts that sit just under the
+ *     server maxDuration so failures surface as typed TIMEOTs rather
+ *     than dropped connections.
+ *   - Retry network/5xx failures with bounded jittered backoff.
+ *   - Maintain a two-level client cache (in-memory + localStorage) for
+ *     successful responses, with a 10-minute fresh window and 30-minute
+ *     stale-while-revalidate window to absorb transient outages without
+ *     surfacing errors to the user.
+ *
+ * All failures are surfaced as `EdgeFunctionError` with stable codes so
+ * the UI can render consistent user-facing messages.
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -47,7 +59,9 @@ function extractMessage(body: unknown, status: number): string {
   return `Request failed with status ${status}`;
 }
 
-// ---------- QUANTUM CACHE - $0 Edge CDN Illusion ----------
+// ---------- Client-side resilient cache ----------
+// Two-level response cache (in-memory LRU + localStorage) used to smooth
+// over transient network/upstream failures and suppress repeat traffic.
 const QC_TTL_MS = 10 * 60 * 1000; // 10 min
 const QC_STALE_TTL_MS = 30 * 60 * 1000; // serve stale up to 30 min if network down
 const memCache = new Map<string, { data: any; expires: number; staleUntil: number }>();
@@ -112,9 +126,9 @@ const VERCEL_ROUTE_MAP: Record<string, string> = {
 };
 
 function getApiEndpoint(functionName: string): { url: string; headers: Record<string, string>; isVercel: boolean } {
-  // generate-content (TubeBot) is hard-pinned to Vercel/OpenRouter so the 3+
-  // server keys + rotation are ALWAYS on the chat path (Master Plan Phase 1).
-  // clone-crush/transcript are already pinned; the rest follow the env flag.
+  // Chat (generate-content), clone-crush, and transcript are hard-pinned to
+  // Vercel so they always use the orchestrator's key rotation and timeouts.
+  // All other endpoints follow the VITE_USE_VERCEL_EDGE / VITE_API_MODE flags.
   const useVercelEdge = functionName === "clone-crush" || functionName === "transcript"
     || functionName === "generate-content"
     || import.meta.env.VITE_USE_VERCEL_EDGE === "true"
@@ -135,14 +149,14 @@ function getApiEndpoint(functionName: string): { url: string; headers: Record<st
   };
 }
 
-// ---------- GHOST RELAY RESILIENCE ----------
+// ---------- Retry & resilience ----------
 const RETRY_DELAYS = [800, 2000, 5000]; // faster than before, plus jitter
 const lastCall = new Map<string, number>();
 const MIN_INTERVAL = 600; // reduced from 1200 for snappier feel
 
 function requestTimeoutMs(functionName: string, body: unknown): number {
   const action = body && typeof body === "object" && "action" in body ? String((body as any).action || "") : "";
-  if (functionName === "generate-content") return 22_000; // server maxDuration 25s — client sits just under (Master Plan)
+  if (functionName === "generate-content") return 22_000; // server maxDuration 25s; client budget sits just under
   if (functionName === "transcript") return 8_000;
   if (functionName === "clone-crush") {
     if (action === "profile") return 15_000;
@@ -209,7 +223,7 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
   const cacheKey = qcKey(functionName, body);
   const cached = qcGet<T>(cacheKey);
 
-  // Throttle guard - ghost protocol style
+  // Basic per-endpoint throttle to keep double-clicks or rapid retries from hammering the server.
   const now = Date.now();
   const prev = lastCall.get(functionName) || 0;
   const elapsed = now - prev;
@@ -337,7 +351,7 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
   }
 
   if (cached) return cached.data;
-  throw lastErr || new EdgeFunctionError("Ghost protocol: request failed after all relays", 500, { code: "GHOST_FAIL" });
+  throw lastErr || new EdgeFunctionError("Request failed after all retries", 500, { code: "GHOST_FAIL" });
 }
 
 export async function fetchEdgeFunctionBlob(functionName: string, body: unknown, signal?: AbortSignal): Promise<Blob> {

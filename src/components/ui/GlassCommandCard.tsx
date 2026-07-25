@@ -2,11 +2,13 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Glass Command Card - Phase 3 Matrix Command Center building block
- * Pushed YouTube grid to background, glassmorphism on top
- * $100/mo elite HUD with brackets, scanline, noise, glow
- */
+ * Glass-styled command card primitive.
+ *
+ * Reusable container with the product's signature glassmorphism
+ * treatment (bracketed corners, subtle scanline, noise texture, glow).
+ * Used for hero and command-center surfaces.
 
+ */
 interface GlassCommandCardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   glow?: "none" | "purple" | "cyan" | "amber" | "red" | "green";

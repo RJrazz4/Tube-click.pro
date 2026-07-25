@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { Sparkles, X, Zap } from "lucide-react";
 
 /**
- * Ghost Intel Drop - Daily classified drop banner
- * Date logic only, zero API, lightweight
- * Shows at 00:00 IST based on local date, new "3 patterns detected"
- */
+ * Daily "intel drop" banner.
+ *
+ * Rotates a marketing/creative tip once per day based on local date.
+ * Purely client-side — no API calls.
 
+ */
 const DROPS = [
   "3 new viral patterns detected in Tech & Coding niche - shock + number = 3.4x CTR",
   "Algorithm shift: Long-form 10m+ favored today - Ghost mesh detected spike",

@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 
 /**
- * Broadcast Sync Indicator - Collaborative war room illusion
- * Uses BroadcastChannel API (native), zero cost
- * If 2 tabs open, shows "2 nodes synced • Collaborative war room"
+ * Cross-tab sync indicator.
+ *
+ * Uses the native `BroadcastChannel` API to detect how many tabs of
+ * the app are open and renders a small "N nodes synced" chip. No
+ * server involvement.
  */
 
 export function BroadcastSyncIndicator({ compact = false }: { compact?: boolean }) {

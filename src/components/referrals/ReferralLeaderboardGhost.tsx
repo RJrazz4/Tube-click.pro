@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 
 /**
- * Referral Leaderboard Ghost - Synthetic social proof, zero-budget
- * Seeded PRNG, vanilla interval, lightweight
- * Makes new platform feel like 10k users already inside
+ * Referral leaderboard display.
+ *
+ * Renders a lightweight activity feed using a seeded PRNG and
+ * `setInterval` so the page feels live without any network cost.
  */
 
 const GHOST_NAMES = [

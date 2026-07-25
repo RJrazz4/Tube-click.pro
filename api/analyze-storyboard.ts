@@ -1,6 +1,9 @@
 /**
- * Vercel Edge — /api/analyze-storyboard
- * OpenRouter (key-rotated) — fast edge for US storyboard analysis
+ * Vercel Edge — POST /api/analyze-storyboard
+ *
+ * Extracts structured scenes (beat type, characters, setting, camera
+ * angle, visual/motion prompts) from a script, using OpenRouter with
+ * key rotation. Runs on the Edge runtime for low-latency US responses.
  */
 export const config = { runtime: 'edge' };
 import { jsonResponse, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError, fetchOpenRouterWithRetry, extractOpenRouterText } from './_shared.js';

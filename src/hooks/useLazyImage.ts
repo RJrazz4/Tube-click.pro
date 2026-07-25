@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * Phase A2 — Performance: Lazy loading for heavy UI components
- * IntersectionObserver-based image lazy loading.
- * Reduces initial bundle + LCP for Thumbnail Architect & Storyboard
+ * IntersectionObserver-based lazy-image hook.
+ *
+ * Defers loading of offscreen images until they approach the viewport,
+ * reducing initial payload and improving LCP for media-heavy pages.
  */
 
 interface UseLazyImageOptions {

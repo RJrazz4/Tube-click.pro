@@ -1,27 +1,26 @@
 {
+  /*
+   * Root TypeScript config — project references only.
+   * Each surface (app, node tooling, API/orchestrator packages) has its own
+   * tsconfig so build settings can be tailored while editors (VS Code, etc.)
+   * still see the whole workspace. Run `npm run typecheck` to build every
+   * project in dependency order.
+   */
   "compilerOptions": {
     "allowJs": true,
+    "skipLibCheck": true,
     "noImplicitAny": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
+    "strictNullChecks": false,
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
-    },
-    "skipLibCheck": true,
-    "strictNullChecks": false
+      "@/*": ["./src/*"]
+    }
   },
   "files": [],
   "references": [
-    {
-      "path": "./tsconfig.app.json"
-    },
-    {
-      "path": "./tsconfig.node.json"
-    },
-    {
-      "path": "./tsconfig.api.json"
-    }
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.api.json" }
   ]
 }

@@ -1,16 +1,22 @@
 {
+  /*
+   * TypeScript config for Vercel serverless functions (api/).
+   * NodeNext resolution because Edge/Node functions run as ESM against
+   * Node 20+ types, and they import packages/orchestrator via ESM.
+   */
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "types": ["node"],
-    "skipLibCheck": true,
-    "isolatedModules": true,
     "moduleDetection": "force",
+    "isolatedModules": true,
     "noEmit": true,
+    "skipLibCheck": true,
 
-    /* Linting — mirrors tsconfig.app.json leniency */
+    // Leniency matches the SPA baseline; orchestrator strictness is
+    // enforced separately via tsconfig.packages.json.
     "strict": false,
     "noImplicitAny": false,
     "noUnusedLocals": false,

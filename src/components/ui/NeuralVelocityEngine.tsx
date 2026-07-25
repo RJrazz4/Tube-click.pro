@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 
 /**
- * Neural Velocity Engine - Simulated AI Intel, Zero Budget
- * Client-side heuristic - calculates retention, clickbait, viral velocity from title
- * Looks like $500/mo AI analysis, costs 0ms, no API
+ * Heuristic "velocity" meter.
+ *
+ * Computes a simple client-side score from the title text and
+ * renders as a small analytics dial. Used to give the user instant
+ * feedback on title quality while they type.
  */
 
 interface Props {

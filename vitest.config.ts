@@ -1,13 +1,13 @@
 /**
- * Phase A0 — Vitest unit-test scope.
+ * Vitest configuration.
  *
- * Unit/integration suites live in tests/, packages/ and src/ (lands with
- * Phase A1/A2 key-pool suites, Phase D rotation tests, Phase H hardening).
- * e2e/ is owned by Playwright (separate runner) and must never be picked
- * up by vitest.
- *
- * The "@" alias mirrors vite.config.ts so src/ suites import app modules
- * exactly as the app does.
+ * - Unit/integration suites are co-located with their modules in
+ *   `packages/**` and `src/**`, plus cross-cutting suites in `tests/`.
+ * - End-to-end tests live under `e2e/` and are executed by Playwright
+ *   (see `e2e/playwright.config.ts`); they are excluded here so Vitest
+ *   never tries to run them as unit tests.
+ * - The `@/*` path alias mirrors Vite so tests import app modules
+ *   exactly the way the application does.
  */
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
@@ -19,6 +19,7 @@ export default defineConfig({
     },
   },
   test: {
+    environment: "node",
     include: [
       "tests/**/*.test.ts",
       "packages/**/*.test.ts",

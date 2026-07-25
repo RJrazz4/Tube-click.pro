@@ -1,7 +1,13 @@
 /**
- * Vercel — /api/transcript — GHOST PROTOCOL v2
- * Triple relay + ghost synthetic fallback - never returns red FAILED
- * Runtime: nodejs (youtube-transcript needs Node)
+ * Vercel Node function — GET /api/transcript
+ *
+ * YouTube transcript retrieval with a multi-path fallback cascade:
+ *   1. Primary `youtube-transcript` library (server-side, no CORS).
+ *   2. Piped public API relay.
+ *   3. Deterministic synthetic transcript scaffold so the workflow can
+ *      continue even when captions are unavailable.
+ *
+ * Runtime: Node.js (the `youtube-transcript` dependency requires Node).
  */
 export const config = { runtime: 'nodejs' };
 
@@ -190,7 +196,8 @@ async function fetchViaInvidious(videoId: string): Promise<TranscriptResult | nu
 }
 
 // GHOST SYNTHETIC TRANSCRIPT - last resort, allows Chain-Loop to continue
-// Generates plausible transcript scaffolding from videoId hash - zero budget, $0 cost
+// Generates a plausible transcript scaffold from the videoId hash when
+// captions are unavailable across all upstream paths. No external API cost.
 function ghostHash(s: string): number {
   let h = 2166136261;
   for (let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h,16777619); }

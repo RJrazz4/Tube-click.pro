@@ -1,0 +1,16 @@
+# Authors
+
+TubeClick Pro is built and maintained by RJrazz4 and the TubeClick Pro team.
+
+## Primary Maintainer
+
+- RJrazz4 <rjrazzrazz@gmail.com>
+
+## Acknowledgements
+
+Portions of the product have benefited from design and engineering
+collaboration with early contributors, design partners, and the creators
+who tested the beta. We gratefully acknowledge that work.
+
+Third-party open-source dependencies are enumerated in package-lock.json;
+each retains its own copyright and license.

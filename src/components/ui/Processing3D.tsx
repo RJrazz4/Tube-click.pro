@@ -1,12 +1,12 @@
 /**
- * Phase G3 — Processing3D: unique premium "3D processing" state
+ * Premium "processing" indicator (3D-style).
  *
- * Replaces generic spinners/progress bars during image generation with a
- * signature animation: CSS-only 3D cube tumbling in perspective, a scan beam
- * sweeping across it, an SVG progress ring (inline variant) and cycling
- * stage microcopy. Accents come from src/lib/brandCopy.ts (per-brand tier).
+ * Replaces generic spinners during image generation with a signature
+ * animation: a CSS-only tumbling cube in 3D perspective, a scan beam,
+ * an inline SVG progress ring, and cycling stage microcopy. Accent
+ * colors come from `src/lib/brandCopy.ts` per product tier.
  *
- * - Pure CSS (transform-style: preserve-3d), zero dependencies
+ * - Pure CSS (`transform-style: preserve-3d`), zero dependencies
  * - variants: "inline" (form/generation blocks), "tile" (grid cells),
  *   "overlay" (fullscreen modal state)
  * - respects prefers-reduced-motion (static cube + first stage)

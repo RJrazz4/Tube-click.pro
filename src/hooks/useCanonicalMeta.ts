@@ -2,8 +2,11 @@ import { useEffect } from "react";
 import { getCanonicalRoot } from "@/lib/domain/canonical";
 
 /**
- * Ensures OG and canonical always point to tubeclickpro.in, never vercel.app
- * Zero-budget, client-side meta enforcement
+ * Canonical-meta enforcement hook.
+ *
+ * Keeps the document's canonical URL, og:url, and related meta tags
+ * pointing at https://tubeclickpro.in regardless of which host the
+ * page was loaded from (preview URLs, Vercel deployments, etc.).
  */
 
 export function useCanonicalMeta() {

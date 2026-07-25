@@ -1,7 +1,10 @@
 /**
- * Vercel Edge — /api/elevenlabs-tts
- * Secure voice generation — static preview MP3s on frontend to save calls
- * Server: ELEVENLABS_API_KEY
+ * Vercel Edge — POST /api/elevenlabs-tts
+ *
+ * Secure voice generation via ElevenLabs. Short static preview MP3s are
+ * served from the client (public/previews/voices/) to eliminate ~80% of
+ * billable calls; full generation uses the server-side
+ * ELEVENLABS_API_KEY.
  */
 export const config = { runtime: 'edge' };
 

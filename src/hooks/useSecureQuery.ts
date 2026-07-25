@@ -5,8 +5,9 @@ import { useAppStore } from "@/stores/useAppStore";
 import { toast } from "sonner";
 
 /**
- * Phase A2 — Global State & Caching
- * Wrappers around React Query providing:
+ * Typed React Query wrappers for the secure edge client.
+ *
+ * Wraps React Query's `useQuery`/`useMutation` to provide:
  * - Centralized query keys (QK)
  * - SWR-like caching (staleTime 5m, gcTime 10m — defined in queryClient)
  * - Throttling via useAppStore.canGenerate() to prevent quota burn
@@ -97,7 +98,7 @@ export function useSeoGeneration() {
   });
 }
 
-// Transcript generation — Phase B2
+// Transcript generation
 export function useTranscriptExtraction() {
   return useSecureMutation<{ transcript: string; segments: any[]; videoId: string; wordCount: number; length: number; source: string }, { url: string }>("transcript");
 }

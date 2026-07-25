@@ -8,9 +8,11 @@ import { GhostIntelDrop } from "./GhostIntelDrop";
 import { ViralOverdriveMiniBanner } from "@/components/referrals/ViralOverdriveMiniBanner";
 
 /**
- * PageWrapperGhost - Phase 5 Global Polish Wrapper
- * Ensures every page has Matrix stealth vibe, video wall background, ticker, ghost nodes
- * Zero-budget, lightweight, glassmorphism command center
+ * Page shell for tool routes.
+ *
+ * Composes the shared chrome — video-wall background, ticker, node
+ * status, live counter, broadcast indicator, and mini referral
+ * banner — for a consistent look across tool pages.
  */
 
 interface Props {

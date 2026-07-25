@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { isTemporaryHost, getCanonicalRoot } from "@/lib/domain/canonical";
 
 /**
- * Ghost Redirect Overlay - If user lands on vercel.app, auto-redirect to tubeclickpro.in
- * Premium illusion: "REDIRECTING TO SECURE DOMAIN" terminal
- * 
- * OAuth is now initiated with the canonical callback URL. The callback is therefore
- * never processed on a temporary host, avoiding the domain-isolated localStorage
- * session split that previously logged users out after the relay.
+ * Canonical-domain redirect overlay.
+ *
+ * If the user lands on a temporary host (e.g., a Vercel preview URL),
+ * displays a redirect overlay while navigating them to
+ * tubeclickpro.in. OAuth flows are always initiated against the
+ * canonical domain so that post-login sessions don't end up split
+ * across host-specific localStorage.
  */
 
 // Auth routes that must NEVER be redirected - they rely on URL hash for tokens

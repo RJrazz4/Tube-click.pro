@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 
 /**
- * Pro Expiry Live Countdown - Scarcity trigger, $100/mo illusion
- * Vanilla interval, local math, zero budget, high urgency
+ * Pro trial expiry countdown.
+ *
+ * Renders a live countdown against the user's Pro expiry timestamp
+ * using `setInterval`; no network calls once the expiry is known.
  */
 
 interface Props {

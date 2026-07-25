@@ -1,23 +1,23 @@
 openapi: "3.0.3"
 info:
-  title: TubeClick.Pro Orchestrator API — Intelligent Image Generation
+  title: TubeClick Pro Orchestrator API
   version: "1.0.0"
   description: |
-    The intelligent orchestrator for YouTube storyboard and thumbnail
-    image generation (Master Plan phases A–H).
+    Public HTTP contract for the TubeClick Pro orchestrator — storyboard
+    and thumbnail generation, tier catalog, and observability.
 
-    **What the server guarantees**
+    **Server guarantees**
 
-    - **Tier enforcement (F).** Scene caps and thumbnail-count choices are
-      resolved server-side from the caller's tier — a storyboard response
-      echoes `truncated` / `remainingScenes` so clients can upsell honestly.
-    - **Never hangs, never 500s on provider failure (C/D).** Every scene
-      routes free-first (token-saving mandate), cascades across providers on
-      normalized failures, and falls back to a URL-only ultimate lane that
-      costs the server zero fetches. Failed scenes arrive as failed *rows*
-      inside a 200 — the batch status does not change.
-    - **Rate limiting (F4).** Per-tier token buckets checked before any
-      expensive work; denials are 429 with `Retry-After`.
+    - **Tier enforcement.** Scene caps and allowed thumbnail counts are
+      resolved server-side from the caller's tier. Responses echo
+      `truncated` / `remainingScenes` so clients render honest upsells.
+    - **Resilient generation.** Every scene routes through a ranked
+      provider cascade (free-first to preserve margins), with retries,
+      key rotation, circuit breakers, and a deterministic final fallback.
+      Failed scenes arrive as failed *rows* inside a 200 response; the
+      batch itself never 500s.
+    - **Rate limiting.** Per-tier token buckets are checked before any
+      expensive work; denials return 429 with `Retry-After`.
     - **Observability (H).** Prometheus exposition at `/metrics`
       (label values only ever from internal enums — never user text),
       machine rollup at `/health`.

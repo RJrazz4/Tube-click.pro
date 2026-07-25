@@ -1,5 +1,5 @@
 /**
- * Chain-Loop → TubeBot seed mapper (Master Plan Phase 4).
+ * Chain-Loop → TubeBot seed mapper.
  *
  * Pure transform: a finished Clone & Crush "Chain-Loop" workflow session is
  * converted into a TubeBot (ChatAgent) seed — a topic to prefill, an optional

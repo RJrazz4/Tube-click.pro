@@ -1,7 +1,13 @@
 /**
- * Vercel Edge — /api/clone-crush
- * GHOST PROTOCOL v2 - Zero-budget resilience + Synthetic fallback matrix
- * Never throws red FAILED - always returns ghost reconstructed intel
+ * Vercel Edge — POST /api/clone-crush
+ *
+ * Competitor channel analysis and asset generation.
+ *
+ * The endpoint always returns a structured payload: when upstream calls
+ * fail, it degrades through retries, provider failover, and
+ * deterministic fallback content rather than surfacing a hard error.
+ * This keeps the creator workflow uninterrupted across upstream
+ * outages and free-tier exhaustion.
  */
 export const config = { runtime: 'edge' };
 
@@ -155,7 +161,8 @@ function estimatedRevenueForViews(views: number): number {
 }
 
 // -------------------------------------------------------------
-// GHOST HASH - Seeded deterministic math (zero budget)
+// Deterministic seeded hash — used to synthesize fallback data when
+// upstream intelligence is unavailable (no external API cost).
 // -------------------------------------------------------------
 function ghostHash(str: string): number {
   let h = 2166136261;
@@ -560,7 +567,8 @@ function competitorMetrics(competitors: any[], niche: string, cpm = '$5-8') {
 }
 
 // -------------------------------------------------------------
-// HANDLER - GHOST PROTOCOL ALWAYS RETURNS INTEL, NEVER RED FAILED
+// Primary handler — returns structured intelligence for every request,
+// including in degraded/fallback modes. See top-of-file docblock.
 // -------------------------------------------------------------
 export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });

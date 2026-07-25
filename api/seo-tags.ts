@@ -1,7 +1,9 @@
 /**
- * Vercel Edge — /api/seo-tags — Phase B1 LLM Routing (SEO)
- * Secure OpenRouter SEO bundle generation (key-rotated)
- * Server: OPENROUTER_API_KEYS
+ * Vercel Edge — POST /api/seo-tags
+ *
+ * Generates SEO bundles (titles, descriptions, tags, score, estimated
+ * search volume) via OpenRouter with key rotation. All provider keys
+ * are read from server environment variables. Runtime: Edge.
  */
 export const config = { runtime: 'edge' };
 

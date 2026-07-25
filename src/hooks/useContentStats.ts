@@ -2,9 +2,11 @@ import { useContentStore } from "@/stores/useContentStore";
 import { useMemo } from "react";
 
 /**
- * Phase A2 — Instant UI via Zustand selector memoization
- * Prevents Dashboard re-renders when unrelated state changes
- * Replaces polling setInterval with reactive subscription
+ * Memoized content-stats selector hook.
+ *
+ * Subscribes to the content store via a Zustand selector so the
+ * Dashboard only re-renders when the stats it cares about change,
+ * avoiding the polling churn of a naive `setInterval` approach.
  */
 
 export function useContentStats() {

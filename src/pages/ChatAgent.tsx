@@ -94,7 +94,7 @@ export default function ChatAgent() {
   const [pendingSeed, setPendingSeed] = useState<TubeBotSeed | null>(null);
   const consumedWorkflowId = useRef<string | null>(null);
 
-  // Master Plan Phase 4 — auto-consume a Chain-Loop → TubeBot handoff.
+  // Auto-consume a Chain-Loop → TubeBot handoff if present on mount.
   // Prefill the topic and surface the incoming payload once per workflow,
   // so the user reviews it before hitting Send (no silent auto-generation).
   useEffect(() => {

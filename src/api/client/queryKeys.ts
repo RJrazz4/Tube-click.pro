@@ -1,9 +1,11 @@
 /**
- * Centralized React Query keys for optimal caching — Phase A2/B1
- * SWR caching: stale 5m, gc 10m — instant feel on revisit
+ * Centralized React Query keys.
+ *
+ * A single source of truth for the query-key namespace, making cache
+ * invalidation predictable across the app.
  */
 export const QK = {
-  // Phase B1 — LLM Routing
+  // LLM-backed content generation
   generateContent: (topic: string, platform: string, style: string, lang: string) =>
     ["content", "generate", topic, platform, style, lang] as const,
   seo: (keyword: string, platform: string, lang: string) =>

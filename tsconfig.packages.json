@@ -1,20 +1,24 @@
 {
+  /*
+   * TypeScript config for shared internal packages (packages/*).
+   * The orchestrator package is held to full strictness because it
+   * contains the security, routing, and resilience-critical code.
+   */
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2023"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "types": ["node"],
-    "skipLibCheck": true,
-    "isolatedModules": true,
     "moduleDetection": "force",
+    "isolatedModules": true,
     "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
 
-    /* New orchestrator code is held to full strictness (legacy configs stay lenient). */
     "strict": true,
-    "noFallthroughCasesInSwitch": true,
-    "forceConsistentCasingInFileNames": true
+    "noFallthroughCasesInSwitch": true
   },
-  "include": ["packages/shared", "packages/orchestrator"],
-  "exclude": ["**/node_modules/**"]
+  "include": ["packages/shared", "packages/orchestrator", "packages/ai", "apps/api"],
+  "exclude": ["**/node_modules/**", "**/dist/**"]
 }

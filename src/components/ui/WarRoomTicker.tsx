@@ -1,9 +1,11 @@
 import { useEffect, useState, useMemo } from "react";
 
 /**
- * War Room Ticker - Bloomberg style live intel ticker
- * Zero-budget: seeded PRNG + vanilla interval, no API calls
- * Looks like real-time market data, costs 0ms
+ * Animated intel ticker.
+ *
+ * Bloomberg-style marquee strip that rotates a set of pre-seeded
+ * "signal" strings using a seeded PRNG and `setInterval`. Purely
+ * decorative — no API calls.
  */
 
 const TICKER_POOL = [

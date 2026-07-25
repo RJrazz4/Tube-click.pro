@@ -1,9 +1,11 @@
 import { useState, useRef, useCallback } from "react";
 
 /**
- * Phase D1 — Preview MP3 logic to save API calls
- * Plays static MP3s from public/previews/voices/ — 0 API calls
- * Only final generation hits VectorEngine secure route
+ * Voice-preview hook.
+ *
+ * Plays short static MP3 samples from `public/previews/voices/` for
+ * instant preview feedback without consuming TTS quota. The full
+ * generation call is only made when the user explicitly requests it.
  */
 
 export function useVoicePreview() {

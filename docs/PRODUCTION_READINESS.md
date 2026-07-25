@@ -1,111 +1,111 @@
-# Production Readiness Checklist — TubeClick.Pro
+# Production Readiness
 
-**Last updated:** 2026-07-18
-**Phase:** 6 (Hardening, Observability & Docs)
-
----
-
-## 1. Security
-
-- [x] **No client-side API keys**: All provider keys live in `process.env` (Vercel) or `Deno.env` (Supabase). Frontend sends only anon Supabase key and brand strings.
-- [x] **Key rotation**: OpenRouter keys rotated on 429/402/401. Image provider keys rotated per-provider via `KeyRotator`. No single key leak compromises the system.
-- [ ] **CORS hardening**: Currently `Access-Control-Allow-Origin: *`. For production, restrict to `https://tubeclick.pro` and `https://app.tubeclick.pro`.
-- [x] **Input validation**: All API inputs validated via Zod schemas before processing. Malformed requests return 400 with field-level errors.
-- [x] **Tier enforcement server-side**: Scene count, brand access, and thumbnail count validated and clamped before generation.
-- [ ] **Rate limiting per IP**: Zustand client-side throttling (1.2s interval) prevents accidental rapid-fire, but production should add Vercel WAF or Upstash rate limiting by IP/user ID.
-- [ ] **Secrets rotation**: `.env` was previously committed to public repo (git history). Keys were Supabase "publishable" tier (safe), but if any real secrets were committed, rotate them and scrub history with `git filter-branch` / BFG Repo-Cleaner.
-
-## 2. Environment Variables
-
-| Variable | Required | Default | Where to set |
-|----------|----------|---------|--------------|
-| `OPENROUTER_API_KEYS` | ✅ Yes | — | Vercel project env (comma-separated) |
-| `OPENROUTER_MODEL` | No | `google/gemini-2.5-flash` | Vercel project env |
-| `OPENROUTER_MODEL_FALLBACKS` | No | `google/gemini-2.5-flash-lite` | Vercel project env |
-| `OPENROUTER_SITE_URL` | No | — | Vercel project env (attribution) |
-| `OPENROUTER_SITE_TITLE` | No | `TubeClick.Pro` | Vercel project env (attribution) |
-| `AGNES_FLASH_API_KEYS` | No | — | Vercel project env (if using AgnesFlash) |
-| `GEMINI_API_KEYS` | No | — | Vercel project env (if using Gemini Flash) |
-| `FAL_API_KEY` | No | — | Vercel project env (for Tube.Cinematic) |
-| `ELEVENLABS_API_KEY` | No | — | Vercel project env (Voice Studio) |
-| `JSON2VIDEO_API_KEY` | No | — | Vercel project env (Shorts rendering) |
-| `LOG_LEVEL` | No | `info` | Vercel project env (debug/info/warn/error) |
-| `VITE_SUPABASE_URL` | ✅ Yes | — | Vite public env |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | ✅ Yes | — | Vite public env |
-| `VITE_USE_VERCEL_EDGE` | No | `false` | Vite public env (toggle faster US routing) |
-
-## 3. Performance
-
-- [x] **Edge runtime**: All API routes use `runtime: "edge"` (<50ms cold start in US regions).
-- [x] **React Query caching**: `staleTime: 5min`, `gcTime: 10min` — instant revisit for cached results.
-- [x] **Lazy-loaded pages**: Heavy tool pages (Storyboard, Thumbnails, VoiceStudio) are `React.lazy()` loaded. Dashboard loads instantly.
-- [x] **Image lazy loading**: `<LazyImage>` component with IntersectionObserver (200px rootMargin). No CLS.
-- [x] **Pollinations fallback**: Ultimate safety net generates URLs instantly (browser loads the image on demand).
-- [x] **Parallel batch generation**: Each image slot is an independent Promise — slow providers don't block the batch.
-- [ ] **CDN caching**: Vercel Edge caching for static assets (`/previews/voices/*.mp3`, `/assets/*`). Consider adding `Cache-Control: public, s-maxage=86400` headers.
-- [ ] **Response compression**: Vercel Edge compresses JSON responses automatically, but verify `Content-Encoding: gzip` in production.
-
-## 4. Monitoring & Observability
-
-- [x] **Structured JSON logging**: All API routes log with consistent schema (`t`, `lvl`, `event`, `msg`, `meta`, `rid`). Compatible with Axiom, Logtail, Datadog.
-- [x] **Request correlation IDs**: Every API request gets a UUID `rid` propagated through all log entries.
-- [x] **Metrics endpoint**: `GET /api/v1/metrics` returns counters, provider breakdown, latency percentiles (p50/p95/p99), and fallback rate.
-- [x] **Provider-level tracking**: Success/failure counts and total latency per provider.
-- [x] **Fallback rate monitoring**: Tracks how often Pollinations fallback is used — should be near-zero in production.
-- [ ] **Vercel Analytics**: Enable Vercel Web Analytics for frontend page views and Speed Insights for Core Web Vitals.
-- [ ] **Uptime monitoring**: Set up a cron job hitting `GET /api/v1/health` every 5 minutes. Alert on non-200 responses.
-- [ ] **Error alerting**: Connect Vercel logs to Slack/PagerDuty for `fatal` and high `error` rate events. Alert when `fallbackRate > 0.05`.
-
-## 5. API Reliability
-
-- [x] **Provider fallback chain**: Authenticated providers → Pollinations fallback. A single provider outage never blocks generation.
-- [x] **Key rotation**: 429/402/401 rotates to next key automatically without user-facing impact.
-- [x] **Model failover**: If primary model is retired/invalid, fails over to fallback models (2.5-flash → 2.5-flash-lite).
-- [x] **Timeout handling**: Generator adapter has configurable timeout signals (default 30s).
-- [x] **Rate limit client de-stacking**: Server-side retry budget prevents Vercel edge maxDuration violations. Client trusts server's verdict (no double-retry).
-- [ ] **Stale-while-revalidate**: Consider adding `stale-while-revalidate` caching layer for frequently-requested content (cache images at edge, serve stale while regenerating).
-
-## 6. Testing
-
-- [x] **E2E API tests**: 5 tests covering free truncation, premium unlimited, thumbnail clamp, brand downgrade, validation (in `e2e/specs/api-tier-enforcement.spec.ts`).
-- [x] **UI component tests**: Banner variants, radio group selection, usage meter (9 tests across 2 spec files).
-- [ ] **Unit tests for provider adapters**: Add Jest/Vitest tests for AgnesFlashAdapter, GeminiFlashAdapter, PollinationsAdapter with mocked HTTP responses.
-- [ ] **Unit tests for orchestrator**: Test fallback chain, key rotation, parallel batch with mock providers.
-- [ ] **Load testing**: Run k6/artillery against `/api/v1/storyboard` and `/api/v1/thumbnail` to verify throughput under concurrent users.
-
-## 7. Deployment
-
-- [x] **Build passes**: `vite build` completes in ~6s with 1768+ modules.
-- [x] **TypeScript**: `tsconfig.app.json` — 0 errors. `tsconfig.api.json` — passes.
-- [x] **No provider keys in bundle**: Verified via `grep` — no `VITE_*_API_KEY` in frontend.
-- [ ] **Vercel deployment**:
-  1. Connect GitHub repo to Vercel project
-  2. Set all environment variables listed in Section 2
-  3. Deploy `main` branch
-  4. Verify `POST /api/v1/health` returns 200
-  5. Test with a free-tier storyboard request
-- [ ] **Custom domain**: Configure `tubeclick.pro` or `app.tubeclick.pro` in Vercel Domains settings.
-- [ ] **Referral entitlement rollout**: Apply the qualified-chain migrations and resolve server-side tier access from `referral_profiles.pro_tier_expires_at`.
-
-## 8. Future Hardening
-
-- [ ] **Edge caching for metrics**: Persist metrics counters to Vercel KV or Upstash Redis (in-memory resets on every cold start).
-- [ ] **Analytics pipeline**: Export metrics snapshot to Axiom/Logtail on a 5-minute schedule for historical dashboards.
-- [ ] **IP allowlisting**: If using enterprise-only providers, restrict API keys by Vercel Edge IP ranges.
-- [ ] **Webhook retry**: JSON2Video webhook handler currently logs only; implement retry queue with exponential backoff.
-- [ ] **Admin alerts**: Monitor `fallbackRate` and `errorRate` in Vercel Analytics; trigger Slack alert when thresholds exceeded.
+Runbook for operating TubeClick Pro in production at [tubeclickpro.in](https://tubeclickpro.in).
 
 ---
 
-## Summary
+## 1. Pre-Launch Checklist
 
-| Area | Status | Notes |
-|------|--------|-------|
-| Security | ✅ 95% | CORS hardening pending (single config change) |
-| Environment | ✅ Documented | 14 variables tracked with defaults |
-| Performance | ✅ 90% | CDN caching headers recommended |
-| Monitoring | ✅ 80% | Vercel Analytics + uptime monitor needed |
-| Reliability | ✅ 95% | Provider fallback, key rotation, model failover |
-| Testing | ✅ 70% | Unit tests for adapters needed |
-| Deployment | ✅ 80% | Vercel setup instructions, referral entitlement rollout pending |
-| Future | ⏳ Documented | Redis persistence, alerting, analytics pipeline |
+### Infrastructure
+- [ ] Vercel project connected to the `main` branch of `RJrazz4/Tube-click.pro`.
+- [ ] Production domain (`tubeclickpro.in`) configured with HTTPS enforced; HSTS enabled.
+- [ ] All server-only environment variables set in Vercel (see [`docs/ENVIRONMENT.md`](./ENVIRONMENT.md)). Confirm no `VITE_`-prefixed variable holds a secret.
+- [ ] Supabase project provisioned; migrations in `supabase/migrations/` applied via `supabase db push`.
+- [ ] Supabase Auth providers configured (email + Google); OAuth callbacks point to `https://tubeclickpro.in`.
+- [ ] Row-Level Security policies enabled on all user-facing tables; anonymous role has no table access.
+- [ ] `REFERRAL_SIGNING_SECRET` set to a high-entropy value (≥32 bytes, generated with `openssl rand -hex 32`).
+- [ ] `OPENROUTER_API_KEYS` populated with at least two production keys to absorb rate-limit rotation.
+- [ ] `ELEVENLABS_API_KEY` present (Voiceover Studio) with billing limits configured on the ElevenLabs side.
+- [ ] `YOUTUBE_API_KEY` present with quota headroom (Clone & Crush).
+- [ ] `LOCKER_URL` returning signed entitlements for paid tiers.
+
+### Quality
+- [ ] `npm run ci` passes locally and on CI (lint + typecheck + Vitest + verifier).
+- [ ] `npm run build` completes without warnings; bundle size budget:
+  - Initial load < 250 KB gzipped
+  - Each lazy chunk < 100 KB gzipped
+- [ ] `npm run test:v1-contract` passes against a Vercel preview deployment.
+- [ ] Playwright e2e suite (`npx playwright test`) passes against a preview deployment.
+- [ ] Lighthouse performance ≥ 85 on mobile on the landing route.
+
+### Observability
+- [ ] Vercel Analytics enabled.
+- [ ] `/api/v1/metrics` reachable and returning `status: ok`.
+- [ ] Error rate alert configured in Vercel for > 3% 5xx over 5 minutes.
+- [ ] Function-duration alert configured for p95 > 8s over 5 minutes.
+- [ ] Supabase database CPU and storage alerts set at 70% thresholds.
+
+### Security
+- [ ] CORS `ALLOWED_ORIGINS` restricted to `https://tubeclickpro.in` (no wildcard in production).
+- [ ] Supabase anon key rotated if it was ever committed to the repository or shared.
+- [ ] Supabase service-role key stored only in Vercel environment variables; not in CI logs, not in `.env` on developer machines unless necessary.
+- [ ] Dependabot / Renovate enabled for security updates; high-severity patches SLA 7 days.
+- [ ] Rate limiter enabled for all `/api/*` routes; free tier throttled.
+
+## 2. Deployment Pipeline
+
+1. **PR opens** → Vercel provisions a preview deployment; CI runs `npm run ci`; Playwright smoke tests run against the preview.
+2. **PR approved and merged to `main`** → production deployment triggers automatically.
+3. **Post-deploy smoke**: hit `/api/config`, `/api/v1/tiers`, `/api/v1/metrics`; confirm 200s.
+4. **Rollback**: use the Vercel dashboard "Promote to Production" on the prior deployment; rollback is near-instant (immutable deployments).
+
+## 3. Key Operational Procedures
+
+### Rotating an AI Provider Key
+
+See [`docs/ENVIRONMENT.md`](./ENVIRONMENT.md) §"Rotating a Leaked Key". Always add the new key before revoking the old one.
+
+### Applying a Database Migration
+
+1. Run the migration against a staging database first.
+2. Verify behavior with preview deployment pointed at staging.
+3. Run migration against production Supabase: `supabase db push`.
+4. Deploy the code that depends on the migration *immediately after*. Migrations must be backward-compatible with the currently deployed code (additive columns/tables first, backfill, then cutover).
+
+### Responding to an Incident
+
+1. **Stabilize:** if an AI provider is failing hard, the circuit breaker will open automatically within ~5 failures; verify via `/api/v1/metrics`. If a bad deploy caused the regression, roll back in Vercel.
+2. **Communicate:** if user-facing impact is > 5 minutes, post on the app's status channel and update `api/config` feature flags if needed to disable a specific module.
+3. **Diagnose:** pull structured logs from Vercel; look for `[chat-ai]` and `[orchestrator]` scopes. The `modelsAttempted` array on errors tells you exactly which providers/keys were tried.
+4. **Remediate:** fix forward on a branch; PR with regression test; merge and deploy.
+5. **Post-mortem:** capture timeline, root cause, contributing factors, and action items.
+
+### Feature Flags
+
+Non-trivial rollouts should be gated by a flag in the `/api/config` response so features can be disabled without a redeploy.
+
+## 4. Monitoring
+
+| Surface | Tool | Signal |
+|---|---|---|
+| Edge function health | Vercel Analytics + `/api/v1/metrics` | 5xx rate, p95 latency |
+| AI provider health | `/api/v1/metrics` → `providers`, `breakersOpen` | Circuit state, key rotations, per-provider error rate |
+| Spend | Cost tracker in `packages/orchestrator/cost` | Per-provider spend snapshot (extend to push to billing dashboards) |
+| Database | Supabase dashboard | CPU, connections, RLS denied events |
+| Client errors | Vercel Analytics + `AppErrorBoundary` logging | Uncaught React errors |
+
+## 5. Scaling Notes
+
+- **Edge functions** scale automatically per request; the only shared state is in-memory counters (best-effort metrics) and Supabase (source of truth).
+- **Rate limiting** is currently per-function-instance. For stricter global enforcement, plan to move the token bucket to Upstash/Redis or Supabase-backed state.
+- **AI provider concurrency** is bounded by per-key lanes in `packages/orchestrator/providers/keyed-lane.ts`; add more keys to `OPENROUTER_API_KEYS` to raise the concurrency ceiling.
+- **Free-tier economics** rely on Pollinations (zero-cost images) and Gemini Flash / OpenRouter free credits for chat. If free-tier usage grows, tighten `RATE_LIMIT_FREE_RPM` before promoting unpaid users to premium providers.
+
+## 6. Compliance & Privacy
+
+- **Referral tracking** uses HMAC-signed HttpOnly cookies and does not collect fingerprinting or raw IP for marketing purposes. See `src/components/referrals/` for the client flow and `api/referrals.ts` for server attribution.
+- **Guest soft-gate** uses a signed cookie plus a local-storage marker (no PII).
+- **No third-party analytics beyond Vercel Analytics** is bundled. When adding analytics, update the privacy notice.
+- AI prompts sent to OpenRouter/Gemini/other providers include the user's content (topic, script, transcript) but never include Supabase JWTs or other secrets.
+
+## 7. Disaster Recovery
+
+- **Source of truth**: Supabase Postgres. Enable daily backups (Supabase Pro) and point-in-time recovery.
+- **Infrastructure-as-code**: The Vercel project is reconstructable from this repository plus environment variables; nothing is configured only in the Vercel UI that isn't captured in `vercel.json`.
+- **Recovery time objective**: < 30 minutes from a clean Vercel reconnect + Supabase restore.
+- **Code rollback**: Vercel immutable deployments (one click).
+
+## 8. Contact
+
+- Operational issues: `support@tubeclickpro.in`
+- Security disclosures: `security@tubeclickpro.in`

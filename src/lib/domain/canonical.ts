@@ -1,7 +1,9 @@
 /**
- * Ghost Protocol v2 - Canonical Domain Engine
- * Ensures referral links ALWAYS show tubeclickpro.in even on Vercel previews
- * Zero-budget, pure client logic, 100% lightweight
+ * Canonical-domain helpers.
+ *
+ * Ensures referral links, canonical URLs, and OAuth callbacks always
+ * resolve to https://tubeclickpro.in — even when the app is loaded
+ * from a Vercel preview or other temporary host.
  */
 
 const CANONICAL_DOMAIN = "https://tubeclickpro.in";

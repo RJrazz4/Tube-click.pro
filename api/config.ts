@@ -1,7 +1,9 @@
 /**
- * Vercel Edge — /api/config
- * Returns public config — locker URL, feature flags, subscription tiers
- * NO secrets ever returned — keys stay server-only
+ * Vercel Edge — GET/POST /api/config
+ *
+ * Returns public, client-safe configuration: feature flags, tier copy,
+ * locker URL, and build/environment metadata. No secrets are included;
+ * all keys stay on the server.
  */
 export const config = { runtime: 'edge' };
 
@@ -11,8 +13,6 @@ export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    // Public config — safe to expose
-    // In production, this can read referral entitlement configuration from Supabase
     const lockerUrl = process.env.LOCKER_URL || "";
 
     return jsonResponse({
@@ -29,7 +29,7 @@ export default async function handler(req: Request) {
         pro: { maxGenerationsPerDay: 500, watermark: false, priority: true },
         enterprise: { maxGenerationsPerDay: 9999, watermark: false, priority: true, support: 'dedicated' },
       },
-      version: '2.0-secure',
+      version: '2.0',
       env: process.env.VERCEL_ENV || 'development',
     });
 

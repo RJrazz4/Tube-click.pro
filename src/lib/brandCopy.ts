@@ -1,11 +1,11 @@
 /**
- * Phase G2 — True White-Label Brand Copy
+ * Branded tier copy and styling.
  *
- * Single source of truth for every user-facing string about our AI engine.
- * RULE: Users only ever see brand tiers — Tube.Flash / Tube.Pro / Tube.Cinematic.
- * Underlying infrastructure is never named anywhere in UI copy.
+ * Single source of truth for user-facing engine branding
+ * (Tube.Flash / Tube.Pro / Tube.Cinematic). Provider and
+ * infrastructure names are deliberately never surfaced in UI copy.
  *
- * `accent` / `accentHex` feed the Phase G3 3D processing state.
+ * `accent` / `accentHex` drive the processing-state accent color.
  */
 
 export type BrandTier = "Tube.Flash" | "Tube.Pro" | "Tube.Cinematic";

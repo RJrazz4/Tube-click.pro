@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 
 /**
- * Ghost Streak - Addictive habit loop, zero budget
- * localStorage day counter + XP bar, pure frontend dopamine
+ * Streak tracker.
+ *
+ * Maintains a local day-counter and XP indicator in localStorage so
+ * returning users see continuity without any server round-trip.
  */
 
 function getStreak(): { streak: number; xp: number; lastDate: string } {

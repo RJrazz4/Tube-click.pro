@@ -1,8 +1,8 @@
 /**
- * Phase A0 — Toolchain smoke test.
+ * Toolchain smoke tests.
  *
- * Proves the vitest runner is wired into the CI gate. Real suites arrive
- * with their owning phases (A1 env schema, A2 key pool, D rotation, …).
+ * Sanity checks that verify the Vitest runner is wired into CI and that
+ * fundamental environment/runtime invariants hold.
  */
 import { describe, expect, it } from "vitest";
 

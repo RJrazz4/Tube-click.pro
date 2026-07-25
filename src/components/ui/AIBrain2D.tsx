@@ -1,8 +1,8 @@
 /**
- * Phase G5 — AIBrain2D: premium 2D "AI thinking" animation for text processing phase.
+ * Animated "AI processing" visualization (2D).
  *
- * A pulsing neural network visualization representing the AI brain analyzing
- * the script, planning scenes, and crafting prompts. Pure CSS/SVG, zero deps.
+ * A pulsing neural-network motif shown during text and planning phases.
+ * Implemented with pure CSS and SVG; no additional dependencies.
  *
  * Variants:
  *   - "inline" — compact for cards/sections

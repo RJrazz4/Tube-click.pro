@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 
 /**
- * Live Active Counter + Loss Aversion Ticker
- * Zero-budget: localStorage seeded counter + vanilla rAF for $ loss
- * Psychological trigger: loss aversion, social proof, urgency
+ * "Live active users" counter.
+ *
+ * A light social-proof indicator that animates a seeded counter using
+ * `requestAnimationFrame`; initial value is derived from localStorage
+ * so the number feels continuous across reloads without a backend.
  */
 
 function getSeededBase(): number {

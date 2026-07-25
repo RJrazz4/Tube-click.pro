@@ -1,26 +1,24 @@
 /**
- * api/_ai.ts — Unified OpenRouter chat-text generation (Phase F3 / Master Plan).
+ * api/_ai.ts — OpenRouter chat-text generation.
  *
- * Single, authoritative server path for /chat-agent text generation. Backed by
- * the tested orchestrator OpenRouterClient (packages/orchestrator) instead of
- * the hand-rolled loop in _shared.ts. This is the "one text stack" the Master
- * Plan converges on.
+ * Authoritative server path for chat (TubeBot) text generation. Delegates
+ * to the orchestrator's `OpenRouterClient`, which implements key-pool
+ * rotation, per-attempt timeouts, a wall-clock deadline, model failover,
+ * and structured error normalization.
  *
- * Guarantees (maps 1:1 to the diagnosed root causes):
- *  - RC-1/RC-4: normalized key resolution via openRouterKeys() (plural |
- *    singular | numbered) — all configured keys are ALWAYS on the path.
- *  - RC-2: per-attempt hard AbortController timeout + a global wall-clock
- *    deadline, so a slow/hung upstream can never drop the connection (the
- *    client "Ghost tunnel interference" failure mode).
- *  - RC-3: the deadline sits well inside the 25s edge maxDuration, so the
- *    function always returns a typed response before the platform severs it.
- *  - Resilience: KeyPool round-robin + cooldown + exhaustion across keys, plus
- *    a model-fallback chain for 404 / 5xx / timeout (different upstream routing).
- *  - Observability: structured, key-material-free per-attempt logs.
- *  - Typed ChatGenerationError carries normalized codes the client maps via
- *    friendlyError() unchanged (RATE_LIMITED / API_KEY_INVALID / TIMEOUT / …).
+ * Guarantees:
+ *  - All configured OpenRouter keys (plural, singular, or numbered forms)
+ *    are normalized into a single pool at boot.
+ *  - Each attempt has its own AbortController timeout; a global deadline
+ *    ensures the function returns a typed response before the platform
+ *    severs the connection.
+ *  - Key rotation and model fallback are automatic across 429/402/5xx/timeout.
+ *  - Errors surface as `ChatGenerationError` with stable codes the client
+ *    maps to user-facing messages via `friendlyError()`.
+ *  - Structured per-attempt logs never include key material (only a masked
+ *    tag: first four + last four characters).
  *
- * Edge-safe: uses only fetch, AbortController, setTimeout, Date.now, JSON.
+ * Runtime: Edge-safe (fetch, AbortController, setTimeout, Date.now, JSON).
  */
 import {
   OpenRouterClient,
@@ -105,9 +103,10 @@ function numEnv(name: string, fallback: number): number {
 let loggedPoolConfig = false;
 
 /**
- * Wraps fetch to emit a key-material-free per-attempt observation line:
+ * Wrap the native fetch to emit a key-material-free observation line per
+ * attempt:
  *   [chat-ai] openrouter http=429 latency=318ms model=google/gemini-2.5-flash key=sk-o...a1f3
- * Used for rotation/latency debugging (Phase 5 observability).
+ * Used for rotation and latency debugging in production logs.
  */
 function makeObservabilityFetch(baseFetch: typeof fetch, now: () => number): typeof fetch {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -226,15 +225,15 @@ function toChatGenerationError(err: unknown, modelsAttempted: string[]): ChatGen
 }
 
 /**
- * Generate JSON-mode chat text via OpenRouter with full key rotation,
+ * Generate JSON-mode chat text via OpenRouter with key rotation,
  * per-attempt timeouts, a global deadline, and model failover.
  *
- * @throws {ChatGenerationError} on any failure — always carries a client-safe code.
+ * @throws {ChatGenerationError} on any failure; always carries a client-safe code.
  */
 export async function generateChatJson(opts: GenerateChatJsonOptions): Promise<ChatGenerationOutcome> {
   const now = opts.now ?? Date.now;
 
-  // RC-4: normalized key resolution (plural | singular | numbered).
+  // Normalize OpenRouter keys from the supported env-var shapes.
   let keys: string[];
   try {
     keys = openRouterKeys();

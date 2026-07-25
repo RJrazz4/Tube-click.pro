@@ -1,9 +1,11 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Particle Burst - Dopamine confetti, zero-budget, lightweight canvas
- * Triggers on Chain-Loop complete, copy, etc.
- * Vanilla JS, no lib, <2kb, 1.2s animation
+ * Particle burst (confetti) effect.
+ *
+ * Small canvas-based celebration animation (~2 KB, ~1.2 s) triggered
+ * on positive milestones such as Chain-Loop completion. Vanilla JS,
+ * no external library.
  */
 
 export function ParticleBurst({ trigger, colors = ["#A855F7", "#22D3EE", "#10B981"] }: { trigger: number; colors?: string[] }) {
