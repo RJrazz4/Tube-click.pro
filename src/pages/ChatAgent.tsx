@@ -91,21 +91,46 @@ export default function ChatAgent() {
   const navigate = useNavigate();
   const { runGuarded } = useSoftGate();
   const activeWorkflow = useWorkflowStore((s) => s.activeWorkflow);
+  const completeHandoff = useWorkflowStore((s) => s.completeHandoff);
+  const clearWorkflow = useWorkflowStore((s) => s.clearWorkflow);
   const [pendingSeed, setPendingSeed] = useState<TubeBotSeed | null>(null);
+  const [autoRunTriggered, setAutoRunTriggered] = useState(false);
   const consumedWorkflowId = useRef<string | null>(null);
+  const autoRunStarted = useRef(false);
 
   // Auto-consume a Chain-Loop → TubeBot handoff if present on mount.
-  // Prefill the topic and surface the incoming payload once per workflow,
-  // so the user reviews it before hitting Send (no silent auto-generation).
+  // When a valid seed arrives we flip into automated mode: the topic is
+  // pre-filled, the input box is hidden, and performSubmit fires once
+  // (zero clicks) to build on the Chain-Loop intel immediately.
   useEffect(() => {
     if (!activeWorkflow) return;
     if (consumedWorkflowId.current === activeWorkflow.id) return;
+    // Only auto-trigger when the handoff destination is actually tubebot.
+    if (activeWorkflow.handoff?.destination && activeWorkflow.handoff.destination !== "tubebot") {
+      return;
+    }
     const seed = buildTubeBotSeed(activeWorkflow);
     if (!seed) return;
     consumedWorkflowId.current = activeWorkflow.id;
-    setTopic((current) => (current.trim() ? current : seed.topic));
+    setTopic(seed.topic);
     setPendingSeed(seed);
+    setAutoRunTriggered(true);
   }, [activeWorkflow]);
+
+  // When a Chain-Loop seed is ready and we haven't kicked off the
+  // automated generation yet, do it exactly once.
+  useEffect(() => {
+    if (!pendingSeed || !autoRunTriggered) return;
+    if (autoRunStarted.current) return;
+    if (isGenerating) return;
+    autoRunStarted.current = true;
+    // Let the paint settle (banner visible, input hidden) then fire.
+    const t = setTimeout(() => {
+      void performSubmit(undefined, pendingSeed.topic);
+    }, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSeed, autoRunTriggered]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -120,26 +145,30 @@ export default function ChatAgent() {
     return () => clearTimeout(id);
   }, [cooldownLeft]);
 
-  const performSubmit = async (e?: React.FormEvent, overrideTopic?: string) => {
+  const performSubmit = async (e?: React.FormEvent, overrideTopic?: string, overrideContext?: string) => {
     e?.preventDefault();
-    
+
+    // Capture the seed at call time so the automated run uses the
+    // Chain-Loop context even if we clear pendingSeed partway through.
+    const seedForRun = overrideContext !== undefined ? { context: overrideContext, summary: pendingSeed?.summary ?? "" } : pendingSeed;
+
     // Input validation
     const trimmedTopic = (overrideTopic ?? topic).trim();
     if (!trimmedTopic) {
-      toast.error("Please enter a video topic");
+      if (!autoRunTriggered) toast.error("Please enter a video topic");
       return;
     }
-    
+
     if (trimmedTopic.length < 3) {
-      toast.error("Topic too short. Please provide at least 3 characters.");
+      if (!autoRunTriggered) toast.error("Topic too short. Please provide at least 3 characters.");
       return;
     }
-    
+
     if (trimmedTopic.length > 500) {
-      toast.error("Topic too long. Maximum 500 characters allowed.");
+      if (!autoRunTriggered) toast.error("Topic too long. Maximum 500 characters allowed.");
       return;
     }
-    
+
     if (isGenerating) return;
 
     setIsGenerating(true);
@@ -148,18 +177,25 @@ export default function ChatAgent() {
 
     const languageLabel = language === "hinglish" ? "Hinglish" : language === "hindi" ? "Hindi" : "English";
 
-    // Add user message
-    setMessages((prev) => [...prev, { role: "user", content: `Generate ${languageLabel} content for: ${trimmedTopic} (${platform}, ${style} style)` }]);
+    // Add user message. Automated runs get a more descriptive prompt so
+    // the transcript reads like a chain-loop compile, not a user type.
+    const userMessage = seedForRun?.context
+      ? `⚡ Auto-compiling Chain-Loop intel into a fresh ${languageLabel} TubeBot package for: ${trimmedTopic} (${platform}, ${style} style)`
+      : `Generate ${languageLabel} content for: ${trimmedTopic} (${platform}, ${style} style)`;
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
 
     try {
-      setMessages((prev) => [...prev, { role: "assistant", content: `🎯 Analyzing your topic and generating ${languageLabel} content...` }]);
+      const thinkingMsg = seedForRun?.context
+        ? `⚙️ Compiling Chain-Loop payload → generating ${languageLabel} assets via the AI Gateway...`
+        : `🎯 Analyzing your topic and generating ${languageLabel} content...`;
+      setMessages((prev) => [...prev, { role: "assistant", content: thinkingMsg }]);
 
       const data = await fetchEdgeFunctionJson<GeneratedContent>("generate-content", {
         topic: trimmedTopic,
         platform,
         style,
         language,
-        ...(pendingSeed ? { context: pendingSeed.context } : {}),
+        ...(seedForRun?.context ? { context: seedForRun.context } : {}),
       });
 
       // Validate response structure
@@ -219,8 +255,21 @@ ${processedContent.description}
         return updated;
       });
 
-      toast.success(`${languageLabel} content generated successfully!`);
-      setTopic("");
+      // If this was an automated Chain-Loop run, mark the handoff as
+      // complete so revisiting /chat-agent won't auto-fire again.
+      const wasAuto = autoRunTriggered;
+      if (wasAuto) {
+        completeHandoff("tubebot");
+        setAutoRunTriggered(false);
+        setPendingSeed(null);
+      }
+
+      toast.success(
+        wasAuto
+          ? `⚡ Chain-Loop compiled to ${languageLabel} assets!`
+          : `${languageLabel} content generated successfully!`,
+      );
+      if (!wasAuto) setTopic("");
 
     } catch (error: unknown) {
       // Phase E3: typed friendly error — raw provider JSON can never reach a bubble
@@ -243,6 +292,12 @@ ${processedContent.description}
         };
         return updated;
       });
+
+      // If the auto-run failed, release the lock so the user can retry
+      // manually (input box re-appears, banner stays with a retry affordance).
+      if (autoRunTriggered) {
+        setAutoRunTriggered(false);
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -334,24 +389,55 @@ ${generatedContent.description || 'N/A'}
               <div className="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-3 animate-fade-in">
                 <div className="flex items-start gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-                    <Sparkles className="w-4 h-4 text-primary" />
+                    {isGenerating ? (
+                      <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4 text-primary" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                       Chain-Loop payload received
                       <span className="text-[9px] font-mono uppercase tracking-wider bg-primary/15 text-primary px-1.5 py-0.5 rounded-full">TubeBot</span>
+                      {isGenerating && (
+                        <span className="text-[9px] font-mono uppercase tracking-wider bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded-full animate-pulse">AUTO-COMPILING</span>
+                      )}
                     </p>
                     <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{pendingSeed.summary}</p>
-                    <p className="text-[10px] text-primary/80 mt-1">Topic pre-filled — review, then hit Send to build on this intel.</p>
+                    <p className="text-[10px] text-primary/80 mt-1">
+                      {isGenerating
+                        ? "Compiling assets automatically — no clicks required."
+                        : autoRunTriggered
+                          ? "Automated run in progress — input is locked until compilation completes."
+                          : "Topic pre-filled — review, then hit Send to build on this intel."}
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setPendingSeed(null)}
-                    className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label="Dismiss Chain-Loop payload"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {pendingSeed && !isGenerating && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (autoRunStarted.current) autoRunStarted.current = false;
+                          void performSubmit(undefined, pendingSeed.topic);
+                        }}
+                        className="text-[10px] font-mono uppercase tracking-wider bg-primary/15 text-primary px-2 py-1 rounded-md hover:bg-primary/25 transition"
+                      >
+                        Retry
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingSeed(null);
+                        setAutoRunTriggered(false);
+                        autoRunStarted.current = false;
+                      }}
+                      className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label="Dismiss Chain-Loop payload"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -359,7 +445,7 @@ ${generatedContent.description || 'N/A'}
             <div className="grid grid-cols-3 gap-2 md:gap-3 mb-4">
               <div className="space-y-1.5">
                 <Label className="text-xs text-foreground">Platform</Label>
-                <Select value={platform} onValueChange={setPlatform} disabled={isGenerating}>
+                <Select value={platform} onValueChange={setPlatform} disabled={isGenerating || autoRunTriggered}>
                   <SelectTrigger className="bg-secondary border-border h-9 md:h-10 text-xs md:text-sm">
                     <SelectValue />
                   </SelectTrigger>
@@ -373,7 +459,7 @@ ${generatedContent.description || 'N/A'}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-foreground">Style</Label>
-                <Select value={style} onValueChange={setStyle} disabled={isGenerating}>
+                <Select value={style} onValueChange={setStyle} disabled={isGenerating || autoRunTriggered}>
                   <SelectTrigger className="bg-secondary border-border h-9 md:h-10 text-xs md:text-sm">
                     <SelectValue />
                   </SelectTrigger>
@@ -391,7 +477,7 @@ ${generatedContent.description || 'N/A'}
                   <Languages className="w-3 h-3" />
                   Language
                 </Label>
-                <Select value={language} onValueChange={setLanguage} disabled={isGenerating}>
+                <Select value={language} onValueChange={setLanguage} disabled={isGenerating || autoRunTriggered}>
                   <SelectTrigger className="bg-secondary border-border h-9 md:h-10 text-xs md:text-sm">
                     <SelectValue />
                   </SelectTrigger>
@@ -477,31 +563,38 @@ ${generatedContent.description || 'N/A'}
               )}
             </ScrollArea>
 
-            {/* Input Form */}
-            <form onSubmit={handleSubmit} className="flex gap-2">
-              <Input
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                placeholder="Enter any video topic or niche..."
-                className="flex-1 bg-secondary border-border focus:border-primary h-11 md:h-12 text-sm md:text-base"
-                disabled={isGenerating}
-                maxLength={500}
-              />
-              <Button 
-                type="submit" 
-                disabled={isGenerating || !topic.trim() || topic.trim().length < 3}
-                className="cyber-button text-primary-foreground h-11 md:h-12 px-4 md:px-6"
-              >
-                {isGenerating ? (
-                  <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4 md:w-5 md:h-5" />
-                )}
-              </Button>
-            </form>
-            
-            {/* Character count */}
-            {topic.length > 0 && (
+            {/* Input Form — hidden during automated Chain-Loop runs */}
+            {!(autoRunTriggered || (pendingSeed && isGenerating)) ? (
+              <form onSubmit={handleSubmit} className="flex gap-2">
+                <Input
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="Enter any video topic or niche..."
+                  className="flex-1 bg-secondary border-border focus:border-primary h-11 md:h-12 text-sm md:text-base"
+                  disabled={isGenerating}
+                  maxLength={500}
+                />
+                <Button
+                  type="submit"
+                  disabled={isGenerating || !topic.trim() || topic.trim().length < 3}
+                  className="cyber-button text-primary-foreground h-11 md:h-12 px-4 md:px-6"
+                >
+                  {isGenerating ? (
+                    <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 md:w-5 md:h-5" />
+                  )}
+                </Button>
+              </form>
+            ) : (
+              <div className="flex items-center justify-center gap-2 h-11 md:h-12 rounded-xl bg-primary/5 border border-primary/30 text-primary text-xs md:text-sm font-medium">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Auto-generating from Chain-Loop payload — sit tight…
+              </div>
+            )}
+
+            {/* Character count — only during manual entry */}
+            {!autoRunTriggered && topic.length > 0 && (
               <p className="text-xs text-muted-foreground mt-1.5 text-right">
                 {topic.length}/500 characters
               </p>

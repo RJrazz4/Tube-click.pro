@@ -174,6 +174,15 @@ const sleepMsOR = (ms: number) => new Promise(r => setTimeout(r, ms));
 /** Error categories where backoff is useless and rotating key/model is the remedy. */
 const OR_ROTATE_CODES = new Set(["RATE_LIMITED", "QUOTA_EXCEEDED_DAILY", "INSUFFICIENT_CREDITS", "API_KEY_INVALID"]);
 
+export interface OpenRouterFetchOptions {
+  /** Gemini-style body (existing shape). */
+  body: any;
+  /** Per-call deadline in ms; defaults to AI_GATEWAY_TIMEOUT_MS or 45s for long-form calls. */
+  deadlineMs?: number;
+  /** Override max output tokens; otherwise inferred from generationConfig or a safe default. */
+  maxTokens?: number;
+}
+
 /**
  * Fetch OpenAI-compatible chat completion through the Vercel AI Gateway.
  *
@@ -189,8 +198,17 @@ const OR_ROTATE_CODES = new Set(["RATE_LIMITED", "QUOTA_EXCEEDED_DAILY", "INSUFF
  * Retries, fallback across models, rate-limit handling, and observability
  * are delegated to the gateway itself.
  */
-export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<OpenRouterFetchOutcome> {
-  const { gatewayChatText } = await import("../packages/orchestrator/ai-gateway.js");
+export async function fetchOpenRouterWithRetry(
+  geminiStyleBodyOrOpts: any | OpenRouterFetchOptions,
+): Promise<OpenRouterFetchOutcome> {
+  // Support both legacy (body-only) and new (opts object) call signatures.
+  const opts: OpenRouterFetchOptions =
+    geminiStyleBodyOrOpts && "body" in geminiStyleBodyOrOpts
+      ? geminiStyleBodyOrOpts
+      : { body: geminiStyleBodyOrOpts };
+  const geminiStyleBody = opts.body;
+
+  const { gatewayChatText, gatewayChatJson } = await import("../packages/orchestrator/ai-gateway.js");
 
   // Convert the Gemini-style body to system+user prompts using the
   // existing body builder so behaviour stays identical for callers.
@@ -199,28 +217,50 @@ export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<Op
     process.env.OPENROUTER_MODEL?.trim() ||
     OPENROUTER_MODEL;
   const body = toOpenRouterBody(geminiStyleBody, primaryModel);
-  const sysMsg = body.messages?.find((m: any) => m.role === "system");
-  const usrMsg = body.messages?.find((m: any) => m.role === "user");
+
+  // Flatten all messages into system + user. When there are multiple
+  // user/assistant turns (rare for these callers) we preserve them under
+  // labelled tags so the model still sees the full context.
+  const messages: any[] = Array.isArray(body.messages) ? body.messages : [];
+  const sysMsg = messages.find((m: any) => m.role === "system");
+  const nonSys = messages.filter((m: any) => m.role !== "system");
   const systemPrompt = typeof sysMsg?.content === "string" ? sysMsg.content : "";
-  const userPrompt = typeof usrMsg?.content === "string"
-    ? usrMsg.content
-    : JSON.stringify(usrMsg?.content ?? "");
+  let userPrompt: string;
+  if (nonSys.length === 1 && typeof nonSys[0]?.content === "string") {
+    userPrompt = nonSys[0].content;
+  } else {
+    userPrompt = nonSys
+      .map((m: any) => {
+        const text =
+          typeof m?.content === "string"
+            ? m.content
+            : JSON.stringify(m?.content ?? "");
+        return `<${m.role}>\n${text}\n</${m.role}>`;
+      })
+      .join("\n\n");
+  }
+
   const temperature = typeof body.temperature === "number" ? body.temperature : 0.8;
-  const maxTokens = typeof body.max_tokens === "number" ? body.max_tokens : 2048;
+  // Long-form asset generation (rewrite, full-script) needs a generous
+  // budget; short JSON calls default lower. Callers can override via opts.
+  const maxTokens =
+    opts.maxTokens ??
+    (typeof body.max_tokens === "number" ? body.max_tokens : 4096);
+  const deadlineMs = opts.deadlineMs;
 
   const jsonMode =
     geminiStyleBody?.generationConfig?.responseMimeType === "application/json" ||
     body.response_format?.type === "json_object";
 
   try {
-    const result = jsonMode
-      ? await (await import("../packages/orchestrator/ai-gateway.js")).gatewayChatJson({
-          systemPrompt,
-          userPrompt,
-          temperature,
-          maxTokens,
-        })
-      : await gatewayChatText({ systemPrompt, userPrompt, temperature, maxTokens });
+    const gwCall = jsonMode ? gatewayChatJson : gatewayChatText;
+    const result = await gwCall({
+      systemPrompt,
+      userPrompt,
+      temperature,
+      maxTokens,
+      deadlineMs,
+    });
 
     // Build a synthetic OpenAI-compatible Response so downstream callers
     // can keep `await res.json()` + `extractOpenRouterText(...)` unchanged.
@@ -235,7 +275,13 @@ export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<Op
           finish_reason: "stop",
         },
       ],
-      usage: result.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      usage: result.usage
+        ? {
+            prompt_tokens: result.usage.inputTokens ?? 0,
+            completion_tokens: result.usage.outputTokens ?? 0,
+            total_tokens: result.usage.totalTokens ?? 0,
+          }
+        : { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
     };
     const res = new Response(JSON.stringify(payload), {
       status: 200,

@@ -9,7 +9,7 @@
  * This keeps the creator workflow uninterrupted across upstream
  * outages and free-tier exhaustion.
  */
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'edge', maxDuration: 60 };
 
 import {
   jsonResponse,
@@ -672,80 +672,145 @@ export default async function handler(req: Request) {
       if (!originalTranscript || !originalTitle || !targetVideoId) return jsonResponse({ error: 'Original transcript, title, and targetVideoId are required' }, 400);
       const truncatedTranscript = originalTranscript.slice(0, 11000);
       const isPremium = tier === 'premium';
-      const glitchProtocolBlock = isPremium ? `
-=== GLITCH PROTOCOL: 99% EXECUTION (PREMIUM) ===
-MAXIMUM AGGRESSION. Weaponized for max CTR.
-TITLE MUST contain Curiosity Glitch: time-jump, hidden secret, shocking mistake, impossible result.
-Use power words: Secret, Hidden, Banned, Exposed, Revealed, Warning, Urgent, Finally, Truth
-HOOK structure: [SHOCKING STATEMENT] → [CREDIBILITY] → [OPEN LOOP] with PATTERN INTERRUPT
-SCRIPT: Every 45-60s RETENTION SPIKE, Open Loop → Partial Close → New Loop, LOOP BOMB at end
-THUMBNAIL: psychologically aggressive, specific facial expression, color contrast, emotional trigger
-` : `
-=== GLITCH PROTOCOL: 60% EXECUTION (FREE) ===
-STANDARD OPTIMIZATION, professional engaging safe
-TITLE: strong SEO, emotional triggers, numbers, power words, clear value
-HOOK: [VALUE] → [CONTEXT] → [WHAT THEY'LL LEARN]
-SCRIPT: well-structured, clear sections, professional pacing
-THUMBNAIL: clean professional, good lighting, readable text, standard best practices
-`;
-      const rewriteSystemInstruction = `You are an Elite Viral YouTube growth expert, copywriter, and high-retention psychologist. Generate 4 viral assets in single JSON.
+      const glitchProtocolBlock = isPremium
+        ? `\n=== GLITCH PROTOCOL: 99% EXECUTION (PREMIUM) ===\nMAXIMUM AGGRESSION. Weaponized for max CTR.\nTITLE MUST contain Curiosity Glitch: time-jump, hidden secret, shocking mistake, impossible result.\nUse power words: Secret, Hidden, Banned, Exposed, Revealed, Warning, Urgent, Finally, Truth\nHOOK structure: [SHOCKING STATEMENT] → [CREDIBILITY] → [OPEN LOOP] with PATTERN INTERRUPT\nSCRIPT: Every 45-60s RETENTION SPIKE, Open Loop → Partial Close → New Loop, LOOP BOMB at end\nTHUMBNAIL: psychologically aggressive, specific facial expression, color contrast, emotional trigger\n`
+        : `\n=== GLITCH PROTOCOL: 60% EXECUTION (FREE) ===\nSTANDARD OPTIMIZATION, professional engaging safe\nTITLE: strong SEO, emotional triggers, numbers, power words, clear value\nHOOK: [VALUE] → [CONTEXT] → [WHAT THEY'LL LEARN]\nSCRIPT: well-structured, clear sections, professional pacing\nTHUMBNAIL: clean professional, good lighting, readable text, standard best practices\n`;
+      const rewriteSystemInstruction = `You are an Elite Viral YouTube growth expert, copywriter, and high-retention psychologist. Generate viral assets in a single JSON object.
 ${glitchProtocolBlock}
 === STEALTH DISGUISE PROTOCOL (BOTH TIERS) ===
 Heavily disguise output: CHANGE EVERY ANALOGY, SWAP ALL EXAMPLES, rephrase uniquely.
-=== OUTPUT SCHEMA ===
+=== OUTPUT SCHEMA (respond with JSON only, no markdown, no prose) ===
 {
   "originalTitle": "Original Title",
-  "rewrittenTitle": "Rewritten Viral Title",
+  "rewrittenTitle": "Rewritten Viral Title (<70 chars)",
   "seoTags": ["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8","tag9","tag10"],
-  "glitchHook": "First 15s hook",
-  "fullScript": "Fully rewritten script...",
-  "thumbnailPrompt": "Thumbnail direction...",
-  "editingGuide": "Editing guide...",
+  "glitchHook": "First 15s hook (1-2 sentences)",
+  "fullScript": "60-90 second voiceover script, 150-220 words, opens with hook, delivers 3 value points, ends with CTA",
+  "thumbnailPrompt": "Thumbnail direction for AI image generator",
+  "editingGuide": "Short 4-6 bullet editing guide",
   "changedAnalogiesCount": 5,
   "changedExamplesCount": 4,
-  "glitchTechniques": ["time-jump","hidden-secret"]
+  "glitchTechniques": ["technique1","technique2","technique3"]
 }`;
       const userPrompt = `Target Video ID: ${targetVideoId}
 Original Title: "${originalTitle}"
 Niche: "${niche || 'General'}"
 Tier: "${tier}" (${isPremium ? '99% GLITCH' : '60% Standard'})
-Transcript excerpt:
+Transcript excerpt (use for tone/subject; do NOT copy verbatim):
 ${truncatedTranscript}
-Execute Chain-Loop. Return JSON only.`;
 
-      const outcome = await fetchOpenRouterWithRetry({
-        systemInstruction: { parts: [{ text: rewriteSystemInstruction }] },
-        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.8 },
-      });
-      const res = outcome.res;
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        return providerErrorResponse(txt, res.status, 'clone-crush:rewrite');
-      }
-      const data = await res.json();
-      const content = extractOpenRouterText(data);
-      if (!content) return jsonResponse({ error: 'Empty response from AI engine - ghost cache will serve previous' }, 502);
-      let parsed: any;
-      try { parsed = JSON.parse(cleanupJson(content)); } catch {
-        return jsonResponse({ error: 'Failed to format asset package - retrying via ghost node', raw: content }, 502);
-      }
-      return jsonResponse({
-        success: true, model: outcome.model, failedOver: outcome.failedOver,
-        rewrite: {
-          originalTitle: parsed.originalTitle || originalTitle,
-          rewrittenTitle: parsed.rewrittenTitle || `REWRITTEN: ${originalTitle}`,
-          seoTags: Array.isArray(parsed.seoTags) ? parsed.seoTags : ["viral","growth","youtube","creator","strategy","algorithm","retention","masterclass","secrets","guide"],
-          glitchHook: parsed.glitchHook || "At 3:00 AM, everything changed...",
-          fullScript: parsed.fullScript || "The AI is polishing your script. Try refreshing in a second.",
-          thumbnailPrompt: parsed.thumbnailPrompt || `Cinematic YouTube thumbnail for "${originalTitle}", extreme close-up, dramatic lighting, high contrast, vibrant colors, 4k`,
-          editingGuide: parsed.editingGuide || "1. Cut dead air. 2. Add zoom punch-in on glitch hook. 3. Sound FX on key reveals. 4. Dynamic B-roll every 4 seconds.",
-          changedAnalogiesCount: typeof parsed.changedAnalogiesCount === 'number' ? parsed.changedAnalogiesCount : 3,
-          changedExamplesCount: typeof parsed.changedExamplesCount === 'number' ? parsed.changedExamplesCount : 4,
-          glitchTechniques: Array.isArray(parsed.glitchTechniques) ? parsed.glitchTechniques : (isPremium ? ["time-jump","hidden-secret","retention-spike"] : ["basic-curiosity"]),
-          glitchIntensity: isPremium ? 99 : 60,
-          tier, isStealthDisguised: true
+Execute Chain-Loop. Return STRICT JSON matching the schema, nothing else.`;
+
+      // Deterministic local fallback package — guarantees the Chain-Loop
+      // never leaves the user stuck at the "Injecting Curiosity" step, even
+      // if the gateway is unreachable or returns unparseable output.
+      const buildFallbackRewrite = () => {
+        const safeTitle = (originalTitle || 'Viral Content').replace(/^["']|["']$/g, '').trim();
+        const titleBase = safeTitle.length > 50 ? safeTitle.slice(0, 47) + '...' : safeTitle;
+        const nicheWord = (niche || 'growth').trim() || 'content';
+        const rewrittenTitle = isPremium
+          ? `I Tried "${titleBase}" for 30 Days (SHOCKING Truth No One Tells You)`
+          : `${titleBase} — The Complete ${nicheWord} Guide (2025)`;
+        const glitchHook = isPremium
+          ? `Stop scrolling. What I'm about to show you about "${nicheWord}" got me banned from three mastermind groups. Stay until the end — the third trick will change how you create forever.`
+          : `Want to know the real secret behind "${titleBase}"? In the next 60 seconds I'll break down exactly what works, what doesn't, and the one mistake 97% of creators keep making.`;
+        const fullScript = `${glitchHook}\n\nLet me cut through the noise. When I first started researching "${nicheWord}", I consumed every tutorial, bought every course, and wasted months on tactics that don't move the needle. Here's what actually works:\n\nPoint one: Stop chasing viral tricks. The creators who win are the ones who treat the first three seconds like a do-or-die moment. Open with a pattern interrupt — a shocking statement, a contrarian take, or a result people can't ignore.\n\nPoint two: Build an open loop within the first 15 seconds. Tease the payoff, then deliver value in waves. Every 45 seconds, raise the stakes with a new revelation so viewers can't look away.\n\nPoint three: End with a loop bomb — reference the hook, deliver the payoff, and give viewers a reason to watch the next video or hit subscribe before they even think about leaving.\n\nIf you got value from this, drop a 🔥 in the comments and tell me which point hit hardest. Follow for more no-fluff ${nicheWord} breakdowns.`;
+        return {
+          originalTitle,
+          rewrittenTitle,
+          seoTags: [
+            nicheWord.toLowerCase().replace(/\s+/g, ''),
+            'youtube growth',
+            'viral script',
+            isPremium ? 'glitch protocol' : 'content strategy',
+            'retention hack',
+            'shorts formula',
+            'creator tips',
+            'algorithm hack',
+            'youtube 2025',
+            'viral hook',
+          ],
+          glitchHook,
+          fullScript,
+          thumbnailPrompt: isPremium
+            ? `Extreme close-up reaction shot, person pointing directly at camera with wide eyes and one hand covering mouth in shock, dramatic red/cyan neon lighting, bold yellow "EXPOSED" text in all caps, dark background, YouTube thumbnail composition, 4K, hyper-detailed, high contrast`
+            : `Professional YouTube thumbnail for "${rewrittenTitle.slice(0, 40)}", friendly confident creator pointing at bold white title text, bright blue/orange gradient background, clean modern composition, readable sans-serif typography, eye-level camera`,
+          editingGuide: `1. CUT every pause longer than 0.3s.\n2. Zoom punch-in (112%) every 8-12 seconds on key reveals.\n3. Subtitles in bold caption style (Impact, 4px stroke) — highlight hook words in yellow.\n4. B-roll or stock footage cut every 3-4 seconds to match narration.\n5. Impact sound FX (whoosh / riser) at each retention spike.\n6. End-screen card teases the next video for 3 seconds.`,
+          changedAnalogiesCount: 5,
+          changedExamplesCount: 4,
+          glitchTechniques: isPremium
+            ? ['open-loop-bomb', 'pattern-interrupt', 'authority-stack', 'curiosity-gap', 'third-act-reveal']
+            : ['value-stack', 'clear-sections', 'benefit-led'],
+        };
+      };
+
+      let rewrite: any = null;
+      let servedViaFallback = false;
+      let upstreamModel = '';
+      let failedOver = false;
+
+      try {
+        const outcome = await fetchOpenRouterWithRetry({
+          body: {
+            systemInstruction: { parts: [{ text: rewriteSystemInstruction }] },
+            contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.85, maxOutputTokens: 8192 },
+          },
+          deadlineMs: 48_000,
+          maxTokens: 8192,
+        });
+        const r = outcome.res;
+        if (!r.ok) throw new Error(`upstream ${r.status}`);
+        const data = await r.json();
+        const content = extractOpenRouterText(data);
+        if (!content || content.length < 100) throw new Error('Empty or too-short response from AI engine');
+        try {
+          const parsed = JSON.parse(cleanupJson(content));
+          if (parsed && typeof parsed === 'object' && parsed.rewrittenTitle && parsed.fullScript) {
+            rewrite = parsed;
+            upstreamModel = outcome.model;
+            failedOver = outcome.failedOver;
+          } else {
+            throw new Error('Schema mismatch');
+          }
+        } catch (parseErr) {
+          console.warn('[clone-crush:rewrite] JSON parse failed, using fallback package:', (parseErr as Error)?.message);
+          rewrite = null;
         }
+      } catch (err: any) {
+        console.warn('[clone-crush:rewrite] upstream failed, using fallback package:', err?.message);
+        rewrite = null;
+      }
+
+      if (!rewrite) {
+        rewrite = buildFallbackRewrite();
+        servedViaFallback = true;
+      }
+
+      // Defensive fill for any missing fields so the client shape is stable.
+      const fb = buildFallbackRewrite();
+      return jsonResponse({
+        success: true,
+        model: upstreamModel || (servedViaFallback ? 'ghost-local-fallback' : ''),
+        failedOver: failedOver || servedViaFallback,
+        servedViaFallback,
+        rewrite: {
+          originalTitle: typeof rewrite.originalTitle === 'string' && rewrite.originalTitle ? rewrite.originalTitle : originalTitle,
+          rewrittenTitle: typeof rewrite.rewrittenTitle === 'string' && rewrite.rewrittenTitle ? rewrite.rewrittenTitle : fb.rewrittenTitle,
+          seoTags: Array.isArray(rewrite.seoTags) && rewrite.seoTags.length ? rewrite.seoTags.slice(0, 10) : fb.seoTags,
+          glitchHook: typeof rewrite.glitchHook === 'string' && rewrite.glitchHook ? rewrite.glitchHook : fb.glitchHook,
+          fullScript: typeof rewrite.fullScript === 'string' && rewrite.fullScript && rewrite.fullScript.length > 40 ? rewrite.fullScript : fb.fullScript,
+          thumbnailPrompt: typeof rewrite.thumbnailPrompt === 'string' && rewrite.thumbnailPrompt ? rewrite.thumbnailPrompt : fb.thumbnailPrompt,
+          editingGuide: typeof rewrite.editingGuide === 'string' && rewrite.editingGuide ? rewrite.editingGuide : fb.editingGuide,
+          changedAnalogiesCount: typeof rewrite.changedAnalogiesCount === 'number' ? rewrite.changedAnalogiesCount : 5,
+          changedExamplesCount: typeof rewrite.changedExamplesCount === 'number' ? rewrite.changedExamplesCount : 4,
+          glitchTechniques: Array.isArray(rewrite.glitchTechniques) && rewrite.glitchTechniques.length
+            ? rewrite.glitchTechniques
+            : (isPremium ? ['open-loop', 'hidden-secret', 'retention-spike'] : ['basic-curiosity']),
+          glitchIntensity: isPremium ? 99 : 60,
+          tier,
+          isStealthDisguised: true,
+        },
       });
     }
 
@@ -768,9 +833,13 @@ Execute Chain-Loop. Return JSON only.`;
       let sourceVideoInfo = null;
       try {
         const reverseOutcome = await fetchOpenRouterWithRetry({
-          systemInstruction: { parts: [{ text: reverseEngineerPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: `Viral video: Title: "${topVideo.title}" Views: ${topVideo.viewsText} Channel: ${topVideo.channelName} Thumbnail: ${thumbnailUrl} Search query: "${glitchTitle}" Niche: "${reverseNiche||'General'}" Create 4 prompts. Return JSON: {"prompts": [...], "analysis": "..."}` }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
+          body: {
+            systemInstruction: { parts: [{ text: reverseEngineerPrompt }] },
+            contents: [{ role: 'user', parts: [{ text: `Viral video: Title: "${topVideo.title}" Views: ${topVideo.viewsText} Channel: ${topVideo.channelName} Thumbnail: ${thumbnailUrl} Search query: "${glitchTitle}" Niche: "${reverseNiche||'General'}" Create 4 prompts. Return JSON: {"prompts": [...], "analysis": "..."}` }] }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 4096 },
+          },
+          deadlineMs: 15_000,
+          maxTokens: 4096,
         });
         const reverseContent = extractOpenRouterText(await reverseOutcome.res.json());
         if (reverseContent) {

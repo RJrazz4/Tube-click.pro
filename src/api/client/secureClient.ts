@@ -159,11 +159,11 @@ function requestTimeoutMs(functionName: string, body: unknown): number {
   if (functionName === "generate-content") return 22_000; // server maxDuration 25s; client budget sits just under
   if (functionName === "transcript") return 8_000;
   if (functionName === "clone-crush") {
-    if (action === "profile") return 15_000;
-    if (action === "competitors") return 12_000;
-    if (action === "thumbnail-reverse") return 18_000;
-    if (action === "rewrite") return 55_000;
-    if (action === "threat-alerts") return 10_000;
+    if (action === "profile") return 18_000;
+    if (action === "competitors") return 15_000;
+    if (action === "thumbnail-reverse") return 22_000;
+    if (action === "rewrite") return 58_000;
+    if (action === "threat-alerts") return 12_000;
   }
   return 45_000;
 }
@@ -223,6 +223,9 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
   const cacheKey = qcKey(functionName, body);
   const cached = qcGet<T>(cacheKey);
 
+  // Pull the clone-crush action out once (used by retry policy + timeout).
+  const action = body && typeof body === "object" && "action" in body ? String((body as any).action || "") : "";
+
   // Basic per-endpoint throttle to keep double-clicks or rapid retries from hammering the server.
   const now = Date.now();
   const prev = lastCall.get(functionName) || 0;
@@ -242,7 +245,14 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
   let lastErr: EdgeFunctionError | null = null;
   let pendingDelayMs: number | null = null;
 
-  const maxAttempts = functionName === "transcript" ? 0 : RETRY_DELAYS.length;
+  // Long-running LLM mutations (rewrite, generate-content) already have
+  // server-side fallback + gateway-level model failover. Don't layer client
+  // retries on top — they burn the wall-clock budget and surface phantom
+  // "tunnel interference" toasts when the server would have recovered.
+  const isLongLlmCall =
+    functionName === "generate-content" ||
+    (functionName === "clone-crush" && (action === "rewrite" || action === "thumbnail-reverse"));
+  const maxAttempts = isLongLlmCall ? 0 : (functionName === "transcript" ? 0 : RETRY_DELAYS.length);
 
   for (let attempt = 0; attempt <= maxAttempts; attempt++) {
     if (attempt > 0) {
