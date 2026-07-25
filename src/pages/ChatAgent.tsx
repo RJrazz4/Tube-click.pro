@@ -27,6 +27,8 @@ interface GeneratedContent {
   script: string;
   hashtags: string[];
   description: string;
+  strategyBrief?: string;
+  experimentPlan?: string[];
 }
 
 interface Message {
@@ -68,13 +70,13 @@ function ErrorInlineCard({ err, cooldownLeft, onRetry }: { err: FriendlyError; c
 
 export default function ChatAgent() {
    const [messages, setMessages] = useState<Message[]>([]);
- 
+
    const handleClearContent = () => {
      setGeneratedContent(null);
      setMessages([]);
      toast.success("Workspace cleared");
    };
- 
+
    const handleRemoveMessage = (index: number) => {
      setMessages((prev) => prev.filter((_, i) => i !== index));
    };
@@ -211,12 +213,14 @@ export default function ChatAgent() {
         hooks: (data.hooks || []).filter((h: unknown) => typeof h === 'string' && h.trim()),
         script: cleanedScript,
         hashtags: (data.hashtags || []).filter((h: unknown) => typeof h === 'string'),
-        description: data.description || ''
+        description: data.description || '',
+        strategyBrief: data.strategyBrief || '',
+        experimentPlan: Array.isArray(data.experimentPlan) ? data.experimentPlan.filter((v): v is string => typeof v === 'string').slice(0, 3) : [],
       };
 
       setGeneratedContent(processedContent);
       incrementStat('scriptsGenerated');
-      
+
       // Save to local storage
       const fullContent = `
 TOPIC: ${trimmedTopic}
@@ -238,8 +242,14 @@ ${processedContent.hashtags.join(' ')}
 
 --- DESCRIPTION ---
 ${processedContent.description}
+
+--- STRATEGY BRIEF ---
+${processedContent.strategyBrief || 'Audience and differentiation brief unavailable.'}
+
+--- EXPERIMENT PLAN ---
+${(processedContent.experimentPlan || []).join('\n')}
       `.trim();
-      
+
       saveContent({
         type: 'script',
         title: trimmedTopic,
@@ -248,9 +258,9 @@ ${processedContent.description}
 
       setMessages((prev) => {
         const updated = [...prev];
-        updated[updated.length - 1] = { 
-          role: "assistant", 
-          content: `✅ ${languageLabel} content generated!\n\n📊 Generated:\n• ${processedContent.titles.length} viral titles\n• ${processedContent.hooks.length} hooks\n• Clean script (${processedContent.script.length} chars)\n• ${processedContent.hashtags.length} hashtags\n\nCheck the tabs on the right!` 
+        updated[updated.length - 1] = {
+          role: "assistant",
+          content: `✅ ${languageLabel} content generated!\n\n📊 Generated:\n• ${processedContent.titles.length} viral titles\n• ${processedContent.hooks.length} hooks\n• Clean script (${processedContent.script.length} chars)\n• ${processedContent.hashtags.length} hashtags\n• ${processedContent.experimentPlan?.length || 0} growth experiments\n\nCheck the tabs on the right and use the saved strategy brief to guide publishing!`
         };
         return updated;
       });
@@ -334,9 +344,9 @@ ${processedContent.description}
       toast.error("No content to download");
       return;
     }
-    
+
     const languageLabel = language === "hinglish" ? "Hinglish" : language === "hindi" ? "Hindi" : "English";
-    
+
     const content = `
 TOPIC: ${topic || "Generated Content"}
 PLATFORM: ${platform}
@@ -653,7 +663,7 @@ ${generatedContent.description || 'N/A'}
                     Desc
                   </TabsTrigger>
                 </TabsList>
-                
+
                 <div className="flex-1 overflow-hidden">
                   <TabsContent value="titles" className="h-full m-0 p-3 md:p-4 overflow-auto">
                     <div className="space-y-2">
@@ -681,7 +691,7 @@ ${generatedContent.description || 'N/A'}
                       )}
                     </div>
                   </TabsContent>
-                  
+
                   <TabsContent value="hooks" className="h-full m-0 p-3 md:p-4 overflow-auto">
                     <div className="space-y-2">
                       {generatedContent.hooks?.length > 0 ? (
@@ -708,7 +718,7 @@ ${generatedContent.description || 'N/A'}
                       )}
                     </div>
                   </TabsContent>
-                  
+
                   <TabsContent value="script" className="h-full m-0 p-3 md:p-4 overflow-auto">
                     <div className="relative">
                       <div className="absolute top-2 right-2 z-10">
@@ -742,7 +752,7 @@ ${generatedContent.description || 'N/A'}
                       </p>
                     </div>
                   </TabsContent>
-                  
+
                   <TabsContent value="hashtags" className="h-full m-0 p-3 md:p-4 overflow-auto">
                     <div className="flex flex-wrap gap-2">
                       {generatedContent.hashtags?.length > 0 ? (
@@ -782,7 +792,7 @@ ${generatedContent.description || 'N/A'}
                       </Button>
                     )}
                   </TabsContent>
-                  
+
                   <TabsContent value="description" className="h-full m-0 p-3 md:p-4 overflow-auto">
                     <div className="relative">
                       <div className="absolute top-2 right-2 z-10">

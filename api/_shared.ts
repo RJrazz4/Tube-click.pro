@@ -13,10 +13,16 @@ export const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-export function jsonResponse(payload: unknown, status = 200) {
+export function requestId(req?: Request): string {
+  const incoming = req?.headers.get("x-request-id")?.trim();
+  if (incoming && /^[a-zA-Z0-9._:-]{1,96}$/.test(incoming)) return incoming;
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function jsonResponse(payload: unknown, status = 200, id?: string) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json", ...(id ? { "x-request-id": id } : {}) },
   });
 }
 

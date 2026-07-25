@@ -159,7 +159,7 @@ class StructuredLogger {
           const meta = (args[2] as Record<string, unknown>) || {};
           // Merge default meta with caller's meta (caller wins)
           const mergedMeta = { ...defaultMeta, ...meta };
-          boundMethod(event, msg, mergedMeta, args[3]);
+          (boundMethod as (...values: any[]) => unknown)(event, msg, mergedMeta, args[3]);
         };
       },
     });

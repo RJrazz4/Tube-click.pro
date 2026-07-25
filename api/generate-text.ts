@@ -52,7 +52,10 @@ export default async function handler(req: Request) {
       default: langInstr = "Write EVERYTHING in Cinematic Hinglish (Romanized Hindi + English blend)."; break;
     }
 
-    const systemPrompt = `You are a viral YouTube content strategist.\n${langInstr}\nRespond in exact JSON: { "titles": [...5], "hooks": [...10], "script": "60s script narration only", "hashtags": [...10], "description": "SEO desc" }`;
+    const systemPrompt = `You are an institutional-grade YouTube growth strategist, not a generic copywriter.
+${langInstr}
+Use a clear evidence-to-action process: identify the viewer's urgent desire or tension, the competitive gap, the unique promise, the first-30-second retention mechanism, and the proof/payoff required. Avoid recycled cliches, vague claims, fake data, and interchangeable titles. Every title must make a distinct promise; every hook must create an open loop that the script closes. Optimize for viewer value and measurable experimentation, not empty virality.
+Return exact JSON only: { "titles": [...5 distinct title families], "hooks": [...10 mechanisms], "script": "60s voiceover with a strong opening, escalating value beats, proof/payoff, and specific CTA; narration only", "hashtags": [...10 relevant], "description": "SEO description with clear promise and audience fit", "strategyBrief": "one concise paragraph explaining audience tension, differentiation, and retention plan", "experimentPlan": ["three measurable title/thumbnail or opening tests"] }`;
 
     // Optional Chain-Loop handoff context (free-text): when present, instruct
     // the model to BUILD ON the supplied intel rather than start from scratch.
@@ -61,7 +64,11 @@ export default async function handler(req: Request) {
         ? `\n\nIncoming intel from a completed Chain-Loop package — use this as the creative foundation. Expand and rework it into fresh, original assets; do not merely repeat it:\n"""${context.trim().slice(0, 4000)}"""`
         : "";
 
-    const userPrompt = `Topic: ${sanitized}\nPlatform: ${platform}\nStyle: ${style}\nLanguage: ${language}\nGenerate viral content as specified.${contextBlock}`;
+    const userPrompt = `Topic: ${sanitized}
+Platform: ${platform}
+Style: ${style}
+Language: ${language}
+Before drafting, reason privately about audience intent, saturation risk, differentiation, click promise, retention beats, and the single action the viewer should take. Then generate the requested assets. Do not invent competitor metrics or claim guaranteed performance.${contextBlock}`;
 
     const outcome = await generateChatJson({ systemPrompt, userPrompt });
 
@@ -80,6 +87,8 @@ export default async function handler(req: Request) {
       script: typeof parsed.script === "string" ? parsed.script.trim() : outcome.content,
       hashtags: normalize(parsed.hashtags, ["#viral"]).slice(0, 10),
       description: typeof parsed.description === "string" ? parsed.description.trim() : sanitized,
+      strategyBrief: typeof parsed.strategyBrief === "string" ? parsed.strategyBrief.trim() : "Audience tension and differentiation were evaluated from the supplied topic.",
+      experimentPlan: normalize(parsed.experimentPlan, ["Test two title promises against the same thumbnail", "Test a faster first-30-second payoff", "Compare proof-led versus curiosity-led openings"]).slice(0, 3),
     });
   } catch (e: unknown) {
     console.error("[generate-text] error:", e);

@@ -12,37 +12,58 @@ export default function Analytics() {
   const { runGuarded } = useSoftGate();
   const [subs, setSubs] = useState("50000");
   const [avgViews, setAvgViews] = useState("15000");
+  const [uploadsPerMonth, setUploadsPerMonth] = useState("4");
   const [niche, setNiche] = useState("Tech & AI");
   const [result, setResult] = useState<{
     projectedMonthlyViews: number;
+    projectedSubscriberGrowth: number;
     estimatedAdsense: number;
     estimatedSponsorship: number;
     viralScore: number;
     growthRate: string;
+    conservativeRevenue: number;
+    upsideRevenue: number;
+    confidence: "Low" | "Medium" | "High";
+    assumptions: string[];
+    sensitivity: string;
+    priorityAction: string;
   } | null>(null);
 
   const performCalculateROI = () => {
     const s = parseInt(subs) || 0;
     const v = parseInt(avgViews) || 0;
-    
-    if (s <= 0 || v <= 0) {
+    const uploadCount = Math.min(31, Math.max(1, parseInt(uploadsPerMonth) || 0));
+
+    if (s <= 0 || v <= 0 || uploadCount <= 0) {
       toast.error("Please enter valid numbers");
       return;
     }
 
-    const monthlyViews = v * 4; // ~4 uploads a month
+    const monthlyViews = v * uploadCount;
+    const monthlySubscriberGrowth = Math.round(monthlyViews * 0.012);
     const cpm = niche === "Finance & Crypto" ? 12 : niche === "Tech & AI" ? 8 : 4;
     const adsense = Math.round((monthlyViews / 1000) * cpm);
-    const sponsorship = Math.round(s * 0.08); // Estimate brand deal value
-    const viralScore = Math.min(98, Math.max(65, Math.round((v / s) * 100 + 40)));
+    const sponsorship = Math.round(s * 0.08); // Benchmark estimate, not a guarantee
+    const viralScore = Math.min(98, Math.max(35, Math.round((v / s) * 100 + 40)));
     const growthRate = s > 100000 ? "+18% MoM" : "+24% MoM";
+    const baseRevenue = adsense + sponsorship;
+    const conservativeRevenue = Math.round(baseRevenue * 0.65);
+    const upsideRevenue = Math.round(baseRevenue * 1.6);
+    const confidence = v >= s * 0.5 ? "High" : v >= s * 0.15 ? "Medium" : "Low";
 
     setResult({
       projectedMonthlyViews: monthlyViews,
+      projectedSubscriberGrowth: monthlySubscriberGrowth,
       estimatedAdsense: adsense,
       estimatedSponsorship: sponsorship,
       viralScore,
-      growthRate
+      growthRate,
+      conservativeRevenue,
+      upsideRevenue,
+      confidence,
+      assumptions: [`${cpm} estimated RPM for ${niche}`, `${uploadCount} uploads per month`, "Sponsorship benchmark based on subscriber count"],
+      sensitivity: `A 25% reach lift would add about ${Math.round(monthlyViews * 0.25).toLocaleString()} monthly views and $${Math.round(adsense * 0.25).toLocaleString()} estimated ad revenue.`,
+      priorityAction: v < s * 0.25 ? "Prioritize packaging tests: title and thumbnail promise clarity are the highest-leverage gap." : "Prioritize retention: strengthen the first 30 seconds and move proof closer to the opening payoff.",
     });
 
     toast.success("Growth projection and ROI calculated!");
@@ -96,6 +117,12 @@ export default function Analytics() {
             </div>
 
             <div className="space-y-2">
+              <Label className="text-sm text-foreground">Uploads per Month</Label>
+              <Input type="number" min="1" max="31" value={uploadsPerMonth} onChange={(e) => setUploadsPerMonth(e.target.value)} className="bg-secondary border-border" />
+              <p className="text-[11px] text-muted-foreground">Used to calculate monthly reach instead of assuming four uploads.</p>
+            </div>
+
+            <div className="space-y-2">
               <Label className="text-sm text-foreground">Content Niche</Label>
               <Select value={niche} onValueChange={setNiche}>
                 <SelectTrigger className="bg-secondary border-border">
@@ -138,6 +165,10 @@ export default function Analytics() {
                     </p>
                   </div>
                   <div className="p-4 rounded-xl bg-secondary/50 border border-border">
+                    <p className="text-xs text-muted-foreground">Projected Subs Added</p>
+                    <p className="text-xl md:text-2xl font-display font-bold text-foreground mt-1">+{result.projectedSubscriberGrowth.toLocaleString()}</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-secondary/50 border border-border">
                     <p className="text-xs text-muted-foreground">Est. AdSense</p>
                     <p className="text-xl md:text-2xl font-display font-bold text-green-400 mt-1">
                       ${result.estimatedAdsense.toLocaleString()}
@@ -154,6 +185,24 @@ export default function Analytics() {
                     <p className="text-xl md:text-2xl font-display font-bold text-accent mt-1">
                       {result.viralScore}/100
                     </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-4 rounded-xl bg-secondary/50 border border-border">
+                    <p className="text-xs text-muted-foreground">Conservative monthly revenue</p>
+                    <p className="text-xl font-display font-bold text-foreground mt-1">${result.conservativeRevenue.toLocaleString()}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">65% of benchmark case</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-primary/10 border border-primary/30">
+                    <p className="text-xs text-muted-foreground">Benchmark revenue range</p>
+                    <p className="text-xl font-display font-bold text-primary mt-1">${result.conservativeRevenue.toLocaleString()}–${result.upsideRevenue.toLocaleString()}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">Not a guaranteed forecast</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-secondary/50 border border-border">
+                    <p className="text-xs text-muted-foreground">Model confidence</p>
+                    <p className="text-xl font-display font-bold text-foreground mt-1">{result.confidence}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">Based on views/subscriber signal</p>
                   </div>
                 </div>
 
@@ -176,6 +225,16 @@ export default function Analytics() {
                       Sponsorship readiness: Your channel metrics qualify for tier-2 brand sponsorships.
                     </li>
                   </ul>
+                  <div className="border-t border-primary/20 pt-3 mt-3 space-y-1">
+                    <p className="text-[11px] font-semibold text-foreground">Highest-leverage action</p>
+                    <p className="text-[11px] text-muted-foreground">{result.priorityAction}</p>
+                    <p className="text-[11px] font-semibold text-foreground mt-2">Sensitivity signal</p>
+                    <p className="text-[11px] text-muted-foreground">{result.sensitivity}</p>
+                  </div>
+                  <div className="border-t border-primary/20 pt-2 mt-3">
+                    <p className="text-[11px] font-semibold text-foreground">Model assumptions</p>
+                    <p className="text-[11px] text-muted-foreground">{result.assumptions.join(" • ")}</p>
+                  </div>
                 </div>
               </div>
             ) : (
