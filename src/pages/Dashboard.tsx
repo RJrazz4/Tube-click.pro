@@ -1,7 +1,7 @@
 import { lazy, memo, Suspense, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
-  Bot, Image as ImageIcon, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Loader2, X, Sparkles, RefreshCw, Share2, TrendingUp, Search, Zap, DollarSign, Flame, Gauge, AlertTriangle, Terminal, Cpu, Activity,
+  Image as ImageIcon, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Loader2, X, Sparkles, RefreshCw, Share2, TrendingUp, Search, Zap, DollarSign, Flame, Gauge, AlertTriangle, Terminal, Cpu, Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +29,6 @@ const TheLab = lazy(() => import("@/components/lab/TheLab").then(m => ({ default
 
 const tools = [
   { title: "Clone & Crush AI", description: "Ghost mesh • Stealth Disguise • 1 Click = 5 Assets", icon: Zap, path: "/clone-crush", gradient: "from-purple-600 via-indigo-600 to-cyan-500", glow: "neon-glow-purple" },
-  { title: "TubeBot AI Agent", description: "Viral titles, hooks & scripts • Quantum cached", icon: Bot, path: "/chat-agent", gradient: "from-neon-purple to-pink-500", glow: "neon-glow-purple" },
   { title: "Voiceover Studio", description: "Cinematic AI voiceovers • Neural Engine", icon: Mic, path: "/voice", gradient: "from-orange-400 to-red-500", glow: "" },
   { title: "Multi-Platform Repurposer", description: "Convert scripts to X, IG, LinkedIn & YouTube", icon: Share2, path: "/repurposer", gradient: "from-pink-500 to-rose-600", glow: "" },
   { title: "Channel Analytics & ROI", description: "Simulate growth, AdSense & brand deals", icon: TrendingUp, path: "/analytics", gradient: "from-blue-500 to-indigo-600", glow: "" },

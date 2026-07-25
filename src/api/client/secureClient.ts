@@ -171,7 +171,7 @@ const MIN_INTERVAL = 600; // reduced from 1200 for snappier feel
 
 function requestTimeoutMs(functionName: string, body: unknown): number {
   const action = body && typeof body === "object" && "action" in body ? String((body as any).action || "") : "";
-  if (functionName === "generate-content") return 22_000; // server maxDuration 25s; client budget sits just under
+  if (functionName === "generate-content") return 52_000; // server maxDuration 55s; match raised gateway deadline so client doesn't abort mid-fallback
   if (functionName === "transcript") return 8_000;
   if (functionName === "clone-crush") {
     if (action === "profile") return 18_000;

@@ -11,8 +11,7 @@
  *      with fallback models, and sanitizes output.
  */
 
-import { gatewayChatJson, GatewayChatOptions } from "../packages/orchestrator/ai-gateway.js";
-import { ChatGenerationError } from "./_ai.js";
+import { gatewayChatJson } from "../packages/orchestrator/ai-gateway.js";
 
 export interface ChannelMemoryProfile {
   niche?: string;
@@ -107,11 +106,14 @@ ${critiqueFeedback ? `\n\nCRITICAL FIXES REQUIRED FROM PREVIOUS ITERATION:\n${cr
 Return exact JSON only matching the requested schema.`;
 
     try {
+      // Per-attempt deadline: 20s writer + 10s critic fits inside the 55s
+      // server maxDuration even with 2 iterations + gateway fallback.
       const result = await gatewayChatJson({
         systemPrompt,
         userPrompt: currentPrompt,
         temperature: 0.85,
         maxTokens: 8192,
+        deadlineMs: 20_000,
       });
 
       lastModel = result.model;
@@ -139,6 +141,7 @@ Respond in exact JSON only:
         userPrompt: criticUser,
         temperature: 0.2,
         maxTokens: 1000,
+        deadlineMs: 10_000,
       });
 
       let criticClean = criticResult.text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
@@ -153,17 +156,13 @@ Respond in exact JSON only:
         selfHealed = true;
       }
     } catch (err) {
-      if (iter === MAX_ITERATIONS) {
-        if (!lastParsed) {
-          throw new ChatGenerationError(
-            "UPSTREAM_ERROR",
-            "Agentic generation pipeline encountered an unrecoverable upstream error.",
-            502,
-            { modelsAttempted: attemptedModels }
-          );
-        }
-      }
+      // Single-call failure (timeout, 502, JSON parse) is swallowed so the
+      // engine can retry or fall through to the hard-coded payload. The
+      // "unrecoverable upstream error" throw is removed entirely — the
+      // route-level buildLocalContentPackage handles the absolute worst case.
       selfHealed = true;
+      if (iter < MAX_ITERATIONS) continue;
+      if (!lastParsed) break;
     }
   }
 

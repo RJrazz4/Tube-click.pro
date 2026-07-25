@@ -37,7 +37,12 @@ const DEFAULT_FALLBACKS = [
 
 const DEFAULT_BASE_URL = "https://gateway.vercel.sh/v1";
 const DEFAULT_PRIMARY = "google/gemini-2.5-flash";
-const DEFAULT_TIMEOUT_MS = 20_000;
+// Raised from 20s to 40s so primary + 2 fallbacks have enough wall-clock
+// to complete before our AbortController severs the call. Clone-crush /
+// Chain-Loop callers pass an explicit higher deadline (48s) that overrides
+// this default, but the generic content-generation path was getting
+// aborted mid-fallback producing "Provider hiccup" UPSTREAM_ERRORs.
+const DEFAULT_TIMEOUT_MS = 40_000;
 
 function readNumber(name: string, fallback: number): number {
   const raw = process.env[name];

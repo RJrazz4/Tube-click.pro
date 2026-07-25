@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Bot, Mic, Sparkles, Share2, TrendingUp, Search, Settings, Zap, Gift, Terminal, Cpu } from "lucide-react";
+import { LayoutDashboard, Mic, Sparkles, Share2, TrendingUp, Search, Settings, Zap, Gift, Terminal, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -7,7 +7,6 @@ const navItems = [
   { icon: LayoutDashboard, label: "Dashboard • Ghost War Room", path: "/" },
   { icon: Zap, label: "Clone & Crush • Ghost Protocol", path: "/clone-crush" },
   { icon: Gift, label: "Referral Rewards • Private Tracker", path: "/rewards" },
-  { icon: Bot, label: "TubeBot AI • Quantum Cached", path: "/chat-agent" },
   { icon: Mic, label: "Voiceover • Neural Engine", path: "/voice" },
   { icon: Share2, label: "Multi-Platform Repurposer", path: "/repurposer" },
   { icon: TrendingUp, label: "Analytics & ROI • Ghost Calc", path: "/analytics" },

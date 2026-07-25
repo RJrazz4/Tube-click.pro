@@ -17,7 +17,6 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
 // Lazy-load heavy tool pages to keep the initial bundle small.
-const ChatAgent = lazy(() => import("./pages/ChatAgent"));
 const VoiceStudio = lazy(() => import("./pages/VoiceStudio"));
 const Repurposer = lazy(() => import("./pages/Repurposer"));
 const Analytics = lazy(() => import("./pages/Analytics"));
@@ -68,7 +67,6 @@ const App = () => (
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/" element={<Index />} />
-                <Route path="/chat-agent" element={<SoftGateRoute><ChatAgent /></SoftGateRoute>} />
                 <Route path="/voice" element={<SoftGateRoute><VoiceStudio /></SoftGateRoute>} />
                 <Route path="/repurposer" element={<SoftGateRoute><Repurposer /></SoftGateRoute>} />
                 <Route path="/analytics" element={<SoftGateRoute><Analytics /></SoftGateRoute>} />

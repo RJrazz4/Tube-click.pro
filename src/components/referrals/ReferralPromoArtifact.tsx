@@ -130,17 +130,17 @@ export function ReferralPromoArtifact({ referralCode, className = "", showQR = t
       onMouseLeave={() => setIsHovering(false)}
     >
       {/* Matrix rain canvas */}
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full opacity-30" />
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full opacity-30 pointer-events-none" />
 
       {/* Grid */}
-      <div className="absolute inset-0 opacity-[0.06] ghost-grid" />
+      <div className="absolute inset-0 opacity-[0.06] ghost-grid pointer-events-none" />
 
       {/* Orbs */}
       <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-cyan-400/15 blur-[40px] pointer-events-none" />
       <div className="absolute -bottom-16 -left-16 w-72 h-72 rounded-full bg-purple-600/20 blur-[50px] pointer-events-none" />
 
-      {/* Main SVG */}
-      <svg ref={svgRef} viewBox="0 0 1200 630" className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
+      {/* Main SVG (visual only — pointer-events-none so it doesn't eat clicks on the parent/buttons) */}
+      <svg ref={svgRef} viewBox="0 0 1200 630" className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="g1" x1="100" y1="80" x2="1100" y2="550" gradientUnits="userSpaceOnUse">
             <stop stopColor="#7C3AED" stopOpacity="0.9" />
