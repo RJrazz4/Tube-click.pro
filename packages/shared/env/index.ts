@@ -1,19 +1,20 @@
 /**
- * Phase A1 — Zod-validated server environment (fail-fast at boot).
+ * Zod-validated server environment (fail-fast at boot).
  *
  *   const env = loadEnv();            // throws EnvValidationError on bad config
  *   console.log(summarizeEnv(env));   // counts + flags only — zero key material
  *
  * Variables:
+ *   AI_GATEWAY_API_KEY      Vercel AI Gateway bearer token (preferred LLM path)
  *   IMAGE_API_KEYS          pooled provider keys: "agnes:k1,k2;gemini:k3;hf:k4"
- *   OPENROUTER_API_KEYS     manager-brain keys, comma-separated (preferred)
+ *   OPENROUTER_API_KEYS     manager-brain keys, comma-separated (legacy fallback)
  *   OPENROUTER_API_KEY      legacy singular alias (used when plural absent)
  *   POLLINATIONS_ENABLED    "true"/"false"/"1"/"0" — default true
  *   TIER_LIMITS             JSON override deep-merged onto tier defaults
  *
  * SERVER-ONLY: never import this module from src/ — Vite would inline it
  * into the client bundle. Consumers: api/* edge functions and
- * packages/orchestrator (Phase B onward).
+ * packages/orchestrator.
  */
 import { z } from "zod";
 
@@ -32,7 +33,9 @@ export * from "./tier-limits.js";
 /** Fully-parsed, fail-fast validated server configuration. */
 export interface AppEnv {
   imageKeyPools: ImageKeyPools;
-  /** Manager-brain credential pool (Phase B); [] when unconfigured. */
+  /** Vercel AI Gateway token; when present, LLM traffic routes via gateway. */
+  aiGatewayKey?: string;
+  /** Manager-brain credential pool (legacy OpenRouter); [] when unconfigured or gateway is used. */
   openrouterKeys: string[];
   /** Override for the manager model ID; undefined = code-pinned default. */
   openrouterModel?: string;
@@ -99,6 +102,7 @@ const booleanField = (defaultValue: boolean) =>
 
 const appEnvInputSchema = z.object({
   IMAGE_API_KEYS: imageKeyPoolsField,
+  AI_GATEWAY_KEY: z.string().trim().min(1).optional(),
   OPENROUTER_KEYS: openrouterKeysField,
   OPENROUTER_MODEL: z.string().trim().min(1).optional(),
   POLLINATIONS_ENABLED: booleanField(true),
@@ -115,6 +119,7 @@ export function parseEnv(source: EnvSource): AppEnv {
 
   const result = appEnvInputSchema.safeParse({
     IMAGE_API_KEYS: source.IMAGE_API_KEYS,
+    AI_GATEWAY_KEY: source.AI_GATEWAY_API_KEY,
     OPENROUTER_KEYS: openrouterRaw,
     OPENROUTER_MODEL: source.OPENROUTER_MODEL,
     POLLINATIONS_ENABLED: source.POLLINATIONS_ENABLED,
@@ -138,6 +143,9 @@ export function parseEnv(source: EnvSource): AppEnv {
     pollinationsEnabled: result.data.POLLINATIONS_ENABLED,
     tierLimits: result.data.TIER_LIMITS,
   };
+  if (result.data.AI_GATEWAY_KEY !== undefined) {
+    env.aiGatewayKey = result.data.AI_GATEWAY_KEY;
+  }
   if (result.data.OPENROUTER_MODEL !== undefined) {
     env.openrouterModel = result.data.OPENROUTER_MODEL;
   }
@@ -158,6 +166,7 @@ export function maskKey(key: string): string {
 /** Boot-log snapshot — counts/flags only, zero key material. */
 export function summarizeEnv(env: AppEnv): Record<string, number | boolean | string> {
   return {
+    aiGateway: env.aiGatewayKey ? "configured" : "unconfigured",
     agnesKeys: env.imageKeyPools.agnes.length,
     geminiKeys: env.imageKeyPools.gemini.length,
     hfKeys: env.imageKeyPools.hf.length,

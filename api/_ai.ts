@@ -1,35 +1,29 @@
 /**
- * api/_ai.ts — OpenRouter chat-text generation.
+ * api/_ai.ts — AI chat-text generation.
  *
- * Authoritative server path for chat (TubeBot) text generation. Delegates
- * to the orchestrator's `OpenRouterClient`, which implements key-pool
- * rotation, per-attempt timeouts, a wall-clock deadline, model failover,
- * and structured error normalization.
+ * Authoritative server path for chat (TubeBot) and structured JSON
+ * generation. All LLM traffic is routed through the Vercel AI Gateway
+ * (`packages/orchestrator/ai-gateway.ts`), which handles retries, model
+ * fallback, rate-limit backoff, caching, and observability. This module
+ * is responsible for:
+ *   - Wrapping the SDK call in our stable `ChatGenerationError` shape so
+ *     existing client-side error mappers (src/lib/friendlyError.ts)
+ *     keep working unchanged.
+ *   - Enforcing a per-call timeout and honoring caller-supplied abort
+ *     signals.
+ *   - Emitting structured, key-material-free logs for production
+ *     debugging.
  *
- * Guarantees:
- *  - All configured OpenRouter keys (plural, singular, or numbered forms)
- *    are normalized into a single pool at boot.
- *  - Each attempt has its own AbortController timeout; a global deadline
- *    ensures the function returns a typed response before the platform
- *    severs the connection.
- *  - Key rotation and model fallback are automatic across 429/402/5xx/timeout.
- *  - Errors surface as `ChatGenerationError` with stable codes the client
- *    maps to user-facing messages via `friendlyError()`.
- *  - Structured per-attempt logs never include key material (only a masked
- *    tag: first four + last four characters).
- *
- * Runtime: Edge-safe (fetch, AbortController, setTimeout, Date.now, JSON).
+ * Runtime: Edge-safe (fetch, AbortController, setTimeout, Date.now).
  */
 import {
-  OpenRouterClient,
-  OpenRouterError,
-  OPENROUTER_DEFAULT_BASE_URL,
-  type ChatMessage,
-} from "../packages/orchestrator/manager/openrouter-client.js";
-import { maskKey } from "../packages/shared/env/index.js";
-import { openRouterKeys, openRouterModelChain } from "./_shared.js";
+  gatewayChatJson,
+  gatewayChatText,
+  GatewayConfigError,
+  type GatewayChatOptions,
+} from "../packages/orchestrator/ai-gateway.js";
 
-export type { ChatMessage };
+export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 export interface GenerateChatJsonOptions {
   systemPrompt: string;
@@ -38,36 +32,38 @@ export interface GenerateChatJsonOptions {
   temperature?: number;
   /** Max output tokens. Default 8192. */
   maxTokens?: number;
-  /** Global wall-clock deadline (ms) across ALL models + keys. Default OPENROUTER_CHAT_DEADLINE_MS / 17000. */
+  /** Global wall-clock deadline (ms) for the call. Falls back to env/20s. */
   deadlineMs?: number;
-  /** Per-attempt upstream timeout (ms). Default OPENROUTER_CHAT_ATTEMPT_TIMEOUT_MS / 7000. */
+  /** Legacy alias retained for callers — maps to deadlineMs. */
   attemptTimeoutMs?: number;
-  /** Injectable fetch for tests. */
-  fetchImpl?: typeof fetch;
-  /** Injectable clock for tests. */
-  now?: () => number;
+  /** Abort signal from the edge caller (reserved for future use). */
+  signal?: AbortSignal;
+  /** @deprecated Fetch injection is now supported for tests via this param. */
+  fetchImpl?: unknown;
+  /** @deprecated Use deadlineMs — kept for API compatibility. */
+  now?: unknown;
 }
 
 export interface ChatGenerationOutcome {
-  /** Raw model text (JSON-mode; caller parses). */
+  /** Raw model text (JSON-mode callers parse this). */
   content: string;
-  /** OpenRouter model id that produced the content. */
+  /** Model id that produced the content (post-fallback). */
   model: string;
-  /** Index (0-based) of the pool key that succeeded. */
+  /** Always 0 now that the gateway manages the connection pool. */
   keyIndex: number;
-  /** Attempts consumed on the winning model (1 = first key worked). */
+  /** Always 1; the gateway handles retries internally. */
   attempts: number;
-  /** Total wall-clock latency (ms). */
+  /** Wall-clock latency (ms). */
   latencyMs: number;
-  /** Distinct models tried, in order. */
+  /** Models attempted in order (primary then fallbacks). */
   modelsAttempted: string[];
-  /** True if rotation / model failover actually happened. */
+  /** True when a fallback model served the request. */
   failedOver: boolean;
 }
 
 /**
- * Typed, normalized failure. `code` mirrors the server/client taxonomy so
- * src/lib/friendlyError.ts maps it with zero changes.
+ * Stable error type. `code` uses the existing taxonomy consumed by
+ * src/lib/friendlyError.ts so the UI does not change.
  */
 export class ChatGenerationError extends Error {
   readonly code: string;
@@ -92,238 +88,181 @@ export class ChatGenerationError extends Error {
   }
 }
 
-function numEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const n = parseInt(raw, 10);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
-/** One-time boot log of pool size + model chain (counts only, zero key material). */
-let loggedPoolConfig = false;
-
-/**
- * Wrap the native fetch to emit a key-material-free observation line per
- * attempt:
- *   [chat-ai] openrouter http=429 latency=318ms model=google/gemini-2.5-flash key=sk-o...a1f3
- * Used for rotation and latency debugging in production logs.
- */
-function makeObservabilityFetch(baseFetch: typeof fetch, now: () => number): typeof fetch {
-  return async (input: RequestInfo | URL, init?: RequestInit) => {
-    const t0 = now();
-    let model = "?";
-    let keyTag = "—";
-    try {
-      if (init && typeof init.body === "string") {
-        const parsed = JSON.parse(init.body) as { model?: unknown };
-        if (typeof parsed.model === "string") model = parsed.model;
-      }
-      const headers = init?.headers as Record<string, string> | undefined;
-      const auth =
-        headers && typeof headers === "object"
-          ? headers.Authorization ?? headers.authorization
-          : undefined;
-      if (typeof auth === "string" && auth.toLowerCase().startsWith("bearer ")) {
-        keyTag = maskKey(auth.slice(7));
-      }
-    } catch {
-      /* observation must never break the request */
-    }
-    let status = 0;
-    try {
-      const res = await baseFetch(input as RequestInfo, init as RequestInit);
-      status = res.status;
-      return res;
-    } finally {
-      console.log(`[chat-ai] openrouter http=${status} latency=${now() - t0}ms model=${model} key=${keyTag}`);
-    }
+/** Classify an unknown thrown value into a stable ChatGenerationError. */
+function toChatGenerationError(
+  err: unknown,
+  modelsAttempted: string[],
+): ChatGenerationError {
+  // AI SDK errors expose a `statusCode` when the HTTP response is readable,
+  // plus a name ("AI_InvalidDataError", "AI_APICallError", etc.). We map
+  // the ones we care about onto our legacy codes and render everything
+  // else as UPSTREAM_ERROR / UNKNOWN.
+  const e = err as {
+    name?: string;
+    statusCode?: number;
+    status?: number;
+    data?: unknown;
+    responseBody?: string;
+    message?: string;
+    isRetryable?: boolean;
   };
-}
-
-/** True when a model-level failover could plausibly help (different upstream). */
-function shouldFailOverModel(err: OpenRouterError): boolean {
-  return (
-    err.kind === "timeout" ||
-    err.kind === "provider_unavailable" ||
-    err.statusCode === 404 ||
-    (typeof err.statusCode === "number" && err.statusCode >= 500)
-  );
-}
-
-/** Map an orchestrator OpenRouterError (or unknown) to a client-safe code+status. */
-function toChatGenerationError(err: unknown, modelsAttempted: string[]): ChatGenerationError {
+  const status = e.statusCode ?? e.status ?? 502;
   const noteModels = { modelsAttempted };
-  if (err instanceof OpenRouterError) {
-    const retryAfter = err.retryAfterMs !== undefined ? Math.ceil(err.retryAfterMs / 1000) : undefined;
-    switch (err.kind) {
-      case "rate_limit":
-        return new ChatGenerationError(
-          "RATE_LIMITED",
-          retryAfter
-            ? `AI is busy — the rate limit was reached. Please wait about ${retryAfter}s and try again.`
-            : "AI is busy right now — too many requests. Please wait a moment and try again.",
-          429,
-          { retryAfter, action: retryAfter ? `Auto-retry after ~${retryAfter} seconds is recommended.` : undefined, ...noteModels },
-        );
-      case "quota_exceeded":
+
+  if (err instanceof ChatGenerationError) return err;
+
+  if (err instanceof GatewayConfigError) {
+    return new ChatGenerationError(
+      "API_KEY_INVALID",
+      err.message,
+      500,
+      { action: "Admin: verify AI_GATEWAY_API_KEY in the Vercel project environment variables.", ...noteModels },
+    );
+  }
+
+  if (e.name === "AI_APICallError" || e.name === "APICallError") {
+    if (status === 401 || status === 403) {
+      return new ChatGenerationError(
+        "API_KEY_INVALID",
+        "The AI service key is invalid or unauthorized — this is a server configuration issue.",
+        500,
+        { action: "Admin: verify AI_GATEWAY_API_KEY in the Vercel project environment variables.", ...noteModels },
+      );
+    }
+    if (status === 402 || status === 429) {
+      if (status === 402) {
         return new ChatGenerationError(
           "INSUFFICIENT_CREDITS",
           "The AI credit pool is temporarily exhausted. Please try again later.",
           402,
-          { action: "Admin: top up OpenRouter credits or add more keys to OPENROUTER_API_KEYS.", ...noteModels },
+          { action: "Admin: check Vercel AI Gateway billing and quotas.", ...noteModels },
         );
-      case "auth":
-        return new ChatGenerationError(
-          "API_KEY_INVALID",
-          "The AI service key is invalid or unauthorized — this is a server configuration issue, not something you did wrong.",
-          500,
-          { action: "Admin: verify OPENROUTER_API_KEYS in the Vercel project environment variables.", ...noteModels },
-        );
-      case "timeout":
-        return new ChatGenerationError(
-          "TIMEOUT",
-          "The AI request timed out. Please try again.",
-          504,
-          noteModels,
-        );
-      case "provider_unavailable":
-        return new ChatGenerationError(
-          "UPSTREAM_ERROR",
-          "The AI provider is temporarily unavailable. Please try again shortly.",
-          502,
-          noteModels,
-        );
-      case "invalid_request":
-        return err.statusCode === 404
-          ? new ChatGenerationError(
-              "MODEL_NOT_FOUND",
-              "The requested AI model is currently unavailable. Please try again in a moment.",
-              502,
-              { action: "Admin: check the configured OPENROUTER_MODEL against the list of available models.", ...noteModels },
-            )
-          : new ChatGenerationError(
-              "BAD_REQUEST",
-              "The AI service rejected the request. Please adjust the input and try again.",
-              400,
-              noteModels,
-            );
-      default:
-        return new ChatGenerationError(
-          "UNKNOWN",
-          "The AI service returned an unexpected error. Please try again.",
-          502,
-          noteModels,
-        );
+      }
+      return new ChatGenerationError(
+        "RATE_LIMITED",
+        "AI is busy right now — too many requests. Please wait a moment and try again.",
+        429,
+        noteModels,
+      );
+    }
+    if (status === 408 || (err as Error)?.name === "AbortError" || /abort|timeout/i.test(e.message ?? "")) {
+      return new ChatGenerationError("TIMEOUT", "The AI request timed out. Please try again.", 504, noteModels);
+    }
+    if (status === 404) {
+      return new ChatGenerationError(
+        "MODEL_NOT_FOUND",
+        "The requested AI model is currently unavailable. Please try again shortly.",
+        502,
+        { action: "Admin: verify AI_GATEWAY_PRIMARY and AI_GATEWAY_FALLBACKS against the model catalog.", ...noteModels },
+      );
+    }
+    if (status >= 500) {
+      return new ChatGenerationError(
+        "UPSTREAM_ERROR",
+        "The AI provider is temporarily unavailable. Please try again shortly.",
+        502,
+        noteModels,
+      );
+    }
+    if (status === 400) {
+      return new ChatGenerationError(
+        "BAD_REQUEST",
+        "The AI service rejected the request. Please adjust the input and try again.",
+        400,
+        noteModels,
+      );
     }
   }
+
+  if (
+    (err as Error)?.name === "AbortError" ||
+    (e.name === "AI_APICallError" && /abort|timeout/i.test(e.message ?? "")) ||
+    /abort|timeout/i.test((err as Error)?.message ?? "")
+  ) {
+    return new ChatGenerationError("TIMEOUT", "The AI request timed out. Please try again.", 504, noteModels);
+  }
+  if (e.name === "AI_InvalidDataError" || /invalid json|parse/i.test(e.message ?? "")) {
+    return new ChatGenerationError(
+      "UPSTREAM_ERROR",
+      "The AI provider returned an unexpected response. Please try again.",
+      502,
+      noteModels,
+    );
+  }
+
   return new ChatGenerationError(
     "UNKNOWN",
-    err instanceof Error ? err.message : "OpenRouter text generation failed.",
+    err instanceof Error ? err.message : "AI text generation failed.",
     502,
     noteModels,
   );
 }
 
 /**
- * Generate JSON-mode chat text via OpenRouter with key rotation,
- * per-attempt timeouts, a global deadline, and model failover.
+ * Generate structured JSON-mode chat text via the Vercel AI Gateway.
  *
- * @throws {ChatGenerationError} on any failure; always carries a client-safe code.
+ * The returned `ChatGenerationOutcome` matches the legacy shape used by
+ * existing callers; fields that no longer apply (keyIndex, attempts)
+ * are set to safe defaults.
+ *
+ * @throws {ChatGenerationError} with stable code/status.
  */
-export async function generateChatJson(opts: GenerateChatJsonOptions): Promise<ChatGenerationOutcome> {
-  const now = opts.now ?? Date.now;
+export async function generateChatJson(
+  opts: GenerateChatJsonOptions,
+): Promise<ChatGenerationOutcome> {
+  const gwOpts: GatewayChatOptions = {
+    systemPrompt: opts.systemPrompt,
+    userPrompt: opts.userPrompt,
+    temperature: opts.temperature,
+    maxTokens: opts.maxTokens,
+    deadlineMs: opts.deadlineMs ?? opts.attemptTimeoutMs,
+    signal: opts.signal,
+    fetchImpl: typeof opts.fetchImpl === "function" ? (opts.fetchImpl as typeof fetch) : undefined,
+  };
 
-  // Normalize OpenRouter keys from the supported env-var shapes.
-  let keys: string[];
   try {
-    keys = openRouterKeys();
-  } catch {
-    throw new ChatGenerationError(
-      "API_KEY_INVALID",
-      "The AI service key is not configured on the server — this is a server configuration issue, not something you did wrong.",
-      500,
-      { action: "Admin: set OPENROUTER_API_KEYS (comma-separated) in the Vercel project environment variables.", modelsAttempted: [] },
+    const result = await gatewayChatJson(gwOpts);
+    return {
+      content: result.text,
+      model: result.model,
+      keyIndex: 0,
+      attempts: 1,
+      latencyMs: result.latencyMs,
+      modelsAttempted: result.modelsAttempted,
+      failedOver: result.failedOver,
+    };
+  } catch (err) {
+    const mapped = toChatGenerationError(
+      err,
+      (err as { modelsAttempted?: string[] })?.modelsAttempted ?? [],
     );
+    // Best-effort log; error message already trimmed upstream.
+    console.error(
+      `[chat-ai] failed code=${mapped.code} status=${mapped.status}`,
+    );
+    throw mapped;
   }
+}
 
-  const models = openRouterModelChain();
-  const deadlineMs = opts.deadlineMs ?? numEnv("OPENROUTER_CHAT_DEADLINE_MS", 17000);
-  const attemptTimeoutMs = opts.attemptTimeoutMs ?? numEnv("OPENROUTER_CHAT_ATTEMPT_TIMEOUT_MS", 7000);
-  // One full rotation through the pool per model; cap at 3 to stay inside the deadline.
-  const maxAttempts = Math.min(keys.length, 3);
-  const baseUrl = process.env.OPENROUTER_BASE_URL ?? OPENROUTER_DEFAULT_BASE_URL;
-  const siteUrl = process.env.OPENROUTER_SITE_URL;
-  const siteTitle = process.env.OPENROUTER_SITE_TITLE;
-
-  if (!loggedPoolConfig) {
-    loggedPoolConfig = true;
-    console.log(`[chat-ai] OpenRouter pool ready: ${keys.length} key(s) • models: ${models.join(" → ")} • deadline=${deadlineMs}ms • attemptTimeout=${attemptTimeoutMs}ms`);
+/**
+ * Free-text variant — same call path but without the strict-JSON wrapper.
+ * Used when the caller wants prose/markdown rather than a parseable payload.
+ */
+export async function generateChatText(
+  opts: GatewayChatOptions,
+): Promise<ChatGenerationOutcome> {
+  try {
+    const result = await gatewayChatText(opts);
+    return {
+      content: result.text,
+      model: result.model,
+      keyIndex: 0,
+      attempts: 1,
+      latencyMs: result.latencyMs,
+      modelsAttempted: result.modelsAttempted,
+      failedOver: result.failedOver,
+    };
+  } catch (err) {
+    throw toChatGenerationError(err, []);
   }
-
-  const started = now();
-  const modelsAttempted: string[] = [];
-  const fetchImpl = makeObservabilityFetch(opts.fetchImpl ?? fetch, now);
-  let lastError: ChatGenerationError | null = null;
-
-  for (const model of models) {
-    if (!modelsAttempted.includes(model)) modelsAttempted.push(model);
-
-    const remaining = deadlineMs - (now() - started);
-    if (remaining < 3000) {
-      // Not enough budget left to justify another model's rotation; stop.
-      break;
-    }
-
-    const client = new OpenRouterClient({
-      keys,
-      model,
-      baseUrl,
-      timeoutMs: attemptTimeoutMs,
-      retryBudgetMs: Math.max(3000, remaining),
-      maxAttempts,
-      siteUrl,
-      siteTitle,
-      fetchImpl,
-      now,
-    });
-
-    try {
-      const result = await client.completeJson({
-        messages: [
-          { role: "system", content: opts.systemPrompt },
-          { role: "user", content: opts.userPrompt },
-        ],
-        temperature: opts.temperature ?? 0.9,
-        maxTokens: opts.maxTokens ?? 8192,
-      });
-
-      const latencyMs = now() - started;
-      const failedOver = modelsAttempted.length > 1 || result.attempts > 1 || result.keyIndex > 0;
-      console.log(`[chat-ai] OK model=${result.model} key#${result.keyIndex + 1}/${keys.length} attempts=${result.attempts} latency=${latencyMs}ms${failedOver ? " (rotated)" : ""}`);
-      return {
-        content: result.content,
-        model: result.model,
-        keyIndex: result.keyIndex,
-        attempts: result.attempts,
-        latencyMs,
-        modelsAttempted,
-        failedOver,
-      };
-    } catch (err) {
-      lastError = toChatGenerationError(err, modelsAttempted);
-      const moreModels = modelsAttempted.length < models.length;
-      console.error(
-        `[chat-ai] model=${model} failed → ${lastError.code} (status ${lastError.status})${lastError.retryAfter ? ` retryAfter≈${lastError.retryAfter}s` : ""}${moreModels ? " — failing over to next model" : " — no more models"}`,
-      );
-      if (err instanceof OpenRouterError && shouldFailOverModel(err) && moreModels) {
-        continue;
-      }
-      throw lastError;
-    }
-  }
-
-  throw (
-    lastError ??
-    new ChatGenerationError("UNKNOWN", "OpenRouter text generation failed — deadline exhausted.", 504, { modelsAttempted })
-  );
 }

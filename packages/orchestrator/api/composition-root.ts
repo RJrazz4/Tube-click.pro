@@ -24,7 +24,7 @@ import type { AppEnv } from "../../shared/env/index.js";
 import { parseImageKeyPoolsWithReport } from "../../shared/env/image-keys.js";
 import { CostTracker } from "../cost/index.js";
 import { GeneratorAgent, GeneratorMetrics } from "../generator/index.js";
-import { ManagerService, OpenRouterClient } from "../manager/index.js";
+import { ManagerService, OpenRouterClient, GatewayJsonClient } from "../manager/index.js";
 import {
   AgnesFlashAdapter,
   GeminiFlashAdapter,
@@ -96,17 +96,29 @@ export interface OrchestratorApi {
 }
 
 /**
- * B4 planner, or a loud placeholder when the manager brain has no keys.
+ * B4 planner — prefers the Vercel AI Gateway when AI_GATEWAY_API_KEY is
+ * configured, otherwise falls back to the pooled OpenRouter client for
+ * backward compatibility.
  */
 function defaultPlanner(
   env: AppEnv,
   overrides: OrchestratorApiOverrides,
 ): StoryboardPlanner {
+  // Vercel AI Gateway path — preferred.
+  if (env.aiGatewayKey) {
+    return new ManagerService({
+      client: new GatewayJsonClient({
+        model: env.openrouterModel,
+      }),
+    });
+  }
   if (env.openrouterKeys.length === 0) {
     return {
       analyzeScript: () =>
         Promise.reject(
-          new Error("storyboard planner not configured: set OPENROUTER_API_KEYS"),
+          new Error(
+            "storyboard planner not configured: set AI_GATEWAY_API_KEY or OPENROUTER_API_KEYS",
+          ),
         ),
     };
   }

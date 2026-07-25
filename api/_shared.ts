@@ -175,112 +175,94 @@ const sleepMsOR = (ms: number) => new Promise(r => setTimeout(r, ms));
 const OR_ROTATE_CODES = new Set(["RATE_LIMITED", "QUOTA_EXCEEDED_DAILY", "INSUFFICIENT_CREDITS", "API_KEY_INVALID"]);
 
 /**
- * Fetch OpenRouter with key rotation and model failover.
+ * Fetch OpenAI-compatible chat completion through the Vercel AI Gateway.
  *
- * Policy:
- *  1. Outer loop walks the model chain; inner loop rotates through keys.
- *  2. 429/402/401/403 rotate to the next key immediately; once every key
- *     is exhausted, advance to the next model and reset the key cursor.
- *  3. A Retry-After hint is honored once per (model, key) if it fits
- *     within the retry budget.
- *  4. 5xx triggers one short backoff on the same key, then rotation.
- *  5. Non-429 4xx errors (bad request) are identical across keys and
- *     models, so they fail fast on the first attempt.
+ * This function is now a thin compatibility shim over
+ * `packages/orchestrator/ai-gateway.ts` so legacy callers (seo-tags,
+ * analyze-storyboard, clone-crush) keep working without modification.
+ * It accepts the legacy Gemini-style body, converts it to system+user
+ * prompts, calls the gateway, and returns a synthetic `Response` whose
+ * shape matches the old OpenRouter JSON envelope (`choices[0].message.content`)
+ * so that existing callers' `res.json()` + `extractOpenRouterText()`
+ * continue to work.
  *
- * Total sleep is bounded by AI_RETRY_BUDGET_MS (default 12000) so the
- * function returns inside the edge runtime limit. Logs reference keys
- * by index only — no key material is ever written.
+ * Retries, fallback across models, rate-limit handling, and observability
+ * are delegated to the gateway itself.
  */
 export async function fetchOpenRouterWithRetry(geminiStyleBody: any): Promise<OpenRouterFetchOutcome> {
-  const keys = openRouterKeys();
-  const models = openRouterModelChain();
-  const RETRY_BUDGET_MS = Math.max(0, parseInt(process.env.AI_RETRY_BUDGET_MS || process.env.GEMINI_RETRY_BUDGET_MS || "12000", 10) || 12000);
-  const t0 = Date.now();
+  const { gatewayChatText } = await import("../packages/orchestrator/ai-gateway.js");
 
-  const attempted: string[] = [];
-  let keysTried = 0;
-  let lastRes: Response | null = null;
-  let lastModel = models[0];
-  let lastOrBody: any = null;
+  // Convert the Gemini-style body to system+user prompts using the
+  // existing body builder so behaviour stays identical for callers.
+  const primaryModel =
+    process.env.AI_GATEWAY_PRIMARY?.trim() ||
+    process.env.OPENROUTER_MODEL?.trim() ||
+    OPENROUTER_MODEL;
+  const body = toOpenRouterBody(geminiStyleBody, primaryModel);
+  const sysMsg = body.messages?.find((m: any) => m.role === "system");
+  const usrMsg = body.messages?.find((m: any) => m.role === "user");
+  const systemPrompt = typeof sysMsg?.content === "string" ? sysMsg.content : "";
+  const userPrompt = typeof usrMsg?.content === "string"
+    ? usrMsg.content
+    : JSON.stringify(usrMsg?.content ?? "");
+  const temperature = typeof body.temperature === "number" ? body.temperature : 0.8;
+  const maxTokens = typeof body.max_tokens === "number" ? body.max_tokens : 2048;
 
-  for (const model of models) {
-    if (!attempted.includes(model)) attempted.push(model);
-    const orBody = toOpenRouterBody(geminiStyleBody, model);
-    lastOrBody = orBody;
+  const jsonMode =
+    geminiStyleBody?.generationConfig?.responseMimeType === "application/json" ||
+    body.response_format?.type === "json_object";
 
-        keysLoop: for (let ki = 0; ki < keys.length; ki++) {
-      keysTried++;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        // Per-attempt hard timeout ensures a slow or hung upstream cannot
-        // stall the loop (and the client) indefinitely.
-        const PER_ATTEMPT_TIMEOUT_MS = Math.max(2000, parseInt(process.env.OPENROUTER_ATTEMPT_TIMEOUT_MS || "15000", 10) || 15000);
-        const attemptTimer = timeoutSignal(PER_ATTEMPT_TIMEOUT_MS);
-        try {
-          lastRes = await fetch(OPENROUTER_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${keys[ki]}`,
-              // OpenRouter attribution headers (driven by env; no placeholder
-              // values are sent when the site URL is unconfigured).
-              "X-Title": process.env.OPENROUTER_SITE_TITLE || "TubeClick Pro",
-              ...(process.env.OPENROUTER_SITE_URL ? { "HTTP-Referer": process.env.OPENROUTER_SITE_URL } : {}),
-            },
-            body: JSON.stringify(orBody),
-            signal: attemptTimer.signal,
-          });
-        } catch (fetchErr) {
-          const reason = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
-          console.error(`[openrouter] upstream fetch failed (timeout/network) model=${model} key#${ki + 1}/${keys.length}: ${reason} — rotating to next key`);
-          break; // transient transport failure → next key
-        } finally {
-          attemptTimer.clear();
-        }
-        lastModel = model;
+  try {
+    const result = jsonMode
+      ? await (await import("../packages/orchestrator/ai-gateway.js")).gatewayChatJson({
+          systemPrompt,
+          userPrompt,
+          temperature,
+          maxTokens,
+        })
+      : await gatewayChatText({ systemPrompt, userPrompt, temperature, maxTokens });
 
-        const failedOver = attempted.length > 1 || keysTried > 1;
-        if (lastRes.ok) return { res: lastRes, model, attempted, failedOver };
-
-        const errText = await lastRes.clone().text().catch(() => "");
-        const info = parseProviderError(errText, lastRes.status, "openrouter");
-        console.error(`[openrouter] ${info.code} (HTTP ${lastRes.status}) model=${model} key#${ki + 1}/${keys.length}`);
-
-        if (attempt === 0 && info.code === "RATE_LIMITED") {
-          const raSec = toRetrySeconds(lastRes.headers.get("retry-after") || undefined);
-          if (raSec && raSec * 1000 <= 15000 && (Date.now() - t0 + raSec * 1000) <= RETRY_BUDGET_MS) {
-            await sleepMsOR(Math.round(raSec * 1000 * (1 + 0.1 * Math.random())));
-            continue;
-          }
-        }
-
-        if (OR_ROTATE_CODES.has(info.code)) break;
-
-        // Invalid/retired model ID is doomed for EVERY key on that model:
-        // skip ALL remaining keys and jump straight to the next model in the chain.
-        if (info.code === "MODEL_NOT_FOUND") break keysLoop;
-
-        if (attempt === 0 && info.code === "UPSTREAM_ERROR" && (Date.now() - t0 + 1500) <= RETRY_BUDGET_MS) {
-          await sleepMsOR(Math.round(1500 * (1 + 0.2 * Math.random())));
-          continue;
-        }
-
-        // Log a redacted outbound snapshot on fatal errors so Vercel logs
-        // show the payload shape the provider rejected (aids future audits).
-        console.error(`[openrouter] fatal on model=${model} key#${ki + 1} — outbound snapshot: ${JSON.stringify(orBody).slice(0, 1200)}`);
-        return { res: lastRes, model, attempted, failedOver: attempted.length > 1 || keysTried > 1 };
-      }
-    }
+    // Build a synthetic OpenAI-compatible Response so downstream callers
+    // can keep `await res.json()` + `extractOpenRouterText(...)` unchanged.
+    const payload = {
+      id: `gw-${Date.now()}`,
+      object: "chat.completion",
+      model: result.model,
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: result.text },
+          finish_reason: "stop",
+        },
+      ],
+      usage: result.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    };
+    const res = new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+    return {
+      res,
+      model: result.model,
+      attempted: result.modelsAttempted,
+      failedOver: result.failedOver,
+    };
+  } catch (err) {
+    // Surface a 502 Response with the stable error envelope consumed by
+    // providerErrorResponse(); callers then turn that into a UI-safe message.
+    const msg = err instanceof Error ? err.message : "AI gateway error";
+    const payload = { error: { message: msg, code: "UPSTREAM_ERROR" } };
+    const res = new Response(JSON.stringify(payload), {
+      status: 502,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+    return {
+      res,
+      model: primaryModel,
+      attempted: [primaryModel],
+      failedOver: false,
+    };
   }
-
-  if (!lastRes) {
-    // Every (model, key) attempt failed at the transport layer (timeout or
-    // connection refused); surface a clean error instead of dereferencing null.
-    throw new Error("OpenRouter unreachable: every key/model attempt failed at the network layer (timeout or connection refused).");
-  }
-  if (lastOrBody) {
-    console.error(`[openrouter] All keys × models exhausted — last outbound snapshot: ${JSON.stringify(lastOrBody).slice(0, 1200)}`);
-  }
-  return { res: lastRes, model: lastModel, attempted, failedOver: attempted.length > 1 || keysTried > 1 };
 }
 
 export function cleanupJson(value: string) {
