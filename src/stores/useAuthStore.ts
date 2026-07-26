@@ -1,9 +1,18 @@
 /**
  * Licensing & Auth Store
  * Manages subscription tiers and feature access for the SaaS
+ *
+ * Session persistence: this store's snapshot (user + license + dailyUsage)
+ * is persisted to a per-user NAMESPACED localStorage key so a returning
+ * authenticated user lands on a fully-hydrated, signed-in shell BEFORE
+ * Supabase finishes its async refresh-token round-trip. The snapshot is a
+ * cache, never the source of truth — SoftGateContext.syncSession always
+ * reconciles it against the real Supabase session and downgrades/strips
+ * it on mismatch.
  */
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { createPerUserStorage } from "@/lib/storage/perUserStorage";
 
 export type SubscriptionTier = "free" | "pro" | "enterprise";
 export type LicenseStatus = "active" | "expired" | "none";
@@ -199,13 +208,31 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "tubegenius-auth-store",
-      storage: createJSONStorage(() => localStorage),
+      version: 2,
+      // Per-user namespace: keyed off the Supabase-auth user id via the
+      // same `tc:last-auth-user-id` pin the Supabase client writes. The
+      // getter reads the live user when available and falls back to the
+      // pin; this guarantees the auth snapshot never rehydrates from
+      // another user's bucket even on first paint.
+      storage: createJSONStorage(() => createPerUserStorage(
+        "tubegenius-auth-store",
+        () => useAuthStore.getState().user?.id ?? null,
+      )),
       partialize: (state) => ({
         license: state.license,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
         dailyUsage: state.dailyUsage,
       }),
+      migrate: (persistedState: unknown) => {
+        // v1 -> v2: the un-namespaced v1 blob is discarded; the
+        // perUserStorage layer handles the one-time copy-in for existing
+        // users on first read.
+        if (persistedState && typeof persistedState === "object") {
+          return persistedState as Record<string, unknown>;
+        }
+        return {};
+      },
     }
   )
 );

@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { createPerUserStorage } from "@/lib/storage/perUserStorage";
+import { useAuthStore } from "./useAuthStore";
 
 type SubscriptionTier = "free" | "pro" | "enterprise";
 
@@ -36,7 +38,13 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "tubegenius-app-store",
-      storage: createJSONStorage(() => localStorage),
+      version: 2,
+      // Per-user namespace: a Pro user's tier flag must never rehydrate
+      // into a guest/other user's session.
+      storage: createJSONStorage(() => createPerUserStorage(
+        "tubegenius-app-store",
+        () => useAuthStore.getState().user?.id ?? null,
+      )),
       partialize: (state) => ({ tier: state.tier, sidebarOpen: state.sidebarOpen }),
     }
   )

@@ -16,7 +16,7 @@ import { useAppStore } from "@/stores/useAppStore";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useWorkflowStore } from "@/stores/useWorkflowStore";
-import { purgeAllUserStores } from "@/lib/storage/perUserStorage";
+import { purgeAllUserStores, pinUserId } from "@/lib/storage/perUserStorage";
 
 interface SoftGateContextValue {
   /** True until Supabase has restored (or definitively rejected) local session storage. */
@@ -33,7 +33,6 @@ type PendingAuth = { actionLabel: string; resolve: (authenticated: boolean) => v
 export function SoftGateProvider({ children }: { children: ReactNode }) {
   const setUser = useAuthStore((state) => state.setUser);
   const setLicense = useAuthStore((state) => state.setLicense);
-  const license = useAuthStore((state) => state.license);
   const setAppTier = useAppStore((state) => state.setTier);
   const [pending, setPending] = useState<PendingAuth | null>(null);
   // Never treat the initial false value as a signed-out decision. Supabase
@@ -75,6 +74,10 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
     // the guest bucket so they cannot re-hydrate.
     purgeAllUserStores(lastUserIdRef.current);
     if (userId) purgeAllUserStores(null); // also clear guest bucket on sign-in
+    // Repin the active user id so every per-user storage adapter (incl.
+    // the Supabase auth-storage adapter and the auth-store snapshot)
+    // resolves to the new namespace BEFORE any rehydration fires.
+    pinUserId(userId);
     lastUserIdRef.current = userId;
   }, []);
 
@@ -141,7 +144,7 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       // Authentication remains valid even if entitlement sync is temporarily unavailable.
       // Do NOT downgrade here on network failure — but also do NOT promote.
     }
-  }, [finishPending, license.expiresAt, license.tier, setAppTier, setLicense, setUser]);
+  }, [finishPending, setAppTier, setLicense, setUser]);
 
   useEffect(() => {
     let active = true;

@@ -5,17 +5,20 @@
  * to a fixed key per origin. When User A signs out of a shared browser and
  * User B signs in on the same device (or when the Supabase session is
  * restored slowly on first paint), the persisted blobs for profile,
- * generated content, and workflow state from the PREVIOUS user hydrate
- * into the new user's session. To the new user it looks like another
- * person's YouTube channel / scripts / history are "theirs".
+ * generated content, workflow state, license, AND the mirrored auth/user
+ * snapshot from the PREVIOUS user hydrate into the new user's session —
+ * causing flash-of-wrong-account, cross-user data leaks, and "login keeps
+ * flipping back" symptoms.
  *
  * This adapter wraps localStorage under a NAMESPACED key
- *   `<baseKey>:u:<userId>`
- * and exposes a `purge()` helper that wipes both the namespaced key and
- * the legacy un-namespaced key for that store. When no userId is known
- * (pre-auth), the store reads/writes to `<baseKey>:guest` which is
- * explicitly wiped on any successful sign-in so guest demo data never
- * bleeds into an authenticated session.
+ *   `tc:u:<baseKey>:u:<userId>` (or `tc:u:<baseKey>:guest` pre-auth).
+ *
+ * The active userId is resolved from either (a) an injected getter (used
+ * by stores that can ask useAuthStore for current user), or (b) the
+ * durable `tc:last-auth-user-id` pin that the Supabase auth client writes
+ * the instant it persists a session. This means the namespace is
+ * deterministic BEFORE React mounts — no window where the wrong user's
+ * blob could hydrate.
  *
  * Server data (Supabase) is already isolated by RLS + SECURITY DEFINER
  * RPCs using auth.uid(); this fixes the CLIENT-SIDE cross-user leak.
@@ -24,13 +27,39 @@ import { createJSONStorage, type StateStorage } from "zustand/middleware";
 
 const NAMESPACE_PREFIX = "tc:u:";
 const GUEST_SUFFIX = ":guest";
+/** Durable pin written by the Supabase auth client the moment a session is persisted. */
+export const AUTH_USER_PIN_KEY = "tc:last-auth-user-id";
 const LEGACY_KEYS = new Set([
   "tubegenius-auth-store",
   "tubegenius-app-store",
   "tubegenius-clone-crush-store",
   "tubegenius-content-store-v2",
   "tubeclick-creator-workflow-v1",
+  "tubegenius-stats",
+  "tubegenius-content",
 ]);
+
+/**
+ * Resolve the currently-pinned user id synchronously from localStorage.
+ * Returns null when no user is pinned (pre-auth / signed-out) — callers
+ * map that to the `:guest` bucket.
+ */
+export function getPinnedUserId(): string | null {
+  try {
+    const uid = localStorage.getItem(AUTH_USER_PIN_KEY);
+    return uid && uid.trim().length > 0 ? uid : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Pin a userId as the active authenticated storage namespace. */
+export function pinUserId(userId: string | null): void {
+  try {
+    if (userId) localStorage.setItem(AUTH_USER_PIN_KEY, userId);
+    else localStorage.removeItem(AUTH_USER_PIN_KEY);
+  } catch {}
+}
 
 function storageKey(baseKey: string, userId: string | null): string {
   if (!userId) return `${NAMESPACE_PREFIX}${baseKey}${GUEST_SUFFIX}`;
@@ -47,12 +76,27 @@ function removeRaw(key: string): void {
   try { localStorage.removeItem(key); } catch {}
 }
 
-export function createPerUserStorage(baseKey: string, getUserId: () => string | null): StateStorage {
+export function createPerUserStorage(baseKey: string, getUserId?: () => string | null): StateStorage {
   // A tiny JSONStorage that proxies getItem/setItem/removeItem to a
   // userId-namespaced key. The zustand persist middleware will call
   // these methods on every read/write, so the namespace is recomputed
   // against the CURRENT session every time — no stale closures.
-  const getKey = () => storageKey(baseKey, getUserId());
+  //
+  // Resolution order: explicit getter (useAuthStore live snapshot) →
+  // durable pin written by Supabase auth client → guest. This keeps the
+  // namespace deterministic even before React mounts / the auth store
+  // itself is rehydrating (which is the chicken-and-egg window where
+  // the old flat-key design leaked user B's data onto user A).
+  const resolveUserId = (): string | null => {
+    if (getUserId) {
+      try {
+        const uid = getUserId();
+        if (uid) return uid;
+      } catch {}
+    }
+    return getPinnedUserId();
+  };
+  const getKey = () => storageKey(baseKey, resolveUserId());
   return {
     getItem: (name) => {
       // `name` is the persist `name` field; we ignore it and use our
@@ -66,7 +110,7 @@ export function createPerUserStorage(baseKey: string, getUserId: () => string | 
       // existing users don't lose their own saved content.
       if (!raw && LEGACY_KEYS.has(baseKey)) {
         const legacy = readRaw(baseKey);
-        if (legacy && getUserId()) {
+        if (legacy && resolveUserId()) {
           writeRaw(key, legacy);
           // Best-effort: leave legacy in place for one session so the
           // migration is non-destructive; a future sign-out clears it.

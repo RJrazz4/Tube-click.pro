@@ -15,7 +15,7 @@ import { getCanonicalRoot } from "@/lib/domain/canonical";
 const getCurrentRoot = () => {
   try { return window.location.origin; } catch { return getCanonicalRoot(); }
 };
-import { purgeAllUserStores } from "@/lib/storage/perUserStorage";
+import { purgeAllUserStores, pinUserId } from "@/lib/storage/perUserStorage";
 
 export function TopBar() {
   const [ghostOpen, setGhostOpen] = useState(false);
@@ -29,7 +29,10 @@ export function TopBar() {
     const userId = user?.id ?? null;
     purgeAllUserStores(userId);
     purgeAllUserStores(null);
-    try { localStorage.removeItem("tc:last-auth-user-id"); } catch {}
+    // Unpin the user id so all per-user storage adapters immediately fall
+    // back to the `:guest` namespace — closes the race where a React
+    // effect rehydrates from the signed-in namespace after purge.
+    pinUserId(null);
     const { error } = await supabase.auth.signOut({ scope: "local" });
     if (error) toast.error("Ghost logout interference - retry via MUM-01");
     else toast.success("Ghost session terminated • MUM-01 • Quantum cache purged");
