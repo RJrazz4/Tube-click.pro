@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
   Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, Award, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio,
@@ -73,8 +73,7 @@ export default function CloneCrush() {
   const [nicheInput, setNicheInput] = useState("");
   const [customDescription, setCustomDescription] = useState("");
   const [selectedVideo, setSelectedVideo] = useState<CompetitorVideo | null>(null);
-  const isPro = license.tier === "pro";
-  const [selectedTier, setSelectedVideoTier] = useState<"free" | "premium">(isPro ? "premium" : "free");
+  const [selectedTier, setSelectedVideoTier] = useState<"free" | "premium">(license.tier === "pro" ? "premium" : "free");
   const [copiedText, setCopiedText] = useState(false);
   const [activeTab, setActiveTab] = useState("script");
   const [logSteps, setLogSteps] = useState<{ label: string; status: "pending" | "processing" | "success" | "rerouting" | "error"; meta?: string }[]>([]);
@@ -89,8 +88,35 @@ export default function CloneCrush() {
   const cloneCrushMutation = useCloneCrushMutation();
   const { quota: dailyQuota, isBlocked: dailyLimitBlocked, refresh: refreshQuota } = useCloneCrushQuota();
 
+  // Execution guard: prevents double-fire when React double-invokes in
+  // StrictMode dev AND prevents bypass via stale-closure reads of license.
+  // We read tier straight from the store at click-time so any async
+  // hydration race (Supabase session restore, expired-pro downgrade) is
+  // evaluated on the CURRENT snapshot, not the one captured when the
+  // handler was created.
+  const isExecutingRef = useRef(false);
+
+  // Paywall gate — single source of truth. Called at click-time AND at the
+  // top of performCloneAndCrush. Returns true if user was bounced.
+  const enforcePremiumPaywall = useCallback((): boolean => {
+    const liveTier = useAuthStore.getState().license.tier;
+    if (liveTier === "pro") return false;
+    if (selectedTier === "premium" || (selectedVideo && selectedVideo.isLocked)) {
+      toast.error("99% Glitch reserved for Pro • Rerouting to Private Tracker", { id: "pro-upsell-99glitch" });
+      navigate("/rewards?upsell=clonecrush");
+      return true;
+    }
+    return false;
+  }, [selectedTier, selectedVideo, navigate]);
+
+  // Synchronize selectedTier with live license (e.g. on session restore or
+  // pro expiry), but NEVER upgrade a free user's selection to premium.
   useEffect(() => {
-    if (license.tier === "free") setSelectedVideoTier("free");
+    if (license.tier === "pro") {
+      setSelectedVideoTier((t) => t === "premium" ? "premium" : t);
+    } else {
+      setSelectedVideoTier("free");
+    }
   }, [license.tier]);
 
   useEffect(() => {
@@ -200,14 +226,21 @@ export default function CloneCrush() {
   const performCloneAndCrush = async () => {
     if (!selectedVideo) { toast.error("Select a competitor video from matrix"); return; }
 
-    // HARD PREFLIGHT — free users cannot run 99% Glitch. Bounce instantly,
-    // before any state mutation (setIsRewriting / setLogSteps) so the fake
-    // console never renders. Checks both the persisted tier field AND any
-    // in-flight selection edge-case where selectedTier is "premium" for a
-    // free user.
-    const userIsPro = license.tier === "pro";
+    // Double-click / StrictMode guard.
+    if (isExecutingRef.current) return;
+    isExecutingRef.current = true;
+
+    // Read tier DIRECTLY from the store snapshot (not from a stale closure).
+    const liveTier = useAuthStore.getState().license.tier;
+    const userIsPro = liveTier === "pro";
+
+    // HARD PREFLIGHT — premium paywall. Runs from inside performCloneAndCrush
+    // as well as from the click handler so even if runGuarded() invokes us
+    // after a microtask / auth-popup resolution, we re-check.
     if (!userIsPro && (selectedTier === "premium" || selectedVideo.isLocked)) {
-      routeFreeToProUpsell();
+      isExecutingRef.current = false;
+      toast.error("99% Glitch reserved for Pro • Rerouting to Private Tracker", { id: "pro-upsell-99glitch" });
+      navigate("/rewards?upsell=clonecrush");
       return;
     }
 
@@ -225,6 +258,7 @@ export default function CloneCrush() {
       try { await refreshQuota(true); } catch { /* server enforcement still applies */ }
       const q = useQuotaStore.getState();
       if (!q.allowed && q.remainingSeconds > 0) {
+        isExecutingRef.current = false;
         setDailyLimitActive(true);
         toast.error("Daily free limit reached — unlock Pro for unlimited Chain-Loops", { id: "daily-limit" });
         return;
@@ -329,7 +363,10 @@ export default function CloneCrush() {
       );
       setLogSteps(recovered);
       console.warn("[clone-crush] Chain-Loop transport error:", err instanceof Error ? err.message : String(err));
-    } finally { setIsRewriting(false); }
+    } finally {
+      setIsRewriting(false);
+      isExecutingRef.current = false;
+    }
   };
 
   const handleSendToVoiceover = () => { if (!activeRewrite) return; startWorkflowHandoff("voice"); toast.success("Script loaded into Voiceover Studio!"); navigate("/voice"); };
@@ -339,31 +376,19 @@ export default function CloneCrush() {
     const txt = `TITLE: ${activeRewrite.rewrittenTitle}\nHOOK: ${activeRewrite.glitchHook}\nSCRIPT:\n${activeRewrite.fullScript}\n\nTHUMBNAIL PROMPT: ${activeRewrite.thumbnailPrompt}\nSEO TAGS: ${(activeRewrite.seoTags || []).join(", ")}\nEDITING GUIDE: ${activeRewrite.editingGuide}`;
     try { await navigator.clipboard.writeText(txt); toast.success("Full Chain-Loop package copied to clipboard"); } catch { toast.error("Copy failed"); }
   };
-  // SYNCHRONOUS EXECUTE-BUTTON INTERCEPT — before any guarded wrapper runs
-  // (which could itself trigger a soft gate delay / animation), check the
-  // 99% Glitch paywall and stale-wipe synchronously. This is THE single
-  // entry point for the big blue button.
+  // THE SINGLE ENTRY POINT for the big blue Execute button. Runs the paywall
+  // gate synchronously against the CURRENT store snapshot (no stale closure),
+  // blocks double-clicks, and only then hands off to runGuarded().
   const handleCloneAndCrush = () => {
     if (!selectedVideo) { toast.error("Select a competitor video from matrix"); return; }
-    // 99% Glitch paywall: instant redirect, never fires runGuarded/performClone.
-    if (!isPro && (selectedTier === "premium" || selectedVideo.isLocked)) {
-      routeFreeToProUpsell();
-      return;
-    }
+    if (isExecutingRef.current) return;
+    if (enforcePremiumPaywall()) return;
     return runGuarded("unlock next Clone & Crush result", performCloneAndCrush);
   };
   const handleCopyThumbnailPrompt = async () => { if (!activeRewrite) return; try { await navigator.clipboard.writeText(activeRewrite.thumbnailPrompt || "Cinematic thumbnail"); toast.success("Thumbnail prompt copied!"); } catch { toast.error("Copy failed"); } };
   const handleCopySeoTags = async () => { if (!activeRewrite) return; try { await navigator.clipboard.writeText((activeRewrite.seoTags||[]).join(", ")); toast.success("SEO tags copied!"); } catch { toast.error("Copy failed"); } };
   const handleCopyScript = async () => { if (!activeRewrite) return; const txt = `TITLE: ${activeRewrite.rewrittenTitle}\nHOOK: ${activeRewrite.glitchHook}\nSCRIPT: ${activeRewrite.fullScript}`; try { await navigator.clipboard.writeText(txt); setCopiedText(true); toast.success("Script copied!"); setTimeout(()=>setCopiedText(false),2000); } catch { toast.error("Copy failed"); } };
   const openReferralRewards = () => navigate("/rewards?upsell=clonecrush");
-
-  // Hard preflight: free users may never run the 99% Glitch. Any click path
-  // that tries to select premium tier on a free account must bounce the user
-  // directly to the Referral Rewards upsell — no fake console, no spinner.
-  const routeFreeToProUpsell = () => {
-    toast.error("99% Glitch reserved for Pro • Rerouting to Private Tracker", { id: "pro-upsell-99glitch" });
-    openReferralRewards();
-  };
 
   return (
     <div className="relative space-y-6 md:space-y-8 animate-fade-in pb-12">
@@ -521,18 +546,33 @@ export default function CloneCrush() {
                     <div className="flex items-center gap-2 mb-1"><input type="radio" checked={selectedTier==="free"} onChange={()=>{}} className="accent-primary" /><p className="text-sm font-bold text-foreground">60% Loophole (Vibe-Extract)</p></div>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">Extracts core points, writes entirely new narrative flow, fresh pacing. Ghost cached.</p>
                   </div>
-                  <div onClick={()=>{ if(license.tier==="free"){ routeFreeToProUpsell(); return;} setSelectedVideoTier("premium"); }} className={`rounded-xl border p-4 cursor-pointer transition-all ${license.tier==="free"?"opacity-60":""} ${selectedTier==="premium"?"border-primary bg-primary/5 ring-1 ring-primary/30":"border-border/60 hover:border-border bg-secondary/10"}`}>
+                  <div onClick={()=>{
+                    // Free users clicking the 99% Glitch tier card → instant upsell.
+                    const liveTier = useAuthStore.getState().license.tier;
+                    if (liveTier !== "pro") { enforcePremiumPaywall(); return; }
+                    setSelectedVideoTier("premium");
+                  }} className={`rounded-xl border p-4 cursor-pointer transition-all ${license.tier==="free"?"opacity-60":""} ${selectedTier==="premium"?"border-primary bg-primary/5 ring-1 ring-primary/30":"border-border/60 hover:border-border bg-secondary/10"}`}>
                     <div className="flex items-center justify-between gap-2 mb-1"><div className="flex items-center gap-2"><input type="radio" checked={selectedTier==="premium"} onChange={()=>{}} disabled={license.tier==="free"} className="accent-primary" /><p className="text-sm font-bold text-foreground">99% Glitch (Maximum Aggression)</p></div>{license.tier==="free" && <Lock className="w-3.5 h-3.5 text-primary" />}</div>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">Extreme Curiosity Glitches, time-jumps, hidden secrets. Reverse-engineers thumbnails ruthlessly.</p>
                   </div>
                 </div>
                 <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex gap-3 items-start"><ShieldAlert className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" /><div><p className="text-xs font-bold text-yellow-500">Stealth Disguise Protocol Active • Ghost Node MUM-01</p><p className="text-[10px] text-muted-foreground leading-relaxed">All outputs deploy Anti-Clone Illusion: analogies discarded, case studies swapped, vocabularies updated. Never cloned.</p></div></div>
                 <div className="relative w-full">
-                  <Button onClick={handleCloneAndCrush} disabled={isRewriting || (license.tier!=="pro" && dailyLimitActive)} className="w-full h-12 bg-gradient-to-r from-primary to-accent text-primary-foreground font-display font-bold uppercase tracking-wider text-sm flex gap-2">
-                    {isRewriting ? <><Loader2 className="w-4 h-4 animate-spin" />Executing Chain-Loop via Ghost Mesh...</> : license.tier!=="pro" && dailyLimitActive ? <><Lock className="w-4 h-4" />Daily Limit Reached — Unlock Premium</> : <><Zap className="w-4 h-4 fill-primary-foreground" />Execute Chain-Loop (1 Click = 5 Assets) • MUM-01</>}
-                  </Button>
-                  {license.tier!=="pro" && dailyLimitActive && <div className="absolute inset-0 pointer-events-none" aria-hidden="true" />}
-                  {license.tier!=="pro" && dailyLimitActive && <div className="mt-3"><DailyLimitOverlay variant="hero" /></div>}
+                  {(() => {
+                    const freeBlocked = license.tier !== "pro" && (dailyLimitActive || selectedTier === "premium");
+                    return (
+                      <>
+                        <Button onClick={handleCloneAndCrush} disabled={isRewriting || freeBlocked} className="w-full h-12 bg-gradient-to-r from-primary to-accent text-primary-foreground font-display font-bold uppercase tracking-wider text-sm flex gap-2">
+                          {isRewriting ? <><Loader2 className="w-4 h-4 animate-spin" />Executing Chain-Loop via Ghost Mesh...</>
+                            : license.tier!=="pro" && dailyLimitActive ? <><Lock className="w-4 h-4" />Daily Limit Reached — Unlock Premium</>
+                            : license.tier!=="pro" && selectedTier==="premium" ? <><Lock className="w-4 h-4" />99% Glitch — Unlock Pro</>
+                            : <><Zap className="w-4 h-4 fill-primary-foreground" />Execute Chain-Loop (1 Click = 5 Assets) • MUM-01</>}
+                        </Button>
+                        {license.tier!=="pro" && dailyLimitActive && <div className="absolute inset-0 pointer-events-none" aria-hidden="true" />}
+                        {license.tier!=="pro" && dailyLimitActive && <div className="mt-3"><DailyLimitOverlay variant="hero" /></div>}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {logSteps.length>0 && (
