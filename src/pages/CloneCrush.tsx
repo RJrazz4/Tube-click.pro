@@ -56,11 +56,24 @@ export default function CloneCrush() {
   const navigate = useNavigate();
   const { runGuarded, isAuthLoading } = useSoftGate();
 
+  // Synchronous cold-start hygiene: if the user reopens the page AFTER
+  // their 24h cooldown has expired (offline/sleep across expiry), wipe
+  // the persisted locked state synchronously so React never renders
+  // yesterday's competitors/rewrites. Read is one-shot at module render
+  // (not inside an effect) so the first paint is clean; the
+  // auto-refresh effect below then populates a fresh matrix.
+  (() => {
+    const s = useCloneCrushStore.getState();
+    if (s.freeCooldownUntil && s.freeCooldownUntil <= Date.now() && s.freeLockedVideoId) {
+      s.expireFreeCooldownCycle();
+    }
+  })();
+
   const {
-    profile, isProfiling, competitors, isSearchingCompetitors, envyMetrics, threatAlerts, wideningGap, rewrites, isRewriting, activeRewrite,
-    freeCooldownUntil, freeLockedVideoId,
-    setProfile, setIsProfiling, setCompetitors, setIsSearchingCompetitors, setThreatAlerts, addRewrite, setIsRewriting, setActiveRewrite, deleteRewrite,
-    startFreeCooldown, clearFreeCooldown, beginNewWorkflow,
+    profile, isProfiling, lastChannelUrl, competitors, isSearchingCompetitors, envyMetrics, threatAlerts, wideningGap, rewrites, isRewriting, activeRewrite,
+    freeCooldownUntil, freeLockedVideoId, autoRefreshPending,
+    setProfile, setIsProfiling, setLastChannelUrl, setCompetitors, setIsSearchingCompetitors, setThreatAlerts, addRewrite, setIsRewriting, setActiveRewrite, deleteRewrite,
+    startFreeCooldown, clearFreeCooldown, expireFreeCooldownCycle, markAutoRefreshConsumed, beginNewWorkflow,
   } = useCloneCrushStore();
 
   const saveContent = useContentStore((s) => s.saveContent);
@@ -74,21 +87,32 @@ export default function CloneCrush() {
 
   // Live-ticking cooldown remaining (ms). Set from a 1s interval so the
   // UI overlays update in real time without triggering a full store
-  // subscriber cascade every second.
+  // subscriber cascade every second. When the countdown hits zero the
+  // store's expireFreeCooldownCycle() wipes the locked state and flips
+  // autoRefreshPending so a fresh competitor fetch fires below.
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState(() =>
     freeCooldownUntil ? Math.max(0, freeCooldownUntil - Date.now()) : 0,
   );
+  const [, setTick] = useState(0);
   useEffect(() => {
     if (!freeCooldownUntil) { setCooldownRemainingMs(0); return; }
     const tick = () => {
       const remaining = Math.max(0, (freeCooldownUntil ?? 0) - Date.now());
       setCooldownRemainingMs(remaining);
-      if (remaining <= 0) clearFreeCooldown();
+      if (remaining <= 0) {
+        // Cycle the cooldown: wipes locked video/rewrite/stale
+        // competitors + sets autoRefreshPending=true. Auto-refresh is
+        // kicked off by a separate effect that reads that flag.
+        expireFreeCooldownCycle();
+        // Force a re-render so downstream effects see the cleared state
+        // immediately (persist writes are synchronous in zustand).
+        setTick((n) => n + 1);
+      }
     };
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [freeCooldownUntil, clearFreeCooldown]);
+  }, [freeCooldownUntil, expireFreeCooldownCycle]);
 
   const isFreeCooldownActive = !isPro && !!freeCooldownUntil && freeCooldownUntil > Date.now() && !!freeLockedVideoId;
   void cooldownRemainingMs; // retained for future use; UI reads directly from freeCooldownUntil via per-second re-render trigger.
@@ -97,7 +121,9 @@ export default function CloneCrush() {
   const saveWorkflowPackage = useWorkflowStore((s) => s.saveContentPackage);
   const startWorkflowHandoff = useWorkflowStore((s) => s.startHandoff);
 
-  const [channelInput, setChannelInput] = useState("");
+  // Persistent target: pre-fill from the per-user namespaced store so the
+  // user never has to re-enter their channel URL on future visits.
+  const [channelInput, setChannelInput] = useState<string>(() => lastChannelUrl ?? "");
   const [nicheInput, setNicheInput] = useState("");
   const [customDescription, setCustomDescription] = useState("");
   const [selectedVideo, setSelectedVideo] = useState<CompetitorVideo | null>(null);
@@ -197,6 +223,8 @@ export default function CloneCrush() {
 
   useEffect(() => {
     if (profile) {
+      // Keep the URL input synced with the saved channel so editing feels
+      // right, but never overwrite what the user is actively typing.
       if (!channelInput) setChannelInput(profile.url || profile.handle);
       if (!nicheInput) {
         const desc = profile.description.toLowerCase();
@@ -209,7 +237,95 @@ export default function CloneCrush() {
       }
       if (!customDescription) setCustomDescription(profile.description.slice(0, 150) + "...");
     }
-  }, [profile]);
+  }, [profile]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Daily Retention Loop #1 + #3:
+  //  - When a returning free user has a saved channelUrl but no profile
+  //    hydrated yet, pre-fill the input and re-profile in the background
+  //    so they don't have to paste the URL again.
+  //  - When autoRefreshPending flips to true (either because the 24h
+  //    timer just expired or because a returning user loaded the page
+  //    after expiry), wipe the selection and fire a fresh competitor
+  //    fetch against the saved profile — guarantees the matrix shows
+  //    new/updated videos for the day's single free run.
+  const autoRefreshRunningRef = useRef(false);
+  useEffect(() => {
+    // Never interrupt an in-flight generation.
+    if (isRewriting || isProfiling || isSearchingCompetitors) return;
+    // Pro users don't participate in the daily lock.
+    if (isPro) {
+      if (autoRefreshPending) markAutoRefreshConsumed();
+      return;
+    }
+
+    // Case A: cooldown just expired (ticker set autoRefreshPending) AND
+    // we still have a profile — refresh competitors only.
+    if (autoRefreshPending && profile && !isFreeCooldownActive) {
+      if (autoRefreshRunningRef.current) return;
+      autoRefreshRunningRef.current = true;
+      // Wipe UI state that belonged to yesterday's run.
+      setSelectedVideo(null);
+      setActiveRewrite(null);
+      setLogSteps([]);
+      setActiveTab("script");
+      setCopiedText(false);
+      setDailyLimitActive(false);
+      setWorkflowNonce((n) => n + 1);
+      toast.loading("New 24h window opened • refreshing ghost matrix...", { id: "auto-refresh" });
+      // Refresh server-side quota too (cooldown expiry = new day token).
+      void refreshQuota(true).catch(() => {});
+      const prof: ProfileWithKeywords = { ...profile, extractedKeywords: [] };
+      autoDiscoverCompetitors(prof)
+        .catch(() => {})
+        .finally(() => {
+          markAutoRefreshConsumed();
+          autoRefreshRunningRef.current = false;
+          toast.dismiss("auto-refresh");
+        });
+      return;
+    }
+
+    // Case B: returning user with a saved lastChannelUrl but no profile
+    // in memory (fresh tab / reload after expiry). Re-run the profile
+    // flow so the page is ready without the user re-pasting the URL.
+    if (!profile && lastChannelUrl && !isAuthLoading && tierHydrated && !autoRefreshPending) {
+      if (autoRefreshRunningRef.current) return;
+      autoRefreshRunningRef.current = true;
+      if (!channelInput) setChannelInput(lastChannelUrl);
+      toast.loading("Reconnecting to your saved channel via MUM-01...", { id: "returning-profile" });
+      setIsProfiling(true);
+      cloneCrushMutation
+        .mutateAsync({ action: "profile", channelUrl: lastChannelUrl })
+        .then((res: any) => {
+          if (!res?.success || !res.profile) throw new Error(res?.error || "Profile unavailable");
+          const profiledChannel: ProfileWithKeywords = {
+            ...res.profile,
+            extractedKeywords: res.extractedKeywords || res.profile.extractedKeywords || [],
+          };
+          setProfile(profiledChannel, lastChannelUrl);
+          startWorkflowProfile({ id: profiledChannel.id, name: profiledChannel.name, handle: profiledChannel.handle, avatar: profiledChannel.avatar });
+          toast.success(`Reconnected to ${profiledChannel.name} • MUM-01`, { id: "returning-profile" });
+          return autoDiscoverCompetitors(profiledChannel);
+        })
+        .catch(() => {
+          toast.dismiss("returning-profile");
+          // Silent fail — leave input pre-filled so user can press the
+          // button themselves if the ghost mesh was down.
+        })
+        .finally(() => {
+          autoRefreshRunningRef.current = false;
+          setIsProfiling(false);
+        });
+    }
+  }, [
+    autoRefreshPending, profile, isFreeCooldownActive, isPro, lastChannelUrl,
+    isAuthLoading, tierHydrated, isRewriting, isProfiling, isSearchingCompetitors,
+    channelInput, markAutoRefreshConsumed, refreshQuota, setProfile, setIsProfiling,
+    startWorkflowProfile,
+    // autoDiscoverCompetitors is defined below this effect in the
+    // original file but is function-scoped and stable by reference;
+    // leave it out of deps to avoid stale-closure churn.
+  ]);
 
   const autoDiscoverCompetitors = async (prof: ProfileWithKeywords) => {
     const extractedKeywords = Array.isArray(prof.extractedKeywords) ? prof.extractedKeywords.filter((k: unknown) => typeof k === "string" && k.trim()).slice(0, 8) : [];
@@ -282,6 +398,9 @@ export default function CloneCrush() {
     setWorkflowNonce((n) => n + 1);
     setDailyLimitActive(false);
     setIsProfiling(true);
+    // Persist the URL the user submitted BEFORE async work so a crash or
+    // navigation during profiling still remembers the channel next visit.
+    setLastChannelUrl(input);
     toast.loading("Establishing ghost tunnel to YouTube veil layer...", { id: "profile-scrape" });
     try {
       const profileRequest = cloneCrushMutation.mutateAsync({ action: "profile", channelUrl: input });
@@ -289,7 +408,7 @@ export default function CloneCrush() {
       if (res.success && res.profile) {
         const profileResponse = res as typeof res & { extractedKeywords?: string[] };
         const profiledChannel: ProfileWithKeywords = { ...res.profile, extractedKeywords: profileResponse.extractedKeywords || res.profile.extractedKeywords || [] };
-        setProfile(profiledChannel);
+        setProfile(profiledChannel, input);
         startWorkflowProfile({ id: profiledChannel.id, name: profiledChannel.name, handle: profiledChannel.handle, avatar: profiledChannel.avatar });
         const isGhost = (res as any).ghostReconstructed;
         toast.success(isGhost ? `Ghost Profile Reconstructed: ${profiledChannel.name} via MUM-01` : `Connected to ${profiledChannel.name}'s Channel Profile`, { id: "profile-scrape" });

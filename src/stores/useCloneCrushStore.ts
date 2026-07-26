@@ -124,6 +124,9 @@ interface CloneCrushState {
   // Channel Profile
   profile: ProfiledChannel | null;
   isProfiling: boolean;
+  // The last channel URL/handle the user submitted. Persisted per-user so
+  // the input is pre-filled on return visits (Daily Retention Loop #1).
+  lastChannelUrl: string | null;
   
   // Competitors Matrix
   competitors: CompetitorVideo[];
@@ -152,10 +155,14 @@ interface CloneCrushState {
   // Pro users skip the cooldown entirely; becoming Pro clears it.
   freeCooldownUntil: number | null;   // epoch ms at which cooldown ends
   freeLockedVideoId: string | null;   // videoId whose result is locked on screen
+  // Flag set by expireFreeCooldownCycle() to tell the page it should
+  // immediately run a fresh competitor fetch against the saved profile.
+  autoRefreshPending: boolean;
 
   // Actions
-  setProfile: (profile: ProfiledChannel | null) => void;
+  setProfile: (profile: ProfiledChannel | null, sourceUrl?: string | null) => void;
   setIsProfiling: (isProfiling: boolean) => void;
+  setLastChannelUrl: (url: string | null) => void;
   
   setCompetitors: (competitors: CompetitorVideo[], envyMetrics?: EnvyMetrics | null) => void;
   setIsSearchingCompetitors: (isSearchingCompetitors: boolean) => void;
@@ -170,6 +177,13 @@ interface CloneCrushState {
   startFreeCooldown: (videoId: string, durationMs?: number) => void;
   clearFreeCooldown: () => void;
   isInFreeCooldown: () => boolean;
+  // Called the moment the 24h window hits zero. Wipes the locked script,
+  // the day's competitors, and sets autoRefreshPending=true so the page
+  // can kick off a fresh competitor fetch against the saved profile.
+  // Does NOT clear profile or lastChannelUrl — those stay pinned so the
+  // retention loop is seamless.
+  expireFreeCooldownCycle: () => void;
+  markAutoRefreshConsumed: () => void;
   
   // Reset all Clone & Crush State
   clearAll: () => void;
@@ -187,6 +201,7 @@ export const useCloneCrushStore = create<CloneCrushState>()(
     (set, get) => ({
       profile: null,
       isProfiling: false,
+      lastChannelUrl: null,
       competitors: [],
       isSearchingCompetitors: false,
       competitorsFetchedAt: null,
@@ -198,9 +213,19 @@ export const useCloneCrushStore = create<CloneCrushState>()(
       activeRewrite: null,
       freeCooldownUntil: null,
       freeLockedVideoId: null,
+      autoRefreshPending: false,
 
-      setProfile: (profile) => set({ profile }),
+      setProfile: (profile, sourceUrl = null) => set((state) => ({
+        profile,
+        // Remember the channel URL the user submitted so future visits
+        // can pre-fill the input and auto-refresh competitors after the
+        // 24h cooldown expires. Persist under the per-user namespace.
+        lastChannelUrl: sourceUrl ?? state.lastChannelUrl,
+      })),
       setIsProfiling: (isProfiling) => set({ isProfiling }),
+      setLastChannelUrl: (url) => set({
+        lastChannelUrl: url && url.trim().length > 0 ? url.trim() : null,
+      }),
 
       setCompetitors: (competitors, envyMetrics = null) => set({
         competitors: viralOnly(competitors),
@@ -244,17 +269,42 @@ export const useCloneCrushStore = create<CloneCrushState>()(
       startFreeCooldown: (videoId, durationMs = FREE_COOLDOWN_MS) => set({
         freeCooldownUntil: Date.now() + durationMs,
         freeLockedVideoId: videoId,
+        autoRefreshPending: false,
       }),
 
       clearFreeCooldown: () => set({
         freeCooldownUntil: null,
         freeLockedVideoId: null,
+        autoRefreshPending: false,
       }),
 
       isInFreeCooldown: () => {
         const s = get();
         return !!(s.freeCooldownUntil && s.freeCooldownUntil > Date.now() && s.freeLockedVideoId);
       },
+
+      expireFreeCooldownCycle: () => set((state) => {
+        // Only expire once — guard against double-fires from the ticker.
+        if (!state.freeCooldownUntil || state.freeCooldownUntil > Date.now()) return state;
+        return {
+          // Keep profile + lastChannelUrl. Wipe the day's generated
+          // script, locked video, stale competitors/threats/widening-gap
+          // so the UI is clean before the auto-refresh fires.
+          freeCooldownUntil: null,
+          freeLockedVideoId: null,
+          activeRewrite: null,
+          rewrites: [],
+          competitors: [],
+          competitorsFetchedAt: null,
+          threatAlerts: [],
+          wideningGap: null,
+          // Signal to the page that a fresh fetch must run against the
+          // saved profile.
+          autoRefreshPending: true,
+        };
+      }),
+
+      markAutoRefreshConsumed: () => set({ autoRefreshPending: false }),
 
       beginNewWorkflow: () => {
         // A free-tier user mid-cooldown MUST NOT be allowed to wipe the
@@ -276,12 +326,14 @@ export const useCloneCrushStore = create<CloneCrushState>()(
           rewrites: [],
           isRewriting: false,
           activeRewrite: null,
+          autoRefreshPending: false,
         });
       },
 
       clearAll: () => set({
         profile: null,
         isProfiling: false,
+        lastChannelUrl: null,
         competitors: [],
         isSearchingCompetitors: false,
         competitorsFetchedAt: null,
@@ -293,17 +345,18 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         activeRewrite: null,
         freeCooldownUntil: null,
         freeLockedVideoId: null,
+        autoRefreshPending: false,
       }),
     }),
     {
       name: "tubegenius-clone-crush-store",
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => createPerUserStorage(
         "tubegenius-clone-crush-store",
         () => useAuthStore.getState().user?.id ?? null,
       )),
       migrate: (persistedState: any, version) => {
-        // v3 -> v4: add freeCooldownUntil/freeLockedVideoId defaults.
+        // v4 -> v5: add lastChannelUrl + autoRefreshPending defaults.
         void version;
         const base = persistedState && typeof persistedState === "object" ? persistedState : {};
         return {
@@ -311,10 +364,13 @@ export const useCloneCrushStore = create<CloneCrushState>()(
           competitors: Array.isArray(base.competitors) ? viralOnly(base.competitors) : [],
           freeCooldownUntil: typeof base.freeCooldownUntil === "number" ? base.freeCooldownUntil : null,
           freeLockedVideoId: typeof base.freeLockedVideoId === "string" ? base.freeLockedVideoId : null,
+          lastChannelUrl: typeof base.lastChannelUrl === "string" ? base.lastChannelUrl : null,
+          autoRefreshPending: false,
         };
       },
       partialize: (state) => ({
         profile: state.profile,
+        lastChannelUrl: state.lastChannelUrl,
         competitors: viralOnly(state.competitors),
         competitorsFetchedAt: state.competitorsFetchedAt,
         rewrites: state.rewrites,
