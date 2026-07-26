@@ -26,6 +26,7 @@ import { useTranscriptExtraction, useCloneCrushMutation } from "@/hooks/useSecur
 import { useSoftGate } from "@/contexts/SoftGateContext";
 import { useWorkflowStore } from "@/stores/useWorkflowStore";
 import { DailyLimitOverlay } from "@/components/showdown/DailyLimitOverlay";
+import { FreeCooldownOverlay } from "@/components/showdown/FreeCooldownOverlay";
 import { useQuotaStore } from "@/stores/useQuotaStore";
 import { useCloneCrushQuota } from "@/hooks/useCloneCrushQuota";
 
@@ -57,8 +58,9 @@ export default function CloneCrush() {
 
   const {
     profile, isProfiling, competitors, isSearchingCompetitors, envyMetrics, threatAlerts, wideningGap, rewrites, isRewriting, activeRewrite,
+    freeCooldownUntil, freeLockedVideoId,
     setProfile, setIsProfiling, setCompetitors, setIsSearchingCompetitors, setThreatAlerts, addRewrite, setIsRewriting, setActiveRewrite, deleteRewrite,
-    beginNewWorkflow,
+    startFreeCooldown, clearFreeCooldown, beginNewWorkflow,
   } = useCloneCrushStore();
 
   const saveContent = useContentStore((s) => s.saveContent);
@@ -66,8 +68,30 @@ export default function CloneCrush() {
   const license = useAuthStore((s) => s.license);
   // Derived pro flag uses the strict isProTier selector which rejects stale
   // localStorage pro snapshots (expired/missing expiresAt). This is the
-  // single source of truth for all UI gating in this component.
+  // single source of truth for all UI gating in this component. Declared
+  // early so hooks below can reference it safely.
   const isPro = isProTier(license);
+
+  // Live-ticking cooldown remaining (ms). Set from a 1s interval so the
+  // UI overlays update in real time without triggering a full store
+  // subscriber cascade every second.
+  const [cooldownRemainingMs, setCooldownRemainingMs] = useState(() =>
+    freeCooldownUntil ? Math.max(0, freeCooldownUntil - Date.now()) : 0,
+  );
+  useEffect(() => {
+    if (!freeCooldownUntil) { setCooldownRemainingMs(0); return; }
+    const tick = () => {
+      const remaining = Math.max(0, (freeCooldownUntil ?? 0) - Date.now());
+      setCooldownRemainingMs(remaining);
+      if (remaining <= 0) clearFreeCooldown();
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [freeCooldownUntil, clearFreeCooldown]);
+
+  const isFreeCooldownActive = !isPro && !!freeCooldownUntil && freeCooldownUntil > Date.now() && !!freeLockedVideoId;
+  void cooldownRemainingMs; // retained for future use; UI reads directly from freeCooldownUntil via per-second re-render trigger.
   const startWorkflowProfile = useWorkflowStore((s) => s.startProfile);
   const selectWorkflowCompetitor = useWorkflowStore((s) => s.selectCompetitor);
   const saveWorkflowPackage = useWorkflowStore((s) => s.saveContentPackage);
@@ -134,6 +158,32 @@ export default function CloneCrush() {
   useEffect(() => {
     if (!isPro) setSelectedVideoTier("free");
   }, [isPro]);
+
+  // Becoming Pro instantly clears the free-tier 24h cooldown so the
+  // paywall upgrade is the documented bypass and users can immediately
+  // start a new workflow.
+  useEffect(() => {
+    if (isPro && (freeCooldownUntil || freeLockedVideoId)) clearFreeCooldown();
+  }, [isPro, freeCooldownUntil, freeLockedVideoId, clearFreeCooldown]);
+
+  // On reload / rehydration during an active cooldown, force the
+  // originally-locked video as the selected competitor so the "LOCKED"
+  // result panel renders exactly where the user left off, regardless of
+  // which tile was previously clicked.
+  useEffect(() => {
+    if (!isFreeCooldownActive) return;
+    const lockedVideo = competitors.find((v) => v.videoId === freeLockedVideoId);
+    if (lockedVideo && selectedVideo?.videoId !== lockedVideo.videoId) {
+      setSelectedVideo(lockedVideo);
+      // Also restore the rewrite result panel for the locked video if
+      // we have it in history.
+      const lockedRewrite = rewrites.find((r) => r.targetVideoId === freeLockedVideoId);
+      if (lockedRewrite && activeRewrite?.id !== lockedRewrite.id) {
+        setActiveRewrite(lockedRewrite);
+        setActiveTab("script");
+      }
+    }
+  }, [isFreeCooldownActive, competitors, freeLockedVideoId, rewrites, selectedVideo?.videoId, activeRewrite?.id, setActiveRewrite]);
 
   // Mark tier as hydrated once the SoftGateProvider finishes its first
   // session/entitlement load. Until then, Execute stays disabled.
@@ -207,6 +257,15 @@ export default function CloneCrush() {
   const performProfileChannel = async () => {
     const input = channelInput.trim();
     if (!input) { toast.error("Please enter a YouTube Channel URL or Handle"); return; }
+    // 24h cooldown guard (free-tier monetization lock). The locked result
+    // MUST stay on screen — refuse to start a new scan before the cooldown
+    // expires or the user upgrades to Pro. Server-side daily_quota will
+    // also reject, but we refuse here synchronously so the UI doesn't
+    // even flicker.
+    if (isFreeCooldownActive) {
+      toast.error("24h cooldown active — unlock Pro to scan again", { id: "free-cooldown" });
+      return;
+    }
     // Atomic store reset BEFORE async work so stale competitors/rewrites don't
     // bleed into the new scan. Local UI state is reset alongside it, and the
     // keyed panel below forces React to unmount/remount the competitor matrix.
@@ -214,6 +273,7 @@ export default function CloneCrush() {
     setSelectedVideo(null);
     setLogSteps([]);
     setActiveTab("script");
+    setCopiedText(false);
     setBurstTrigger(0);
     setXpTrigger(0);
     setShowIntelDrop(true);
@@ -355,9 +415,16 @@ export default function CloneCrush() {
         if (navigator.vibrate) navigator.vibrate([20, 30, 20]);
         try { const s = JSON.parse(localStorage.getItem("ghost_streak_v2") || "{}"); const xp = (s.xp || 0) + 30; const streak = s.streak || 1; localStorage.setItem("ghost_streak_v2", JSON.stringify({ ...s, xp, streak, lastDate: new Date().toDateString() })); } catch {}
         toast.success(`🚀 ${achievedTier==="premium"?"99% GLITCH":"60% Standard"} Chain-Loop Secured via Ghost Node • ${promptCount} prompts • +30 XP`);
-        // Refresh quota immediately after a successful free-tier run so the
-        // UI flips to "locked" state without waiting for the next tick.
-        if (!userIsPro) void refreshQuota(true);
+        // Free-tier monetization lock: after a successful run the result
+        // stays LOCKED on screen for 24h and all other tiles enter the
+        // cooldown state. The cooldown timestamp is persisted in the
+        // per-user store so the timer & locks survive reload.
+        if (!userIsPro) {
+          startFreeCooldown(selectedVideo.videoId);
+          // Sync server-side daily quota so subsequent attempts short
+          // circuit before hitting the edge.
+          void refreshQuota(true);
+        }
       } else if ((rewriteRes as any).code === "DAILY_LIMIT") {
         // Server-authoritative: free user burned their run today.
         const limitRes = rewriteRes as any;
@@ -443,6 +510,10 @@ export default function CloneCrush() {
     if (!selectedVideo) { toast.error("Select a competitor video from matrix"); return; }
     if (isExecutingRef.current) return;
     if (!tierHydrated) { toast.loading("Verifying clearance via MUM-01...", { id: "tier-hydrating" }); return; }
+    // Free-tier 24h cooldown: once a free user has a locked result on
+    // screen, the Execute button is disabled — but defense-in-depth here
+    // routes them to /rewards if they somehow trigger the click.
+    if (isFreeCooldownActive) { routeToProUpsell("premium"); return; }
     if (enforcePremiumPaywall()) return;
     return runGuarded("unlock next Clone & Crush result", performCloneAndCrush);
   };
@@ -508,21 +579,25 @@ export default function CloneCrush() {
                 <div className="relative flex-1">
                   <Youtube className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input placeholder="YouTube Channel URL or Handle (e.g. @MrBeast)" value={channelInput} onChange={e=>{
-                    // As soon as the user starts typing a new link, wipe the
-                    // prior workflow's generated asset + console so the old
-                    // script/thumb/tags/guide never sits stale under the
-                    // new input. beginNewWorkflow will also fire on submit.
                     const next = e.target.value;
                     setChannelInput(next);
+                    // During the 24h free-tier cooldown the locked result
+                    // must remain pinned — do not wipe any state on input
+                    // change. Otherwise, clear stale per-run assets as the
+                    // user starts a new link (beginNewWorkflow still fires
+                    // on submit to do the hard reset).
+                    if (isFreeCooldownActive) return;
                     if (next.trim().length > 0 && (activeRewrite || logSteps.length > 0 || rewrites.length > 0)) {
                       setActiveRewrite(null);
                       setLogSteps([]);
                       setSelectedVideo(null);
                     }
-                  }} className="pl-10 bg-secondary/40 border-border/80 h-11 text-sm placeholder:text-muted-foreground/60" />
+                  }} className="pl-10 bg-secondary/40 border-border/80 h-11 text-sm placeholder:text-muted-foreground/60" readOnly={isFreeCooldownActive} />
                 </div>
-                <Button onClick={handleProfileChannel} disabled={isProfiling} className="cyber-button px-5 h-11 shrink-0 font-display text-sm flex gap-2">
-                  {isProfiling ? <><Loader2 className="w-4 h-4 animate-spin" />Ghost Scraping...</> : <><Cpu className="w-4 h-4" />Launch Ghost Showdown</>}
+                <Button onClick={handleProfileChannel} disabled={isProfiling || isFreeCooldownActive} className="cyber-button px-5 h-11 shrink-0 font-display text-sm flex gap-2">
+                  {isProfiling ? <><Loader2 className="w-4 h-4 animate-spin" />Ghost Scraping...</>
+                    : isFreeCooldownActive ? <><Lock className="w-4 h-4" />24h Cooldown Active</>
+                    : <><Cpu className="w-4 h-4" />Launch Ghost Showdown</>}
                 </Button>
               </div>
               <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground">
@@ -564,19 +639,36 @@ export default function CloneCrush() {
                 <Card className="glass-strong border-border/80 p-5 h-full flex flex-col justify-between">
                   <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">Live Velocity Matrix</span><span className="text-xs text-muted-foreground">{competitors.length} Outliers {(competitors[0] as any)?.isGhostReconstructed && <span className="text-amber-300">• Ghost</span>}</span></div>
                   {isSearchingCompetitors ? (<div className="py-10 text-center space-y-2"><Loader2 className="w-7 h-7 animate-spin text-primary mx-auto" /><p className="text-xs text-muted-foreground">Auditing via ghost mesh (6 relays)...</p><div className="flex justify-center gap-1 mt-2">{[0,1,2,3].map(i=><span key={i} className="w-1 h-1 rounded-full bg-primary/60 animate-pulse" style={{animationDelay:`${i*150}ms`}} />)}</div></div>) : competitors.length>0 ? (
-                    <div key={workflowNonce} className="grid grid-cols-3 gap-2 mt-2">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400'; const tileLocked = video.isLocked || (!isPro && dailyLimitActive && !isSelected); return (
-                      <div key={video.videoId} onClick={()=>{ if(video.isLocked) { routeToProUpsell("locked"); return; } if(!isPro && dailyLimitActive) { openReferralRewards(); return; }
-                      // New tile = new active asset. Wipe previously-generated
-                      // script/thumb/tags/guide so stale output from a prior
-                      // competitor never bleeds onto the newly-selected tile.
-                      setActiveRewrite(null);
-                      setLogSteps([]);
-                      setActiveTab("script");
-                      setCopiedText(false);
-                      setSelectedVideo(video); selectWorkflowCompetitor({videoId:video.videoId,title:video.title,url:video.url,channelName:video.channelName,thumbnail:video.thumbnail}, nicheInput); }} className={`group relative rounded-xl border p-2 transition-all duration-300 flex flex-col justify-between bg-secondary/30 ${isSelected?"border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow":"border-border/60 hover:border-border"} ${tileLocked?"pointer-events-none":"cursor-pointer"}`}>
-                        <div className="absolute top-1 left-1 z-10 bg-primary text-primary-foreground text-[7px] font-bold px-1.5 py-0.5 rounded-full">{idx===0?"Unlocked":`Locked #${idx}`}</div>
-                        {video.isLocked ? <ProtectedVideoPreview video={video} /> : <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0 mb-1.5"><img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />{!isPro && dailyLimitActive && <DailyLimitOverlay />}</div>}
-                        <div><p className="text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p><p className="text-[8px] text-primary font-mono mt-1 font-semibold">{video.views}</p><div className="flex items-center gap-1.5 mt-1">{video.estimatedRevenue && <span className="text-[7px] font-bold text-green-400 bg-green-400/10 px-1 py-0.5 rounded flex items-center gap-0.5"><DollarSign className="w-2.5 h-2.5" />{video.estimatedRevenue}</span>}{video.viralVelocityScore!==undefined && <span className={`text-[7px] font-bold ${velocityColor} bg-secondary/60 px-1 py-0.5 rounded flex items-center gap-0.5`}><Flame className="w-2.5 h-2.5" />{video.viralVelocityScore}</span>}</div></div>
+                    <div key={workflowNonce} className="grid grid-cols-3 gap-2 mt-2">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400';
+                      // 24h cooldown: the locked video (the one the user
+                      // just generated) is the only tile that remains
+                      // visible/interactable; every other tile is covered
+                      // by the cooldown overlay and non-clickable.
+                      const isCooldownLockedTile = isFreeCooldownActive && freeLockedVideoId !== video.videoId;
+                      const isCooldownPinnedTile = isFreeCooldownActive && freeLockedVideoId === video.videoId;
+                      // Preserve the pre-existing Pro-lock for non-first
+                      // tiles (isLocked) and the daily-limit mask.
+                      const tileLocked = video.isLocked || (!isPro && dailyLimitActive && !isSelected) || isCooldownLockedTile;
+                      return (
+                      <div key={video.videoId} onClick={()=>{
+                        if (isCooldownLockedTile) { routeToProUpsell("premium"); return; }
+                        if (video.isLocked) { routeToProUpsell("locked"); return; }
+                        if (!isPro && dailyLimitActive) { openReferralRewards(); return; }
+                        // During cooldown the pinned tile remains
+                        // selectable but cannot trigger a new generation
+                        // (the Execute button is disabled too).
+                        // New tile = new active asset. Wipe previously-generated
+                        // script/thumb/tags/guide so stale output from a prior
+                        // competitor never bleeds onto the newly-selected tile.
+                        setActiveRewrite(null);
+                        setLogSteps([]);
+                        setActiveTab("script");
+                        setCopiedText(false);
+                        setSelectedVideo(video); selectWorkflowCompetitor({videoId:video.videoId,title:video.title,url:video.url,channelName:video.channelName,thumbnail:video.thumbnail}, nicheInput);
+                      }} className={`group relative rounded-xl border p-2 transition-all duration-300 flex flex-col justify-between bg-secondary/30 ${isSelected||isCooldownPinnedTile?"border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow":"border-border/60 hover:border-border"} ${tileLocked?"pointer-events-none":"cursor-pointer"}`}>
+                        <div className="absolute top-1 left-1 z-10 bg-primary text-primary-foreground text-[7px] font-bold px-1.5 py-0.5 rounded-full">{isCooldownPinnedTile?"Locked • 24h":video.isLocked?`Locked #${idx}`:"Unlocked"}</div>
+                        {video.isLocked ? <ProtectedVideoPreview video={video} /> : <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0 mb-1.5"><img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />{!isPro && dailyLimitActive && <DailyLimitOverlay />}{isCooldownLockedTile && freeCooldownUntil && <FreeCooldownOverlay unlocksAt={freeCooldownUntil} views={video.views} onUpgrade={()=>routeToProUpsell("premium")} variant="tile" />}</div>}
+                        <div><p className="text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p><p className="text-[8px] text-primary font-mono mt-1 font-semibold">{video.views}</p><div className="flex items-center gap-1.5 mt-1">{video.estimatedRevenue && <span className="text-[7px] font-bold text-green-400 bg-green-400/10 px-1 py-0.5 rounded flex items-center gap-0.5"><DollarSign className="w-2.5 h-2.5" />{video.estimatedRevenue}</span>}{video.viralVelocityScore!==undefined && !isCooldownLockedTile && <span className={`text-[7px] font-bold ${velocityColor} bg-secondary/60 px-1 py-0.5 rounded flex items-center gap-0.5`}><Flame className="w-2.5 h-2.5" />{video.viralVelocityScore}</span>}</div></div>
                       </div>);})}</div>) : (<div className="py-8 text-center text-xs text-muted-foreground">Profile your channel to launch ghost showdown matrix.</div>)}</div>
                   {competitors.some(v=>v.isLocked) && !isPro && (<div className="mt-3 p-2.5 rounded-lg bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex items-center justify-between gap-2"><div className="flex items-center gap-2 min-w-0"><Lock className="w-4 h-4 text-primary shrink-0" /><p className="text-[10px] font-bold text-foreground truncate">Unlock Hidden Trend Competitors via Referral</p></div><Button onClick={openReferralRewards} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">Unlock Pro ₹0</Button></div>)}
                 </Card>
@@ -620,19 +712,25 @@ export default function CloneCrush() {
                 <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex gap-3 items-start"><ShieldAlert className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" /><div><p className="text-xs font-bold text-yellow-500">Stealth Disguise Protocol Active • Ghost Node MUM-01</p><p className="text-[10px] text-muted-foreground leading-relaxed">All outputs deploy Anti-Clone Illusion: analogies discarded, case studies swapped, vocabularies updated. Never cloned.</p></div></div>
                 <div className="relative w-full">
                   {(() => {
-                    const freeBlocked = !isPro && (dailyLimitActive || selectedTier === "premium");
+                    const freeBlocked = !isPro && (dailyLimitActive || selectedTier === "premium" || isFreeCooldownActive);
                     const buttonDisabled = isRewriting || freeBlocked || !tierHydrated;
                     return (
                       <>
                         <Button onClick={handleCloneAndCrush} disabled={buttonDisabled} className="w-full h-12 bg-gradient-to-r from-primary to-accent text-primary-foreground font-display font-bold uppercase tracking-wider text-sm flex gap-2">
                           {isRewriting ? <><Loader2 className="w-4 h-4 animate-spin" />Executing Chain-Loop via Ghost Mesh...</>
                             : !tierHydrated ? <><Loader2 className="w-4 h-4 animate-spin" />Verifying clearance...</>
+                            : isFreeCooldownActive ? <><Lock className="w-4 h-4" />24h Cooldown — Skip Wait with Pro</>
                             : !isPro && dailyLimitActive ? <><Lock className="w-4 h-4" />Daily Limit Reached — Unlock Premium</>
                             : !isPro && selectedTier==="premium" ? <><Lock className="w-4 h-4" />99% Glitch — Unlock Pro</>
                             : <><Zap className="w-4 h-4 fill-primary-foreground" />Execute Chain-Loop (1 Click = 5 Assets) • MUM-01</>}
                         </Button>
                         {!isPro && dailyLimitActive && <div className="absolute inset-0 pointer-events-none" aria-hidden="true" />}
                         {!isPro && dailyLimitActive && <div className="mt-3"><DailyLimitOverlay variant="hero" /></div>}
+                        {isFreeCooldownActive && freeCooldownUntil && (
+                          <div className="mt-3">
+                            <FreeCooldownOverlay unlocksAt={freeCooldownUntil} views={selectedVideo?.views} onUpgrade={()=>routeToProUpsell("premium")} variant="hero" />
+                          </div>
+                        )}
                       </>
                     );
                   })()}
@@ -672,7 +770,7 @@ export default function CloneCrush() {
 
         <div className="lg:col-span-4 space-y-6">
           {activeRewrite ? (
-            <Card className="glass-strong border-primary/40 shadow-neon-glow animate-fade-in bracket">
+            <Card className={`glass-strong ${isFreeCooldownActive ? "border-amber-500/40" : "border-primary/40"} shadow-neon-glow animate-fade-in bracket relative overflow-hidden`}>{isFreeCooldownActive && freeCooldownUntil && <FreeCooldownOverlay unlocksAt={freeCooldownUntil} views={selectedVideo?.views} onUpgrade={()=>routeToProUpsell("premium")} variant="result" />}
               <CardHeader className="pb-3 border-b border-border/40"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[9px] font-mono tracking-widest uppercase">Chain-Loop Master • Ghost Secured</span><CardTitle className="font-display text-base text-foreground mt-2 line-clamp-2">{activeRewrite.rewrittenTitle}</CardTitle><p className="text-[10px] text-muted-foreground truncate mt-1">Based on: {activeRewrite.targetVideoTitle} • MUM-01</p></div><Button variant="outline" size="icon" onClick={handleCopyScript} className="shrink-0 border-border hover:border-primary/40 text-muted-foreground hover:text-primary active:scale-95"><Copy className="w-4 h-4" /></Button></div></CardHeader>
               <CardContent className="pt-5 space-y-5">
                 <div className="p-4 rounded-xl glass-ghost border-primary/30 space-y-3"><div className="flex items-center justify-between"><p className="text-xs font-display font-bold text-foreground flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-primary animate-pulse" />Chain-Loop Complete: 5 Assets</p><span className="text-[10px] bg-primary text-primary-foreground font-mono font-bold px-2 py-0.5 rounded-full uppercase">No-Click Handoff</span></div>

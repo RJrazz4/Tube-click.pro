@@ -141,7 +141,18 @@ interface CloneCrushState {
   rewrites: ScriptRewriteResult[];
   isRewriting: boolean;
   activeRewrite: ScriptRewriteResult | null;
-  
+
+  // Free-tier 24h cooldown (monetization lock)
+  //
+  // After a free user's FIRST successful Chain-Loop generation their result
+  // is locked on screen for FREE_COOLDOWN_MS (24h). During that window they
+  // cannot start a new channel scan, select a different competitor, or wipe
+  // the result. All other competitor tiles render under a cooldown
+  // overlay with a live countdown and a "Skip Wait - Unlock Pro" CTA.
+  // Pro users skip the cooldown entirely; becoming Pro clears it.
+  freeCooldownUntil: number | null;   // epoch ms at which cooldown ends
+  freeLockedVideoId: string | null;   // videoId whose result is locked on screen
+
   // Actions
   setProfile: (profile: ProfiledChannel | null) => void;
   setIsProfiling: (isProfiling: boolean) => void;
@@ -154,14 +165,22 @@ interface CloneCrushState {
   setIsRewriting: (isRewriting: boolean) => void;
   setActiveRewrite: (rewrite: ScriptRewriteResult | null) => void;
   deleteRewrite: (id: string) => void;
+
+  // Cooldown controls
+  startFreeCooldown: (videoId: string, durationMs?: number) => void;
+  clearFreeCooldown: () => void;
+  isInFreeCooldown: () => boolean;
   
   // Reset all Clone & Crush State
   clearAll: () => void;
   // Hard reset for a new channel scan: keeps the store but wipes
   // competitors, rewrites, threat alerts and any active card so stale
-  // video assets cannot linger between workflows.
+  // video assets cannot linger between workflows. Disabled during free
+  // cooldown so the locked 24h result cannot be evicted.
   beginNewWorkflow: () => void;
 }
+
+export const FREE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h
 
 export const useCloneCrushStore = create<CloneCrushState>()(
   persist(
@@ -177,6 +196,8 @@ export const useCloneCrushStore = create<CloneCrushState>()(
       rewrites: [],
       isRewriting: false,
       activeRewrite: null,
+      freeCooldownUntil: null,
+      freeLockedVideoId: null,
 
       setProfile: (profile) => set({ profile }),
       setIsProfiling: (isProfiling) => set({ isProfiling }),
@@ -207,24 +228,56 @@ export const useCloneCrushStore = create<CloneCrushState>()(
       setIsRewriting: (isRewriting) => set({ isRewriting }),
       setActiveRewrite: (activeRewrite) => set({ activeRewrite }),
       
-      deleteRewrite: (id) => set((state) => ({
-        rewrites: state.rewrites.filter((r) => r.id !== id),
-        activeRewrite: state.activeRewrite?.id === id ? null : state.activeRewrite,
-      })),
-
-      beginNewWorkflow: () => set({
-        profile: null,
-        isProfiling: true,
-        competitors: [],
-        isSearchingCompetitors: false,
-        competitorsFetchedAt: null,
-        envyMetrics: null,
-        threatAlerts: [],
-        wideningGap: null,
-        rewrites: [],
-        isRewriting: false,
-        activeRewrite: null,
+      deleteRewrite: (id) => set((state) => {
+        // During cooldown the locked rewrite cannot be deleted.
+        const now = Date.now();
+        if (state.freeCooldownUntil && state.freeCooldownUntil > now) {
+          const lockedRewrite = state.rewrites.find((r) => r.targetVideoId === state.freeLockedVideoId);
+          if (lockedRewrite && lockedRewrite.id === id) return state;
+        }
+        return {
+          rewrites: state.rewrites.filter((r) => r.id !== id),
+          activeRewrite: state.activeRewrite?.id === id ? null : state.activeRewrite,
+        };
       }),
+
+      startFreeCooldown: (videoId, durationMs = FREE_COOLDOWN_MS) => set({
+        freeCooldownUntil: Date.now() + durationMs,
+        freeLockedVideoId: videoId,
+      }),
+
+      clearFreeCooldown: () => set({
+        freeCooldownUntil: null,
+        freeLockedVideoId: null,
+      }),
+
+      isInFreeCooldown: () => {
+        const s = get();
+        return !!(s.freeCooldownUntil && s.freeCooldownUntil > Date.now() && s.freeLockedVideoId);
+      },
+
+      beginNewWorkflow: () => {
+        // A free-tier user mid-cooldown MUST NOT be allowed to wipe the
+        // currently-locked result. The server will also reject any new
+        // run (daily_quota SECURITY DEFINER), but the client must refuse
+        // to reset the UI too so the 24h lock holds even before the RPC
+        // round-trip.
+        const s = get();
+        if (s.freeCooldownUntil && s.freeCooldownUntil > Date.now() && s.freeLockedVideoId) return;
+        set({
+          profile: null,
+          isProfiling: true,
+          competitors: [],
+          isSearchingCompetitors: false,
+          competitorsFetchedAt: null,
+          envyMetrics: null,
+          threatAlerts: [],
+          wideningGap: null,
+          rewrites: [],
+          isRewriting: false,
+          activeRewrite: null,
+        });
+      },
 
       clearAll: () => set({
         profile: null,
@@ -238,22 +291,26 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         rewrites: [],
         isRewriting: false,
         activeRewrite: null,
+        freeCooldownUntil: null,
+        freeLockedVideoId: null,
       }),
     }),
     {
       name: "tubegenius-clone-crush-store",
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => createPerUserStorage(
         "tubegenius-clone-crush-store",
         () => useAuthStore.getState().user?.id ?? null,
       )),
       migrate: (persistedState: any, version) => {
-        // Version 2 → 3: previous un-namespaced blobs are discarded;
-        // the perUserStorage migrates them once on first read.
+        // v3 -> v4: add freeCooldownUntil/freeLockedVideoId defaults.
         void version;
+        const base = persistedState && typeof persistedState === "object" ? persistedState : {};
         return {
-          ...(persistedState && typeof persistedState === "object" ? persistedState : {}),
-          competitors: Array.isArray(persistedState?.competitors) ? viralOnly(persistedState.competitors) : [],
+          ...base,
+          competitors: Array.isArray(base.competitors) ? viralOnly(base.competitors) : [],
+          freeCooldownUntil: typeof base.freeCooldownUntil === "number" ? base.freeCooldownUntil : null,
+          freeLockedVideoId: typeof base.freeLockedVideoId === "string" ? base.freeLockedVideoId : null,
         };
       },
       partialize: (state) => ({
@@ -261,6 +318,8 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         competitors: viralOnly(state.competitors),
         competitorsFetchedAt: state.competitorsFetchedAt,
         rewrites: state.rewrites,
+        freeCooldownUntil: state.freeCooldownUntil,
+        freeLockedVideoId: state.freeLockedVideoId,
       }),
     }
   )
