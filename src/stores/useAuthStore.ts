@@ -217,6 +217,34 @@ export const useIsAuthenticated = () => useAuthStore((s) => s.isAuthenticated);
 export const useFeatures = () => useAuthStore((s) => s.getFeatures());
 export const useDailyUsage = () => useAuthStore((s) => s.dailyUsage);
 
+/**
+ * Authoritative "is this user a paying Pro?" selector.
+ *
+ * Returns true ONLY when the license is tier==="pro" AND either there is no
+ * expiresAt (lifetime/admin grant) OR expiresAt is in the future. Any stale
+ * localStorage snapshot with tier==="pro" but a missing/expired expiresAt is
+ * treated as free — this is the single choke point that prevents the
+ * persisted store from lying about entitlement after a session expires.
+ */
+export function isProTier(license: LicenseInfo | null | undefined): boolean {
+  if (!license) return false;
+  if (license.tier !== "pro") return false;
+  if (license.status === "expired") return false;
+  if (!license.expiresAt) {
+    // Lifetime / admin grant — no expiry on file means the backend never
+    // revoked it, treat as pro. Downgrade logic in SoftGateProvider sets
+    // tier="free" when the server says not pro, so this branch only fires
+    // for intentionally-granted lifetime accounts.
+    return true;
+  }
+  try {
+    return new Date(license.expiresAt).getTime() > Date.now();
+  } catch {
+    return false;
+  }
+}
+export const useIsPro = () => useAuthStore((s) => isProTier(s.license));
+
 // Check if user can perform an action
 export const useCanPerform = () => {
   const features = useFeatures();

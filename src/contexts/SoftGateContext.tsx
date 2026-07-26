@@ -94,12 +94,17 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       if (entitlement.active && entitlement.expiresAt && new Date(entitlement.expiresAt).getTime() > Date.now()) {
         setLicense({ tier: "pro", status: "active", expiresAt: entitlement.expiresAt });
         setAppTier("pro");
-      } else if (license.expiresAt && license.tier === "pro") {
+      } else {
+        // Unconditionally downgrade when the server says not pro. This
+        // prevents a stale localStorage { tier: "pro" } (with no expiresAt
+        // or an expired one) from ever being treated as an active license
+        // on future sessions — closing the persistent-state bypass.
         setLicense({ tier: "free", status: "active", expiresAt: undefined });
         setAppTier("free");
       }
     } catch {
       // Authentication remains valid even if entitlement sync is temporarily unavailable.
+      // Do NOT downgrade here on network failure — but also do NOT promote.
     }
   }, [finishPending, license.expiresAt, license.tier, setAppTier, setLicense, setUser]);
 

@@ -21,7 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { useCloneCrushStore, CompetitorVideo, ProfiledChannel } from "@/stores/useCloneCrushStore";
 import { useContentStore } from "@/stores/useContentStore";
-import { useAuthStore } from "@/stores/useAuthStore";
+import { useAuthStore, isProTier } from "@/stores/useAuthStore";
 import { useTranscriptExtraction, useCloneCrushMutation } from "@/hooks/useSecureQuery";
 import { useSoftGate } from "@/contexts/SoftGateContext";
 import { useWorkflowStore } from "@/stores/useWorkflowStore";
@@ -53,7 +53,7 @@ function clientViewCount(video: any): number {
 
 export default function CloneCrush() {
   const navigate = useNavigate();
-  const { runGuarded } = useSoftGate();
+  const { runGuarded, isAuthLoading } = useSoftGate();
 
   const {
     profile, isProfiling, competitors, isSearchingCompetitors, envyMetrics, threatAlerts, wideningGap, rewrites, isRewriting, activeRewrite,
@@ -64,6 +64,10 @@ export default function CloneCrush() {
   const saveContent = useContentStore((s) => s.saveContent);
   const incrementStat = useContentStore((s) => s.incrementStat);
   const license = useAuthStore((s) => s.license);
+  // Derived pro flag uses the strict isProTier selector which rejects stale
+  // localStorage pro snapshots (expired/missing expiresAt). This is the
+  // single source of truth for all UI gating in this component.
+  const isPro = isProTier(license);
   const startWorkflowProfile = useWorkflowStore((s) => s.startProfile);
   const selectWorkflowCompetitor = useWorkflowStore((s) => s.selectCompetitor);
   const saveWorkflowPackage = useWorkflowStore((s) => s.saveContentPackage);
@@ -73,7 +77,7 @@ export default function CloneCrush() {
   const [nicheInput, setNicheInput] = useState("");
   const [customDescription, setCustomDescription] = useState("");
   const [selectedVideo, setSelectedVideo] = useState<CompetitorVideo | null>(null);
-  const [selectedTier, setSelectedVideoTier] = useState<"free" | "premium">(license.tier === "pro" ? "premium" : "free");
+  const [selectedTier, setSelectedVideoTier] = useState<"free" | "premium">(isPro ? "premium" : "free");
   const [copiedText, setCopiedText] = useState(false);
   const [activeTab, setActiveTab] = useState("script");
   const [logSteps, setLogSteps] = useState<{ label: string; status: "pending" | "processing" | "success" | "rerouting" | "error"; meta?: string }[]>([]);
@@ -83,45 +87,63 @@ export default function CloneCrush() {
   const [showIntelDrop, setShowIntelDrop] = useState(true);
   const [workflowNonce, setWorkflowNonce] = useState(0);
   const [dailyLimitActive, setDailyLimitActive] = useState(false);
+  // Block the Execute button until SoftGateProvider has hydrated the
+  // Supabase session + entitlement. Prevents a fast-click on a warm but
+  // stale localStorage "pro" snapshot from ever firing a premium request
+  // before we know the real tier.
+  const [tierHydrated, setTierHydrated] = useState(false);
 
   const transcriptMutation = useTranscriptExtraction();
   const cloneCrushMutation = useCloneCrushMutation();
   const { quota: dailyQuota, isBlocked: dailyLimitBlocked, refresh: refreshQuota } = useCloneCrushQuota();
 
-  // Execution guard: prevents double-fire when React double-invokes in
-  // StrictMode dev AND prevents bypass via stale-closure reads of license.
-  // We read tier straight from the store at click-time so any async
-  // hydration race (Supabase session restore, expired-pro downgrade) is
-  // evaluated on the CURRENT snapshot, not the one captured when the
-  // handler was created.
+  // Double-click / StrictMode guard across renders.
   const isExecutingRef = useRef(false);
+
+  // Single paywall route helper — also resets selectedTier to "free" so if
+  // the user navigates back they're not left on the 99% card.
+  const routeToProUpsell = useCallback((reason: "premium" | "locked" = "premium") => {
+    setSelectedVideoTier("free");
+    toast.error(
+      reason === "premium"
+        ? "99% Glitch reserved for Pro • Rerouting to Private Tracker"
+        : "Locked competitor reserved for Pro • Rerouting to Private Tracker",
+      { id: "pro-upsell-99glitch" }
+    );
+    navigate(`/rewards?upsell=clonecrush&tier=${reason === "premium" ? "99glitch" : "locked"}`);
+  }, [navigate]);
+
+  // Synchronous pro check that always reads the CURRENT store snapshot
+  // (never a closure) and validates via isProTier — this is what guards
+  // the Execute click and the tier-radio click.
+  const canUsePremium = useCallback((): boolean => {
+    return isProTier(useAuthStore.getState().license);
+  }, []);
 
   // Paywall gate — single source of truth. Called at click-time AND at the
   // top of performCloneAndCrush. Returns true if user was bounced.
   const enforcePremiumPaywall = useCallback((): boolean => {
-    const liveTier = useAuthStore.getState().license.tier;
-    if (liveTier === "pro") return false;
-    if (selectedTier === "premium" || (selectedVideo && selectedVideo.isLocked)) {
-      toast.error("99% Glitch reserved for Pro • Rerouting to Private Tracker", { id: "pro-upsell-99glitch" });
-      navigate("/rewards?upsell=clonecrush");
-      return true;
-    }
+    if (canUsePremium()) return false;
+    if (selectedTier === "premium") { routeToProUpsell("premium"); return true; }
+    if (selectedVideo?.isLocked) { routeToProUpsell("locked"); return true; }
     return false;
-  }, [selectedTier, selectedVideo, navigate]);
+  }, [canUsePremium, selectedTier, selectedVideo, routeToProUpsell]);
 
-  // Synchronize selectedTier with live license (e.g. on session restore or
-  // pro expiry), but NEVER upgrade a free user's selection to premium.
+  // Keep selectedTier in lockstep with live entitlement. Free users can
+  // NEVER be on the premium tier — downgrade them instantly.
   useEffect(() => {
-    if (license.tier === "pro") {
-      setSelectedVideoTier((t) => t === "premium" ? "premium" : t);
-    } else {
-      setSelectedVideoTier("free");
-    }
-  }, [license.tier]);
+    if (!isPro) setSelectedVideoTier("free");
+  }, [isPro]);
+
+  // Mark tier as hydrated once the SoftGateProvider finishes its first
+  // session/entitlement load. Until then, Execute stays disabled.
+  useEffect(() => {
+    if (!isAuthLoading) setTierHydrated(true);
+  }, [isAuthLoading]);
 
   useEffect(() => {
-    setDailyLimitActive(license.tier !== "pro" && dailyQuota.allowed === false && (dailyQuota.remainingSeconds ?? 0) > 0);
-  }, [license.tier, dailyQuota.allowed, dailyQuota.remainingSeconds]);
+    setDailyLimitActive(!isPro && dailyQuota.allowed === false && (dailyQuota.remainingSeconds ?? 0) > 0);
+  }, [isPro, dailyQuota.allowed, dailyQuota.remainingSeconds]);
 
   useEffect(() => {
     if (profile) {
@@ -230,17 +252,20 @@ export default function CloneCrush() {
     if (isExecutingRef.current) return;
     isExecutingRef.current = true;
 
-    // Read tier DIRECTLY from the store snapshot (not from a stale closure).
-    const liveTier = useAuthStore.getState().license.tier;
-    const userIsPro = liveTier === "pro";
+    // steps is declared in function scope so the catch/finally blocks can
+    // reference it even when an error throws mid-pipeline.
+    let steps: { label: string; status: "pending" | "processing" | "success" | "rerouting" | "error"; meta?: string }[] = [];
 
-    // HARD PREFLIGHT — premium paywall. Runs from inside performCloneAndCrush
-    // as well as from the click handler so even if runGuarded() invokes us
-    // after a microtask / auth-popup resolution, we re-check.
-    if (!userIsPro && (selectedTier === "premium" || selectedVideo.isLocked)) {
+    // Authoritative pro check — reads live store via isProTier (rejects stale
+    // localStorage snapshots), not a render-closure boolean.
+    const userIsPro = canUsePremium();
+
+    // HARD PREFLIGHT — premium paywall. Re-runs inside performCloneAndCrush
+    // so even if runGuarded() invokes us after a microtask / auth-popup
+    // resolution (or if entitlement changed between click and invoke), we
+    // still bounce.
+    if (enforcePremiumPaywall()) {
       isExecutingRef.current = false;
-      toast.error("99% Glitch reserved for Pro • Rerouting to Private Tracker", { id: "pro-upsell-99glitch" });
-      navigate("/rewards?upsell=clonecrush");
       return;
     }
 
@@ -260,33 +285,28 @@ export default function CloneCrush() {
       if (!q.allowed && q.remainingSeconds > 0) {
         isExecutingRef.current = false;
         setDailyLimitActive(true);
+        setIsRewriting(false);
         toast.error("Daily free limit reached — unlock Pro for unlimited Chain-Loops", { id: "daily-limit" });
         return;
       }
     }
 
+    // --- AUTHORIZATION PHASE ---------------------------------------------
+    // The server is authoritative for premium entitlement. We downgrade
+    // non-pro users to the free tier client-side (so they can never ship a
+    // tier="premium" request that the server has to reject) and start the
+    // console only after we've set up the steps array.
+    const requestedTier: "free" | "premium" = userIsPro ? selectedTier : "free";
     setIsRewriting(true);
 
-    const steps: { label: string; status: "pending" | "processing" | "success" | "rerouting" | "error"; meta?: string }[] = [
-      { label: "Establishing Secure Tunnel via Ghost Node MUM-01...", status: "processing", meta: "ENCRYPTED" },
-      { label: `Arming ${selectedTier === "premium" ? "99% GLITCH PROTOCOL" : "60% Standard Optimization"}...`, status: "pending", meta: "ARMING" },
-      { label: "Scraping Captions via Ghost Relay Mesh (6 nodes)...", status: "pending", meta: "PIPED MESH" },
-      { label: "Enforcing Stealth Disguise & Anti-Clone Shield...", status: "pending", meta: "STEALTH" },
-      { label: `Injecting ${selectedTier === "premium" ? "EXTREME Curiosity Glitch" : "Curiosity"} into Title & Hook...`, status: "pending", meta: "GLITCH" },
-      { label: "Reverse-Engineering Viral Thumbnail DNA...", status: "pending", meta: "THEFT ENGINE" },
-      { label: "Compiling Chain-Loop (5 Viral Assets Package)...", status: "pending", meta: "CHAIN-LOOP" },
-    ];
-    setLogSteps(steps);
-
     try {
-      steps[0].status = "success"; steps[0].meta = "MUM-01 • 87ms"; steps[1].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,400));
-      steps[1].status = "success"; steps[2].status = "processing"; setLogSteps([...steps]);
-
+      // Fire the rewrite. The server will 401/403 if a non-pro user
+      // smuggled tier=premium; we treat those as paywall signals, not
+      // "recovered" successes.
       let transcriptData: any;
       try {
         transcriptData = await withClientTimeout((transcriptMutation.mutateAsync as any)({ url: selectedVideo.url, title: selectedVideo.title }), 8_000);
       } catch (err: any) {
-        steps[2].status = "rerouting"; steps[2].meta = err?.code === "TIMEOUT" || /timed out|timeout/i.test(err?.message || "") ? "TIMEOUT • SYNTH" : "GHOST RECONSTRUCT"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,350));
         transcriptData = { transcript: `Ghost reconstructed scaffold for ${selectedVideo.title}: High-retention script about ${nicheInput}. Hook, open loop, value, payoff loop.`, source: "ghost-local", ghostNode: "LOCAL-SYNTH" };
       }
 
@@ -294,37 +314,50 @@ export default function CloneCrush() {
         transcriptData.transcript = `Ghost scaffold for ${selectedVideo.title}: viral script about ${nicheInput}`;
       }
 
+      steps = [
+        { label: "Establishing Secure Tunnel via Ghost Node MUM-01...", status: "processing", meta: "ENCRYPTED" },
+        { label: `Arming ${requestedTier === "premium" ? "99% GLITCH PROTOCOL" : "60% Standard Optimization"}...`, status: "pending", meta: "ARMING" },
+        { label: "Scraping Captions via Ghost Relay Mesh (6 nodes)...", status: "pending", meta: "PIPED MESH" },
+        { label: "Enforcing Stealth Disguise & Anti-Clone Shield...", status: "pending", meta: "STEALTH" },
+        { label: `Injecting ${requestedTier === "premium" ? "EXTREME Curiosity Glitch" : "Curiosity"} into Title & Hook...`, status: "pending", meta: "GLITCH" },
+        { label: "Reverse-Engineering Viral Thumbnail DNA...", status: "pending", meta: "THEFT ENGINE" },
+        { label: "Compiling Chain-Loop (5 Viral Assets Package)...", status: "pending", meta: "CHAIN-LOOP" },
+      ];
+      setLogSteps(steps);
+      steps[0].status = "success"; steps[0].meta = transcriptData.source?.includes("ghost") ? `${transcriptData.ghostNode || "MUM-01"} • SYNTH` : "MUM-01 • 87ms"; steps[1].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,400));
+      steps[1].status = "success"; steps[2].status = steps[0].meta.includes("SYNTH") ? "rerouting" : "processing"; steps[2].meta = steps[0].meta.includes("SYNTH") ? "GHOST RECONSTRUCT" : "PIPED MESH"; setLogSteps([...steps]); if (steps[2].status === "rerouting") await new Promise(r=>setTimeout(r,300));
       steps[2].status = "success"; steps[2].meta = transcriptData.source?.includes("ghost") ? `${transcriptData.ghostNode || "MUM-01"} • SYNTH` : "LIVE CAPTIONS"; steps[3].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,300));
       steps[3].status = "success"; steps[4].status = "processing"; setLogSteps([...steps]);
 
-      const rewriteRes = await withClientTimeout(cloneCrushMutation.mutateAsync({ action: "rewrite", targetVideoId: selectedVideo.videoId, originalTranscript: transcriptData.transcript, originalTitle: selectedVideo.title, niche: nicheInput, tier: selectedTier }), 55_000);
+      const rewriteRes = await withClientTimeout(cloneCrushMutation.mutateAsync({ action: "rewrite", targetVideoId: selectedVideo.videoId, originalTranscript: transcriptData.transcript, originalTitle: selectedVideo.title, niche: nicheInput, tier: requestedTier }), 55_000);
       steps[4].status = "success"; steps[5].status = "processing"; setLogSteps([...steps]);
 
       if (rewriteRes.success && rewriteRes.rewrite) {
         const rw = rewriteRes.rewrite;
         let reverseEngineeredPrompts: string[] = []; let reverseEngineeredSource: any = null;
         try {
-          const reverseRes = await withClientTimeout(cloneCrushMutation.mutateAsync({ action: "thumbnail-reverse", glitchTitle: rw.rewrittenTitle, niche: nicheInput, tier: selectedTier }), 18_000);
+          const reverseRes = await withClientTimeout(cloneCrushMutation.mutateAsync({ action: "thumbnail-reverse", glitchTitle: rw.rewrittenTitle, niche: nicheInput, tier: requestedTier }), 18_000);
           const reverseData = reverseRes as any;
           if (reverseData.success && reverseData.thumbnailPrompts) { reverseEngineeredPrompts = reverseData.thumbnailPrompts; reverseEngineeredSource = reverseData.sourceVideo || null; }
         } catch {}
         steps[5].status = "success"; steps[6].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,250));
         const savedRewrite = addRewrite({
-          targetVideoId: selectedVideo.videoId, targetVideoTitle: selectedVideo.title, originalTitle: rw.originalTitle, rewrittenTitle: rw.rewrittenTitle, glitchHook: rw.glitchHook, fullScript: rw.fullScript, retentionKeywordsUsed: rw.retentionKeywordsUsed, seoTags: rw.seoTags, thumbnailPrompt: rw.thumbnailPrompt, editingGuide: rw.editingGuide, tier: selectedTier, isStealthDisguised: true, changedAnalogiesCount: rw.changedAnalogiesCount, changedExamplesCount: rw.changedExamplesCount, glitchTechniques: rw.glitchTechniques, glitchIntensity: rw.glitchIntensity || (selectedTier === "premium" ? 99 : 60), reverseEngineeredPrompts, reverseEngineeredSource,
+          targetVideoId: selectedVideo.videoId, targetVideoTitle: selectedVideo.title, originalTitle: rw.originalTitle, rewrittenTitle: rw.rewrittenTitle, glitchHook: rw.glitchHook, fullScript: rw.fullScript, retentionKeywordsUsed: rw.retentionKeywordsUsed, seoTags: rw.seoTags, thumbnailPrompt: rw.thumbnailPrompt, editingGuide: rw.editingGuide, tier: rw.tier || requestedTier, isStealthDisguised: true, changedAnalogiesCount: rw.changedAnalogiesCount, changedExamplesCount: rw.changedExamplesCount, glitchTechniques: rw.glitchTechniques, glitchIntensity: rw.glitchIntensity || (requestedTier === "premium" ? 99 : 60), reverseEngineeredPrompts, reverseEngineeredSource,
         });
         const promptCount = reverseEngineeredPrompts.length || 1;
         saveWorkflowPackage({ rewriteId: savedRewrite.id, title: rw.rewrittenTitle, fullScript: rw.fullScript, thumbnailPrompt: rw.thumbnailPrompt, seoTags: rw.seoTags || [] });
-        saveContent({ type: "script", title: `Chain-Loop: ${rw.rewrittenTitle.substring(0,35)}...`, content: `GLITCH ${rw.glitchIntensity||60}% | TITLE: ${rw.rewrittenTitle} | HOOK: ${rw.glitchHook} | SCRIPT: ${rw.fullScript} | PROMPTS: ${reverseEngineeredPrompts.length>0?reverseEngineeredPrompts.join('\\n'):rw.thumbnailPrompt} | GUIDE: ${rw.editingGuide}`, metadata: { platform: "YouTube", style: selectedTier === "premium" ? "99% Glitch" : "60% Standard" } });
+        const achievedTier: "free"|"premium" = (rw.tier === "premium") ? "premium" : requestedTier;
+        saveContent({ type: "script", title: `Chain-Loop: ${rw.rewrittenTitle.substring(0,35)}...`, content: `GLITCH ${rw.glitchIntensity||(achievedTier==="premium"?99:60)}% | TITLE: ${rw.rewrittenTitle} | HOOK: ${rw.glitchHook} | SCRIPT: ${rw.fullScript} | PROMPTS: ${reverseEngineeredPrompts.length>0?reverseEngineeredPrompts.join('\\n'):rw.thumbnailPrompt} | GUIDE: ${rw.editingGuide}`, metadata: { platform: "YouTube", style: achievedTier === "premium" ? "99% Glitch" : "60% Standard" } });
         incrementStat("scriptsGenerated");
         steps[6].status = "success"; steps[6].meta = "5 ASSETS • SECURED"; setLogSteps([...steps]);
         setBurstTrigger(v => v + 1);
         setXpTrigger(v => v + 1);
         if (navigator.vibrate) navigator.vibrate([20, 30, 20]);
         try { const s = JSON.parse(localStorage.getItem("ghost_streak_v2") || "{}"); const xp = (s.xp || 0) + 30; const streak = s.streak || 1; localStorage.setItem("ghost_streak_v2", JSON.stringify({ ...s, xp, streak, lastDate: new Date().toDateString() })); } catch {}
-        toast.success(`🚀 ${selectedTier==="premium"?"99% GLITCH":"60% Standard"} Chain-Loop Secured via Ghost Node • ${promptCount} prompts • +30 XP`);
+        toast.success(`🚀 ${achievedTier==="premium"?"99% GLITCH":"60% Standard"} Chain-Loop Secured via Ghost Node • ${promptCount} prompts • +30 XP`);
         // Refresh quota immediately after a successful free-tier run so the
         // UI flips to "locked" state without waiting for the next tick.
-        if (license.tier !== "pro") void refreshQuota(true);
+        if (!userIsPro) void refreshQuota(true);
       } else if ((rewriteRes as any).code === "DAILY_LIMIT") {
         // Server-authoritative: free user burned their run today.
         const limitRes = rewriteRes as any;
@@ -339,23 +372,49 @@ export default function CloneCrush() {
         });
         setDailyLimitActive(true);
         setLogSteps([]);
+        setIsRewriting(false);
         toast.error("Daily free limit reached — unlock Pro ₹0 for unlimited Chain-Loops", { id: "daily-limit" });
         return;
-      } else throw new Error((rewriteRes as any).error || "Compilation interference");
+      } else {
+        const code = (rewriteRes as any).code;
+        const status = (rewriteRes as any).status;
+        // AUTH_REQUIRED (401) / PRO_REQUIRED (403) are the server's
+        // definitive answers for a premium-tier request from a free user.
+        // Wipe the console and route to the paywall instead of painting
+        // fake "SECURED" checkmarks.
+        if (code === "AUTH_REQUIRED" || code === "PRO_REQUIRED" || status === 401 || status === 403) {
+          setActiveRewrite(null);
+          setLogSteps([]);
+          setIsRewriting(false);
+          isExecutingRef.current = false;
+          routeToProUpsell("premium");
+          return;
+        }
+        throw new Error((rewriteRes as any).error || "Compilation interference");
+      }
     } catch (err: unknown) {
-      // Any failure path at this point should have been absorbed by the
-      // server-side fallback (rewrite endpoint always returns a package,
-      // even when the gateway/upstream fails). If we land here it's a
-      // genuine transport failure — mark every still-processing step as
-      // recovered so the UI doesn't sit on a spinner forever.
       const errCode = (err as any)?.code;
+      const errStatus = (err as any)?.status;
+      // AUTH_REQUIRED / PRO_REQUIRED / 401 / 403 → paywall, not "recovered" success.
+      if (errCode === "AUTH_REQUIRED" || errCode === "PRO_REQUIRED" || errStatus === 401 || errStatus === 403) {
+        setActiveRewrite(null);
+        setLogSteps([]);
+        setIsRewriting(false);
+        isExecutingRef.current = false;
+        routeToProUpsell("premium");
+        return;
+      }
       if (errCode === "DAILY_LIMIT" || errCode === 402) {
         setDailyLimitActive(true);
         void refreshQuota(true);
         toast.error("Daily free limit reached — unlock Pro ₹0", { id: "daily-limit" });
         setIsRewriting(false);
+        isExecutingRef.current = false;
         return;
       }
+      // Genuine transport failure — mark remaining steps as recovered so
+      // the UI doesn't hang on a spinner, but do NOT claim success on a
+      // paywall/auth failure (those cases are handled above).
       const recovered = steps.map((s) =>
         s.status === "processing" || s.status === "pending"
           ? { ...s, status: "success" as const, meta: s.meta || "RECOVERED" }
@@ -378,10 +437,12 @@ export default function CloneCrush() {
   };
   // THE SINGLE ENTRY POINT for the big blue Execute button. Runs the paywall
   // gate synchronously against the CURRENT store snapshot (no stale closure),
-  // blocks double-clicks, and only then hands off to runGuarded().
+  // blocks double-clicks, blocks until auth/entitlement is hydrated, and
+  // only then hands off to runGuarded().
   const handleCloneAndCrush = () => {
     if (!selectedVideo) { toast.error("Select a competitor video from matrix"); return; }
     if (isExecutingRef.current) return;
+    if (!tierHydrated) { toast.loading("Verifying clearance via MUM-01...", { id: "tier-hydrating" }); return; }
     if (enforcePremiumPaywall()) return;
     return runGuarded("unlock next Clone & Crush result", performCloneAndCrush);
   };
@@ -423,8 +484,8 @@ export default function CloneCrush() {
           <GhostNodeStatus />
           <div className="p-3 bg-card border border-border rounded-xl flex items-center gap-3">
             <Award className="w-5 h-5 text-primary" />
-            <div><p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Clearance</p><p className="text-sm font-bold text-foreground capitalize">{license.tier} • Level 4</p></div>
-            {license.tier==="free" && <Button size="sm" onClick={openReferralRewards} className="cyber-button text-[10px] px-3 h-8 font-display">Unlock Pro ₹0</Button>}
+            <div><p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Clearance</p><p className="text-sm font-bold text-foreground capitalize">{isPro ? "pro" : "free"} • Level 4</p></div>
+            {!isPro && <Button size="sm" onClick={openReferralRewards} className="cyber-button text-[10px] px-3 h-8 font-display">Unlock Pro ₹0</Button>}
           </div>
         </div>
       </div>
@@ -503,8 +564,8 @@ export default function CloneCrush() {
                 <Card className="glass-strong border-border/80 p-5 h-full flex flex-col justify-between">
                   <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">Live Velocity Matrix</span><span className="text-xs text-muted-foreground">{competitors.length} Outliers {(competitors[0] as any)?.isGhostReconstructed && <span className="text-amber-300">• Ghost</span>}</span></div>
                   {isSearchingCompetitors ? (<div className="py-10 text-center space-y-2"><Loader2 className="w-7 h-7 animate-spin text-primary mx-auto" /><p className="text-xs text-muted-foreground">Auditing via ghost mesh (6 relays)...</p><div className="flex justify-center gap-1 mt-2">{[0,1,2,3].map(i=><span key={i} className="w-1 h-1 rounded-full bg-primary/60 animate-pulse" style={{animationDelay:`${i*150}ms`}} />)}</div></div>) : competitors.length>0 ? (
-                    <div key={workflowNonce} className="grid grid-cols-3 gap-2 mt-2">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400'; const tileLocked = video.isLocked || (license.tier!=="pro" && dailyLimitActive && !isSelected); return (
-                      <div key={video.videoId} onClick={()=>{ if(video.isLocked) return; if(license.tier!=="pro" && dailyLimitActive) { openReferralRewards(); return; }
+                    <div key={workflowNonce} className="grid grid-cols-3 gap-2 mt-2">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400'; const tileLocked = video.isLocked || (!isPro && dailyLimitActive && !isSelected); return (
+                      <div key={video.videoId} onClick={()=>{ if(video.isLocked) { routeToProUpsell("locked"); return; } if(!isPro && dailyLimitActive) { openReferralRewards(); return; }
                       // New tile = new active asset. Wipe previously-generated
                       // script/thumb/tags/guide so stale output from a prior
                       // competitor never bleeds onto the newly-selected tile.
@@ -514,10 +575,10 @@ export default function CloneCrush() {
                       setCopiedText(false);
                       setSelectedVideo(video); selectWorkflowCompetitor({videoId:video.videoId,title:video.title,url:video.url,channelName:video.channelName,thumbnail:video.thumbnail}, nicheInput); }} className={`group relative rounded-xl border p-2 transition-all duration-300 flex flex-col justify-between bg-secondary/30 ${isSelected?"border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow":"border-border/60 hover:border-border"} ${tileLocked?"pointer-events-none":"cursor-pointer"}`}>
                         <div className="absolute top-1 left-1 z-10 bg-primary text-primary-foreground text-[7px] font-bold px-1.5 py-0.5 rounded-full">{idx===0?"Unlocked":`Locked #${idx}`}</div>
-                        {video.isLocked ? <ProtectedVideoPreview video={video} /> : <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0 mb-1.5"><img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />{license.tier!=="pro" && dailyLimitActive && <DailyLimitOverlay />}</div>}
+                        {video.isLocked ? <ProtectedVideoPreview video={video} /> : <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0 mb-1.5"><img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />{!isPro && dailyLimitActive && <DailyLimitOverlay />}</div>}
                         <div><p className="text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p><p className="text-[8px] text-primary font-mono mt-1 font-semibold">{video.views}</p><div className="flex items-center gap-1.5 mt-1">{video.estimatedRevenue && <span className="text-[7px] font-bold text-green-400 bg-green-400/10 px-1 py-0.5 rounded flex items-center gap-0.5"><DollarSign className="w-2.5 h-2.5" />{video.estimatedRevenue}</span>}{video.viralVelocityScore!==undefined && <span className={`text-[7px] font-bold ${velocityColor} bg-secondary/60 px-1 py-0.5 rounded flex items-center gap-0.5`}><Flame className="w-2.5 h-2.5" />{video.viralVelocityScore}</span>}</div></div>
                       </div>);})}</div>) : (<div className="py-8 text-center text-xs text-muted-foreground">Profile your channel to launch ghost showdown matrix.</div>)}</div>
-                  {competitors.some(v=>v.isLocked) && license.tier==="free" && (<div className="mt-3 p-2.5 rounded-lg bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex items-center justify-between gap-2"><div className="flex items-center gap-2 min-w-0"><Lock className="w-4 h-4 text-primary shrink-0" /><p className="text-[10px] font-bold text-foreground truncate">Unlock Hidden Trend Competitors via Referral</p></div><Button onClick={openReferralRewards} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">Unlock Pro ₹0</Button></div>)}
+                  {competitors.some(v=>v.isLocked) && !isPro && (<div className="mt-3 p-2.5 rounded-lg bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex items-center justify-between gap-2"><div className="flex items-center gap-2 min-w-0"><Lock className="w-4 h-4 text-primary shrink-0" /><p className="text-[10px] font-bold text-foreground truncate">Unlock Hidden Trend Competitors via Referral</p></div><Button onClick={openReferralRewards} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">Unlock Pro ₹0</Button></div>)}
                 </Card>
               </div>
             </div>
@@ -547,29 +608,31 @@ export default function CloneCrush() {
                     <p className="text-[10px] text-muted-foreground leading-relaxed">Extracts core points, writes entirely new narrative flow, fresh pacing. Ghost cached.</p>
                   </div>
                   <div onClick={()=>{
-                    // Free users clicking the 99% Glitch tier card → instant upsell.
-                    const liveTier = useAuthStore.getState().license.tier;
-                    if (liveTier !== "pro") { enforcePremiumPaywall(); return; }
+                    // Free users clicking the 99% Glitch tier card → instant upsell
+                    // (use canUsePremium which reads the live store + isProTier).
+                    if (!canUsePremium()) { routeToProUpsell("premium"); return; }
                     setSelectedVideoTier("premium");
-                  }} className={`rounded-xl border p-4 cursor-pointer transition-all ${license.tier==="free"?"opacity-60":""} ${selectedTier==="premium"?"border-primary bg-primary/5 ring-1 ring-primary/30":"border-border/60 hover:border-border bg-secondary/10"}`}>
-                    <div className="flex items-center justify-between gap-2 mb-1"><div className="flex items-center gap-2"><input type="radio" checked={selectedTier==="premium"} onChange={()=>{}} disabled={license.tier==="free"} className="accent-primary" /><p className="text-sm font-bold text-foreground">99% Glitch (Maximum Aggression)</p></div>{license.tier==="free" && <Lock className="w-3.5 h-3.5 text-primary" />}</div>
+                  }} className={`rounded-xl border p-4 cursor-pointer transition-all ${!isPro?"opacity-60":""} ${selectedTier==="premium"?"border-primary bg-primary/5 ring-1 ring-primary/30":"border-border/60 hover:border-border bg-secondary/10"}`}>
+                    <div className="flex items-center justify-between gap-2 mb-1"><div className="flex items-center gap-2"><input type="radio" checked={selectedTier==="premium"} onChange={()=>{}} disabled={!isPro} className="accent-primary" /><p className="text-sm font-bold text-foreground">99% Glitch (Maximum Aggression)</p></div>{!isPro && <Lock className="w-3.5 h-3.5 text-primary" />}</div>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">Extreme Curiosity Glitches, time-jumps, hidden secrets. Reverse-engineers thumbnails ruthlessly.</p>
                   </div>
                 </div>
                 <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex gap-3 items-start"><ShieldAlert className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" /><div><p className="text-xs font-bold text-yellow-500">Stealth Disguise Protocol Active • Ghost Node MUM-01</p><p className="text-[10px] text-muted-foreground leading-relaxed">All outputs deploy Anti-Clone Illusion: analogies discarded, case studies swapped, vocabularies updated. Never cloned.</p></div></div>
                 <div className="relative w-full">
                   {(() => {
-                    const freeBlocked = license.tier !== "pro" && (dailyLimitActive || selectedTier === "premium");
+                    const freeBlocked = !isPro && (dailyLimitActive || selectedTier === "premium");
+                    const buttonDisabled = isRewriting || freeBlocked || !tierHydrated;
                     return (
                       <>
-                        <Button onClick={handleCloneAndCrush} disabled={isRewriting || freeBlocked} className="w-full h-12 bg-gradient-to-r from-primary to-accent text-primary-foreground font-display font-bold uppercase tracking-wider text-sm flex gap-2">
+                        <Button onClick={handleCloneAndCrush} disabled={buttonDisabled} className="w-full h-12 bg-gradient-to-r from-primary to-accent text-primary-foreground font-display font-bold uppercase tracking-wider text-sm flex gap-2">
                           {isRewriting ? <><Loader2 className="w-4 h-4 animate-spin" />Executing Chain-Loop via Ghost Mesh...</>
-                            : license.tier!=="pro" && dailyLimitActive ? <><Lock className="w-4 h-4" />Daily Limit Reached — Unlock Premium</>
-                            : license.tier!=="pro" && selectedTier==="premium" ? <><Lock className="w-4 h-4" />99% Glitch — Unlock Pro</>
+                            : !tierHydrated ? <><Loader2 className="w-4 h-4 animate-spin" />Verifying clearance...</>
+                            : !isPro && dailyLimitActive ? <><Lock className="w-4 h-4" />Daily Limit Reached — Unlock Premium</>
+                            : !isPro && selectedTier==="premium" ? <><Lock className="w-4 h-4" />99% Glitch — Unlock Pro</>
                             : <><Zap className="w-4 h-4 fill-primary-foreground" />Execute Chain-Loop (1 Click = 5 Assets) • MUM-01</>}
                         </Button>
-                        {license.tier!=="pro" && dailyLimitActive && <div className="absolute inset-0 pointer-events-none" aria-hidden="true" />}
-                        {license.tier!=="pro" && dailyLimitActive && <div className="mt-3"><DailyLimitOverlay variant="hero" /></div>}
+                        {!isPro && dailyLimitActive && <div className="absolute inset-0 pointer-events-none" aria-hidden="true" />}
+                        {!isPro && dailyLimitActive && <div className="mt-3"><DailyLimitOverlay variant="hero" /></div>}
                       </>
                     );
                   })()}
