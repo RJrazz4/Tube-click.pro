@@ -1,182 +1,131 @@
-# TubeClick Pro
+# TubeClick Pro — Autonomous AI Growth Infrastructure
 
-**AI-powered growth operating system for YouTube creators.**
+TubeClick Pro is a proprietary, closed-source enterprise engine purpose-built for automated short-form content generation and psychological audience retention at scale. The platform orchestrates multi-agent AI reasoning, real-time competitor reverse-engineering, persistent channel memory, and self-healing failover to produce production-ready YouTube assets — titles, retention-optimized hooks, 60-second narration scripts, thumbnail creative, SEO tag clusters, and editing guides — in a single autonomous run, with zero manual prompting and zero chat-style interfaces.
 
-TubeClick Pro consolidates competitive intelligence, AI-assisted content production (scripts, storyboards, thumbnails, voiceover), SEO optimization, and a privacy-conscious viral referral loop into a single tier-aware SaaS product. The platform runs at [tubeclickpro.in](https://tubeclickpro.in).
+This repository contains the complete production deployment: edge runtime, orchestration layer, state stores, and the client application. All infrastructure is deployed globally on Vercel's Edge Network with regional sub-100ms POP latencies and end-to-end encryption at rest and in transit.
 
 ---
 
-## At a Glance
+## Core Architecture
 
-| Concern | Choice | Rationale |
+TubeClick Pro is organized around four autonomous systems that run without human intervention once a creator's channel is connected. There is no manual prompt entry, no chat surface, and no conversational agent — every output is produced by deterministic, observable, self-correcting pipelines.
+
+### 1. Multi-Agent Adversarial Pipeline (Writer ↔ Critic)
+
+Content generation is executed as a closed-loop adversarial workflow between two specialized agents:
+
+- **WriterAgent** drafts viral title families, 8–10 second open-loop hooks, a 60-second narration script, hashtag clusters, and an SEO description grounded in channel memory, platform context, and any incoming Chain-Loop intelligence.
+- **CriticAgent** scores every draft against a three-axis rubric — retention hook cadence (one beat every 8–10 seconds), zero-cliché tolerance, and promise-to-payoff integrity — returning a 0–100 score with precise remediation directives.
+
+Drafts that score below the release threshold (85/100) are automatically resubmitted to the Writer with the Critic's remediation notes, for up to two self-healing iterations. Output that meets threshold is returned to the client with a full audit trail (score, critique, iteration count, self-heal flag, serving model).
+
+### 2. Autonomous Glitch Intensity Engine (Chain-Loop)
+
+The Chain-Loop subsystem delivers done-for-you competitor reverse-engineering in one click:
+
+- **Auto-Profiling**: Given a YouTube handle or channel URL, the system scrapes channel metadata, auto-deduces the niche, and discovers viral outliers (≥50k views) across six public data relays.
+- **Live Velocity Matrix**: Competitors are ranked by viral velocity score (velocity × recency × engagement), with estimated revenue and niche CPM surfaced alongside each outlier.
+- **Reverse-Engineering**: For the selected target, captions are extracted via a mesh of third-party nodes with local-synthetic fallback; the Glitch Intensity Engine then rewrites the hook, title, narration, thumbnail creative, SEO tags, and editing guide using tiered intensity — 60% Standard for free users, 99% Extreme Glitch for Pro subscribers — enforcing Anti-Clone Illusion (analogies, case studies, and vocabulary deterministically replaced).
+- **Five-Asset Package**: Every run returns title, hook, 150–220 word script, thumbnail prompt, editing guide, SEO tag cluster, and glitch techniques — no spinner, no partial output, no "rerouting" dead ends.
+
+### 3. Persistent Channel RAG Memory
+
+Every connected channel accumulates a structured memory profile that persists across sessions and generations:
+
+- Niche classification, target audience, preferred tone, and banned clichés.
+- Past success signals (which hooks outperformed, retention peaks per format).
+- Referral-sourced growth velocity and unlock state.
+
+Memory is injected into every WriterAgent system prompt, giving the engine institutional recall of what has and hasn't performed for the specific creator — eliminating cold-start generic output on every run.
+
+### 4. Self-Healing Failover & Deterministic Fallbacks
+
+Production reliability is enforced at three layers:
+
+- **Gateway-Level Model Failover**: All LLM traffic routes through the Vercel AI Gateway with automatic fallback `google/gemini-2.5-flash → meta-llama/llama-3.3-70b-instruct → openai/gpt-4o-mini`. Failures at any tier are transparent to the client.
+- **Per-Route Deterministic Fallbacks**: If the gateway, all fallback models, JSON parsing, or upstream latency budgets fail, every content route returns a locally-synthesized, schema-valid package (titles, hooks, script, tags, description) so users never see an error state. Fallback packages are flagged via `ghostReconstructed: true` for observability.
+- **Client-Level Quantum Cache**: A two-level response cache (in-memory LRU + `localStorage`) serves stale responses for up to 30 minutes during network partitions, suppressing visible failure entirely.
+
+Edge functions enforce explicit per-call deadlines tuned to their path budget (55s for agentic generation, 60s for Chain-Loop rewrite, 15s for thumbnail reverse), and client-side retries are disabled for long-running LLM mutations to prevent phantom "tunnel interference" states.
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Notes |
 |---|---|---|
-| Frontend | React 18 + TypeScript + Vite | Fast dev server, optimized production builds, mature ecosystem. |
-| UI | Tailwind CSS + shadcn/ui + Radix primitives | Accessible, composable, fully themeable headless components. |
-| State | Zustand + React Query v5 | Predictable client state + cached server state with automatic refetch/backoff. |
-| Backend | Vercel Edge + Node.js serverless functions (root `api/`) | Sub-50ms cold starts at global edge; zero server ops. |
-| AI orchestration | Internal `packages/orchestrator` | Multi-provider routing, key rotation, circuit breaking, cost tracking, tier enforcement. |
-| Persistence & auth | Supabase (Postgres + Auth + Row-Level Security) | Managed Postgres, social auth, and qualified referral chain logic via RPC. |
-| Payments / gating | Locker integration (server-verified entitlements) | Subscription state never trusted from the client. |
-| Quality | TypeScript strict, ESLint, Vitest (unit + contract), Playwright (e2e) | CI blocks merges on type/lint/test/verify failures. |
-| Deployment | Vercel (primary), Supabase Edge (ancillary) | Production served from Vercel's edge network. |
+| Edge Runtime | Vercel Edge Functions | Global POP deployment, sub-100ms cold starts, per-route `maxDuration` budgets |
+| AI Orchestration | Vercel AI SDK + Vercel AI Gateway | Multi-provider failover, structured outputs, zero client-side retries |
+| Primary Models | Google Gemini 2.5 Flash, Meta Llama 3.3 70B Instruct, OpenAI GPT-4o Mini | Three-tier fallback chain managed at the gateway |
+| Client Framework | React 18 + TypeScript | Vite build, route-level code splitting, Suspense streaming |
+| Styling | Tailwind CSS + shadcn/ui | Custom neon/glass design system, reduced-motion respected |
+| State | Zustand (client), TanStack Query (server cache) | Deterministic stores, 10-min fresh / 30-min stale-while-revalidate |
+| Backend Data | Supabase (Postgres + RLS + Auth) | Row-level security on all user/profile/referral tables |
+| Observability | Structured edge logs, request IDs, per-call latency + token usage | Server-side only — no raw provider payloads ever reach the client |
+| Authentication | Supabase Auth + SoftGate | OAuth (Google) + email, ghost-session protection |
+| Payments & Tiering | In-app referral unlock (₹0 Pro via 3-node invite loop) | Referral tracker, ghost uplink QR artifact, XP/streak system |
+| Deployment | Vercel (production), GitHub Actions CI | 4-gate pre-push verification: import extensions, strict TS, Vite build, provider-leak scan |
 
-## Product Modules
-
-- **Clone & Crush** — Reverse-engineer competitor YouTube channels via the YouTube Data API, surface winning formats, and synthesize original scripts, hooks, tags, and thumbnail direction.
-- **SEO Optimizer** — High-intent titles, descriptions, and long-tail tag packs generated against real search-language models.
-- **Storyboard & Thumbnail Studio** — Tier-aware scene planning with multi-provider image generation, deterministic fallbacks, and per-scene latency/cost telemetry.
-- **Voiceover Studio** — Server-side TTS with static previews to minimize upstream call volume by ~80%.
-- **TubeBot (Chat Agent)** — Unified OpenRouter-backed chat interface for on-demand content ideation.
-- **Viral Referral Loop** — Qualified, HMAC-signed chain-referral system. Referrers earn a seven-day Pro pass only when three invites convert and at least one invitee unlocks Pro (anti-fraud, no fake traffic rewards).
+---
 
 ## Repository Layout
 
 ```
-Tube-click.pro/
-├── api/                     # Vercel serverless/edge functions (live HTTP surface)
-│   └── v1/                  # Versioned orchestrator endpoints (storyboard, thumbnails, tiers, metrics)
-├── apps/
-│   └── api/                 # Reference router implementation (kept for parity testing)
-├── packages/
-│   ├── ai/                  # Legacy lightweight AI client (retained for compatibility)
-│   ├── orchestrator/        # Core AI orchestration engine (routing, keys, resilience, cost)
-│   │   ├── api/             # Route handlers wired into Vercel functions
-│   │   ├── generator/       # Storyboard/thumbnail generation pipeline
-│   │   ├── keys/            # Key pool, rotation, cooldown, and exhaustion handling
-│   │   ├── manager/         # LLM director + OpenRouter client + complexity planning
-│   │   ├── observability/   # Structured logging, metrics, health snapshots
-│   │   ├── promptsmith/     # Prompt normalization + deterministic fallbacks
-│   │   ├── providers/       # Adapter layer (Gemini, Pollinations, HuggingFace, Replicate, Together, Agnes)
-│   │   └── resilience/      # Circuit breakers, retry budgets, fallback executor
-│   └── shared/              # Cross-package utilities (env parsing, types)
-├── src/                     # React SPA (routed via react-router)
-│   ├── api/client/          # Typed API client + React Query bindings
-│   ├── components/          # UI primitives (shadcn) + feature components
-│   ├── hooks/               # React hooks (data, queries, lazy loading, SEO meta)
-│   ├── integrations/supabase/  # Supabase client + auth bindings
-│   ├── lib/                 # Domain logic, auth, cache, referrals, monetization
-│   ├── pages/               # Route-level pages
-│   └── stores/              # Zustand stores
-├── public/                  # Static assets (served as-is)
-├── scripts/                 # Build/verify tooling + v1 contract test
-├── supabase/
-│   ├── migrations/          # Postgres schema migrations
-│   └── functions/           # Supabase Edge Functions (ancillary; primary path is Vercel)
-├── docs/                    # Architecture, runbooks, API spec
-├── tests/                   # Vitest unit / integration tests
-└── e2e/                     # Playwright end-to-end tests
+api/                    # Vercel Edge Functions (one per product surface)
+  _shared.ts            # CORS, timeout signals, error classification, sanitization
+  _ai.ts                # Stable ChatGenerationError wrapper over the AI gateway
+  _agenticEngine.ts     # Writer ↔ Critic adversarial loop with per-call deadlines
+  generate-text.ts      # Autonomous content-generation endpoint (5 assets)
+  clone-crush.ts        # Chain-Loop Glitch Intensity Engine
+  analyze-storyboard.ts # Script scene-beat analyzer
+  seo-tags.ts           # SEO tag cluster generator
+  transcript.ts         # YouTube caption extraction (multi-relay)
+  referrals.ts          # Referral attribution + Pro unlock
+packages/
+  orchestrator/         # Gateway client, tier policy, routing, thumbnail pipeline
+  shared/               # Cross-cutting types, env schemas, limits
+src/
+  pages/                # Route-level pages (Dashboard, CloneCrush, VoiceStudio, Rewards, ...)
+  components/           # UI library, layout shell, referral artifacts, overlays
+  stores/               # Zustand stores (auth, workflow, clone-crush, content, app)
+  api/client/           # Typed edge client with resilient cache + timeouts
+  lib/                  # Domain logic: domain canonicalization, referrals, cache, RAG memory primitives
+tests/                  # Vitest unit + conformance suites (462 tests, 53 files)
+scripts/verify.mjs      # Pre-push gate runner (TS strict + build + provider-leak scan)
 ```
 
-## System Architecture
+---
 
-```
-                         ┌────────────────────────────────┐
-                         │         Browser (SPA)          │
-                         │  React + Vite + Tailwind/Radix │
-                         │  Zustand + React Query (cache) │
-                         └──────────────┬─────────────────┘
-                                        │ HTTPS
-                                        ▼
-                         ┌────────────────────────────────┐
-                         │    Vercel Edge / Frontdoor     │
-                         │  rewrite all routes → /index  │
-                         │  /api/* functions terminate    │
-                         └─────┬──────────────┬───────────┘
-                               │              │
-              ┌────────────────┘              └────────────────┐
-              ▼                                                ▼
-  ┌─────────────────────────┐                  ┌─────────────────────────┐
-  │   api/_ai.ts, api/v1/*  │                  │  api/referrals.ts,      │
-  │  api/seo-tags.ts, ...   │                  │  api/clone-crush.ts,    │
-  │  (chat, SEO, storyboard,│                  │  api/transcript.ts,     │
-  │   thumbnails, TTS)      │                  │  api/guest-access.ts    │
-  └────────────┬────────────┘                  └────────────┬────────────┘
-               │                                            │
-               ▼                                            ▼
-  ┌──────────────────────────────────────────────────────────────────────┐
-  │              packages/orchestrator (server-side core)                │
-  │  Manager  →  Promptsmith  →  Providers  →  Resilience  →  Observability │
-  │  (LLM dir)  (prompt norm.)   (multi-adapt.) (circuit/RT/FB) (metrics)  │
-  └──────────────────────────────┬───────────────────────────────────────┘
-                                 │
-            ┌────────────────────┼────────────────────┐
-            ▼                    ▼                    ▼
-     ┌──────────────┐     ┌─────────────┐     ┌───────────────┐
-     │ OpenRouter   │     │   YouTube   │     │   Supabase    │
-     │ (primary)    │     │ Data API v3 │     │ Postgres+Auth │
-     │ Gemini · HF  │     │ transcripts │     │ Referral RPCs │
-     │ Replicate ·  │     │             │     │     RLS       │
-     │ Pollinations │     │             │     │               │
-     └──────────────┘     └─────────────┘     └───────────────┘
-```
+## Performance & Reliability Targets
 
-**Security model.** No AI provider key, YouTube API key, or payment secret is ever sent to the browser. The client only holds the Supabase anon key and the Vite-injected public app URL. All third-party calls are mediated by Vercel functions, which read secrets from `process.env`. Supabase Row-Level Security and signed HttpOnly cookies enforce entitlement decisions on the server; client-side gating is purely cosmetic.
+| Metric | Target |
+|---|---|
+| Edge P95 latency (asset generation) | < 8s on cache hit, < 25s on primary model, < 45s post-failover |
+| Visible error rate | 0% (deterministic fallback always returns a valid package) |
+| Client-side bundle (initial) | Code-split; heavy tools lazy-loaded via `React.lazy` |
+| Test coverage gate | 53 test files, 462 assertions, must pass on every push |
+| Type safety | TypeScript strict mode (`tsconfig.app.json` + `tsconfig.api.json`) zero errors |
+| Data isolation | Supabase RLS on every user table; no provider key material ever ships to the client |
 
-## Getting Started
+---
 
-### Prerequisites
+## Security & Privacy
 
-- Node.js ≥ 20
-- npm ≥ 10
+- All AI provider keys live in Vercel environment variables; they are never exposed to the client or logged in user-facing errors.
+- Raw provider error payloads are classified server-side and mapped to a stable `FriendlyError` envelope before transit.
+- OAuth flows execute exclusively against the canonical domain (`tubeclickpro.in`); temporary preview hosts trigger an automatic redirect overlay to prevent split-session leaks.
+- All content generated through the platform is scoped to the authenticated creator's account and protected by Supabase RLS.
 
-### Install & run
+---
 
-```bash
-git clone https://github.com/RJrazz4/Tube-click.pro.git
-cd Tube-click.pro
-npm install
-cp .env.example .env            # fill in server-side secrets (see docs/ENVIRONMENT.md)
-npm run dev                     # http://localhost:5173
-```
+## Licensing & Copyright
 
-### Production-quality checks
+**PROPRIETARY AND CONFIDENTIAL**
 
-```bash
-npm run lint                    # ESLint with suppression registry
-npm run typecheck               # tsc across app, api, and packages
-npm test                        # Vitest unit + integration suite
-npm run test:v1-contract        # v1 HTTP contract (storyboard/thumbnail shape)
-npm run verify                  # Build-time surface verification
-npm run ci                      # All of the above — CI gate
-npm run build                   # Production bundle to dist/
-```
+Copyright © 2026 TubeClick Pro. All rights reserved.
 
-### End-to-end tests
+This repository and all source code, build artifacts, configuration, prompts, model routing logic, Glitch Intensity heuristics, Chain-Loop orchestration, referral architecture, and contained intellectual property are the exclusive property of TubeClick Pro.
 
-```bash
-npx playwright install          # one-time browser install
-npx playwright test             # headless e2e suite in e2e/
-```
+Unauthorized copying, distribution, reproduction, modification, public display, performance, or reverse engineering of this repository — in whole or in part, via any medium, including but not limited to AI-assisted training, model distillation, or fork redistribution — is strictly prohibited and will be enforced to the fullest extent of applicable law.
 
-## Environment & Secrets
-
-Secrets management is documented in [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md). The headline rule: **never commit or expose a server key with the `VITE_` prefix.** The `.env.example` file lists every variable with purpose, default, and security classification.
-
-## Deployment
-
-The production target is **Vercel**.
-
-1. Connect the GitHub repository to a Vercel project.
-2. Configure environment variables in the Vercel dashboard (do not commit a `.env`).
-3. `vercel --prod` deploys the SPA and provisions `api/*.ts` as Edge/Node functions automatically — no extra routing required (see `vercel.json`).
-4. Supabase migrations in `supabase/migrations/` are applied via `supabase db push` against the linked project.
-
-## API Reference
-
-The public HTTP surface is specified as an OpenAPI 3.0 document at [`docs/openapi.yaml`](docs/openapi.yaml). Versioned endpoints live under `/api/v1/`; unversioned endpoints (chat, SEO, TTS, referrals, clone-crush, transcript, guest-access, config) remain stable.
-
-## Contributing
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md). Branch protection on `main` requires the `ci` script to pass and one review before merge. Commits follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
-
-## Further Reading
-
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — deep architecture, resilience model, tier policy
-- [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) — environment variables and secret handling
-- [`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md) — production runbook, monitoring, incident response
-- [`docs/openapi.yaml`](docs/openapi.yaml) — API contract
-- [`docs/archive/`](docs/archive/) — historical release notes
-
-## License
-
-Private and proprietary. © TubeClick Pro. All rights reserved.
+Access to this repository is granted solely to authorized engineers and contractors bound by a current non-disclosure and licensing agreement with TubeClick Pro. If you have received this code in error, please notify the owner immediately and delete all copies.
