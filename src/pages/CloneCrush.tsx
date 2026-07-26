@@ -200,6 +200,12 @@ export default function CloneCrush() {
     if (!selectedVideo) { toast.error("Select a competitor video from matrix"); return; }
     if (selectedVideo.isLocked && license.tier === "free") { toast.error("Requires Pro. Unlock via Referral Rewards"); return; }
 
+    // Pre-flight: free users cannot fire 99% Glitch at all — bounce to /rewards.
+    if (license.tier !== "pro" && selectedTier === "premium") {
+      routeFreeToProUpsell();
+      return;
+    }
+
     // Free-tier daily-limit short-circuit. The server will also enforce this
     // before running any LLM work, but checking here skips the long spinner
     // and surfaces the paywall instantly.
@@ -326,7 +332,15 @@ export default function CloneCrush() {
   const handleCopyThumbnailPrompt = async () => { if (!activeRewrite) return; try { await navigator.clipboard.writeText(activeRewrite.thumbnailPrompt || "Cinematic thumbnail"); toast.success("Thumbnail prompt copied!"); } catch { toast.error("Copy failed"); } };
   const handleCopySeoTags = async () => { if (!activeRewrite) return; try { await navigator.clipboard.writeText((activeRewrite.seoTags||[]).join(", ")); toast.success("SEO tags copied!"); } catch { toast.error("Copy failed"); } };
   const handleCopyScript = async () => { if (!activeRewrite) return; const txt = `TITLE: ${activeRewrite.rewrittenTitle}\nHOOK: ${activeRewrite.glitchHook}\nSCRIPT: ${activeRewrite.fullScript}`; try { await navigator.clipboard.writeText(txt); setCopiedText(true); toast.success("Script copied!"); setTimeout(()=>setCopiedText(false),2000); } catch { toast.error("Copy failed"); } };
-  const openReferralRewards = () => navigate("/rewards");
+  const openReferralRewards = () => navigate("/rewards?upsell=clonecrush");
+
+  // Hard preflight: free users may never run the 99% Glitch. Any click path
+  // that tries to select premium tier on a free account must bounce the user
+  // directly to the Referral Rewards upsell — no fake console, no spinner.
+  const routeFreeToProUpsell = () => {
+    toast.error("99% Glitch reserved for Pro • Rerouting to Private Tracker", { id: "pro-upsell-99glitch" });
+    openReferralRewards();
+  };
 
   return (
     <div className="relative space-y-6 md:space-y-8 animate-fade-in pb-12">
@@ -384,7 +398,19 @@ export default function CloneCrush() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1">
                   <Youtube className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input placeholder="YouTube Channel URL or Handle (e.g. @MrBeast)" value={channelInput} onChange={e=>setChannelInput(e.target.value)} className="pl-10 bg-secondary/40 border-border/80 h-11 text-sm placeholder:text-muted-foreground/60" />
+                  <Input placeholder="YouTube Channel URL or Handle (e.g. @MrBeast)" value={channelInput} onChange={e=>{
+                    // As soon as the user starts typing a new link, wipe the
+                    // prior workflow's generated asset + console so the old
+                    // script/thumb/tags/guide never sits stale under the
+                    // new input. beginNewWorkflow will also fire on submit.
+                    const next = e.target.value;
+                    setChannelInput(next);
+                    if (next.trim().length > 0 && (activeRewrite || logSteps.length > 0 || rewrites.length > 0)) {
+                      setActiveRewrite(null);
+                      setLogSteps([]);
+                      setSelectedVideo(null);
+                    }
+                  }} className="pl-10 bg-secondary/40 border-border/80 h-11 text-sm placeholder:text-muted-foreground/60" />
                 </div>
                 <Button onClick={handleProfileChannel} disabled={isProfiling} className="cyber-button px-5 h-11 shrink-0 font-display text-sm flex gap-2">
                   {isProfiling ? <><Loader2 className="w-4 h-4 animate-spin" />Ghost Scraping...</> : <><Cpu className="w-4 h-4" />Launch Ghost Showdown</>}
@@ -430,7 +456,15 @@ export default function CloneCrush() {
                   <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">Live Velocity Matrix</span><span className="text-xs text-muted-foreground">{competitors.length} Outliers {(competitors[0] as any)?.isGhostReconstructed && <span className="text-amber-300">• Ghost</span>}</span></div>
                   {isSearchingCompetitors ? (<div className="py-10 text-center space-y-2"><Loader2 className="w-7 h-7 animate-spin text-primary mx-auto" /><p className="text-xs text-muted-foreground">Auditing via ghost mesh (6 relays)...</p><div className="flex justify-center gap-1 mt-2">{[0,1,2,3].map(i=><span key={i} className="w-1 h-1 rounded-full bg-primary/60 animate-pulse" style={{animationDelay:`${i*150}ms`}} />)}</div></div>) : competitors.length>0 ? (
                     <div key={workflowNonce} className="grid grid-cols-3 gap-2 mt-2">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400'; const tileLocked = video.isLocked || (license.tier!=="pro" && dailyLimitActive && !isSelected); return (
-                      <div key={video.videoId} onClick={()=>{ if(video.isLocked) return; if(license.tier!=="pro" && dailyLimitActive) { openReferralRewards(); return; } setSelectedVideo(video); selectWorkflowCompetitor({videoId:video.videoId,title:video.title,url:video.url,channelName:video.channelName,thumbnail:video.thumbnail}, nicheInput); }} className={`group relative rounded-xl border p-2 transition-all duration-300 flex flex-col justify-between bg-secondary/30 ${isSelected?"border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow":"border-border/60 hover:border-border"} ${tileLocked?"pointer-events-none":"cursor-pointer"}`}>
+                      <div key={video.videoId} onClick={()=>{ if(video.isLocked) return; if(license.tier!=="pro" && dailyLimitActive) { openReferralRewards(); return; }
+                      // New tile = new active asset. Wipe previously-generated
+                      // script/thumb/tags/guide so stale output from a prior
+                      // competitor never bleeds onto the newly-selected tile.
+                      setActiveRewrite(null);
+                      setLogSteps([]);
+                      setActiveTab("script");
+                      setCopiedText(false);
+                      setSelectedVideo(video); selectWorkflowCompetitor({videoId:video.videoId,title:video.title,url:video.url,channelName:video.channelName,thumbnail:video.thumbnail}, nicheInput); }} className={`group relative rounded-xl border p-2 transition-all duration-300 flex flex-col justify-between bg-secondary/30 ${isSelected?"border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow":"border-border/60 hover:border-border"} ${tileLocked?"pointer-events-none":"cursor-pointer"}`}>
                         <div className="absolute top-1 left-1 z-10 bg-primary text-primary-foreground text-[7px] font-bold px-1.5 py-0.5 rounded-full">{idx===0?"Unlocked":`Locked #${idx}`}</div>
                         {video.isLocked ? <ProtectedVideoPreview video={video} /> : <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0 mb-1.5"><img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />{license.tier!=="pro" && dailyLimitActive && <DailyLimitOverlay />}</div>}
                         <div><p className="text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p><p className="text-[8px] text-primary font-mono mt-1 font-semibold">{video.views}</p><div className="flex items-center gap-1.5 mt-1">{video.estimatedRevenue && <span className="text-[7px] font-bold text-green-400 bg-green-400/10 px-1 py-0.5 rounded flex items-center gap-0.5"><DollarSign className="w-2.5 h-2.5" />{video.estimatedRevenue}</span>}{video.viralVelocityScore!==undefined && <span className={`text-[7px] font-bold ${velocityColor} bg-secondary/60 px-1 py-0.5 rounded flex items-center gap-0.5`}><Flame className="w-2.5 h-2.5" />{video.viralVelocityScore}</span>}</div></div>
@@ -464,7 +498,7 @@ export default function CloneCrush() {
                     <div className="flex items-center gap-2 mb-1"><input type="radio" checked={selectedTier==="free"} onChange={()=>{}} className="accent-primary" /><p className="text-sm font-bold text-foreground">60% Loophole (Vibe-Extract)</p></div>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">Extracts core points, writes entirely new narrative flow, fresh pacing. Ghost cached.</p>
                   </div>
-                  <div onClick={()=>{ if(license.tier==="free"){ toast.error("99% Glitch reserved for Pro"); return;} setSelectedVideoTier("premium"); }} className={`rounded-xl border p-4 cursor-pointer transition-all ${license.tier==="free"?"opacity-50":""} ${selectedTier==="premium"?"border-primary bg-primary/5 ring-1 ring-primary/30":"border-border/60 hover:border-border bg-secondary/10"}`}>
+                  <div onClick={()=>{ if(license.tier==="free"){ routeFreeToProUpsell(); return;} setSelectedVideoTier("premium"); }} className={`rounded-xl border p-4 cursor-pointer transition-all ${license.tier==="free"?"opacity-60":""} ${selectedTier==="premium"?"border-primary bg-primary/5 ring-1 ring-primary/30":"border-border/60 hover:border-border bg-secondary/10"}`}>
                     <div className="flex items-center justify-between gap-2 mb-1"><div className="flex items-center gap-2"><input type="radio" checked={selectedTier==="premium"} onChange={()=>{}} disabled={license.tier==="free"} className="accent-primary" /><p className="text-sm font-bold text-foreground">99% Glitch (Maximum Aggression)</p></div>{license.tier==="free" && <Lock className="w-3.5 h-3.5 text-primary" />}</div>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">Extreme Curiosity Glitches, time-jumps, hidden secrets. Reverse-engineers thumbnails ruthlessly.</p>
                   </div>

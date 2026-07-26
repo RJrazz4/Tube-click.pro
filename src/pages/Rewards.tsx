@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, Copy, Crown, Gift, Loader2, LockKeyhole, ShieldCheck, Sparkles, UserRoundCheck, Users, Terminal, Activity, Cpu, Flame, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 
@@ -10,10 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { claimReferralAttribution, loadReferralProfile, type ReferralProfile } from "@/lib/referrals/client";
 import { buildReferralPromo } from "@/lib/referrals/promo";
 import { buildReferralUrl } from "@/lib/domain/canonical";
-import { ReferralPromoArtifact } from "@/components/referrals/ReferralPromoArtifact";
-import { ReferralLeaderboardGhost } from "@/components/referrals/ReferralLeaderboardGhost";
 import { ProExpiryCountdown } from "@/components/referrals/ProExpiryCountdown";
-import { GhostStreak } from "@/components/referrals/GhostStreak";
 import { WarRoomTicker } from "@/components/ui/WarRoomTicker";
 import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
 import { LiveActiveCounter } from "@/components/ui/LiveActiveCounter";
@@ -24,8 +21,23 @@ import { XpGainPopup } from "@/components/ui/XpGainPopup";
 import { VideoWallBackground } from "@/components/ui/VideoWallBackground";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
-import { ReferralMilestones } from "@/components/referrals/ReferralMilestones";
-import { ReferralShareActions } from "@/components/referrals/ReferralShareActions";
+import { RewardsPanelFallback, RewardsShellSkeleton } from "@/components/referrals/RewardsSkeletons";
+
+// Heavy referral sub-components lazy-loaded so the route shell paints
+// instantly. These chunks only download after the hero/progress card is
+// visible — eliminating the cold-start lag on /rewards navigation.
+const ReferralPromoArtifact = lazy(() => import("@/components/referrals/ReferralPromoArtifact").then(m => ({ default: m.ReferralPromoArtifact })));
+const ReferralLeaderboardGhost = lazy(() => import("@/components/referrals/ReferralLeaderboardGhost").then(m => ({ default: m.ReferralLeaderboardGhost })));
+const GhostStreak = lazy(() => import("@/components/referrals/GhostStreak").then(m => ({ default: m.GhostStreak })));
+const ReferralMilestones = lazy(() => import("@/components/referrals/ReferralMilestones").then(m => ({ default: m.ReferralMilestones })));
+const ReferralShareActions = lazy(() => import("@/components/referrals/ReferralShareActions").then(m => ({ default: m.ReferralShareActions })));
+
+// In-memory referral-profile cache (module-scoped). Survives across
+// remounts of the page within a single session so the dashboard paints
+// from cache on the very first render and refetches in the background.
+// TTL is 60s — after that we still show cached data but refresh.
+const REFERRAL_CACHE_TTL_MS = 60_000;
+let profileCache: { profile: ReferralProfile | null; fetchedAt: number } | null = null;
 
 export default function Rewards() {
   const { isAuthLoading, isAuthenticated, requestAuthentication } = useSoftGate();
@@ -38,25 +50,60 @@ export default function Rewards() {
   const [burst, setBurst] = useState(0);
   const [xpBurst, setXpBurst] = useState(0);
 
-  const refresh = useCallback(async () => {
+  // Fire a refetch in the background; we don't await it inside effects
+  // that synchronously hydrate from cache. Keeps paint instant while
+  // the dashboard stays within 60s of truth.
+  const backgroundRefetch = useRef<Promise<void> | null>(null);
+  const fetchProfile = useCallback(async (opts?: { force?: boolean }): Promise<ReferralProfile | null> => {
     const { data } = await supabase.auth.getSession();
-    if (!data.session) { setProfile(null); setLoading(false); return; }
-    setLoading(true); setLoadError(false);
+    if (!data.session) {
+      profileCache = null;
+      return null;
+    }
+    await claimReferralAttribution().catch(() => undefined);
+    return await loadReferralProfile();
+  }, []);
+
+  const refresh = useCallback(async () => {
+    setLoadError(false);
     try {
-      await claimReferralAttribution().catch(() => undefined);
-      const nextProfile = await loadReferralProfile();
-      setProfile(nextProfile);
-      if (nextProfile.proTierExpiresAt && new Date(nextProfile.proTierExpiresAt).getTime() > Date.now()) {
-        setLicense({ tier: "pro", status: "active", expiresAt: nextProfile.proTierExpiresAt });
-        setAppTier("pro");
+      const nextProfile = await fetchProfile({ force: true });
+      if (nextProfile) {
+        profileCache = { profile: nextProfile, fetchedAt: Date.now() };
+        setProfile(nextProfile);
+        if (nextProfile.proTierExpiresAt && new Date(nextProfile.proTierExpiresAt).getTime() > Date.now()) {
+          setLicense({ tier: "pro", status: "active", expiresAt: nextProfile.proTierExpiresAt });
+          setAppTier("pro");
+        }
+      } else {
+        setProfile(null);
       }
     } catch {
       setLoadError(true);
       toast.error("Ghost mesh rerouting - qualification safe in quantum cache • MUM-01");
-    } finally { setLoading(false); }
-  }, [setAppTier, setLicense]);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchProfile, setAppTier, setLicense]);
 
-  useEffect(() => { void refresh(); }, [isAuthenticated, refresh]);
+  // First paint: if we have a fresh cache, render it instantly and only
+  // show the spinner on a true cold start. A background refetch keeps
+  // the data fresh without blocking the route transition.
+  useEffect(() => {
+    const cached = profileCache;
+    const now = Date.now();
+    if (cached && cached.profile && now - cached.fetchedAt < REFERRAL_CACHE_TTL_MS) {
+      setProfile(cached.profile);
+      setLoading(false);
+      // Background refresh to keep cache warm
+      if (!backgroundRefetch.current) {
+        backgroundRefetch.current = refresh().finally(() => { backgroundRefetch.current = null; });
+      }
+      return;
+    }
+    if (!isAuthenticated && !isAuthLoading) { setProfile(null); setLoading(false); return; }
+    if (isAuthenticated) void refresh();
+  }, [isAuthenticated, isAuthLoading, refresh]);
 
   useEffect(() => {
     if (profile && (profile.verifiedReferrals >= 3 || profile.qualified)) {
@@ -106,7 +153,7 @@ export default function Rewards() {
 
   if (loadError) return <div className="flex min-h-[60vh] items-center justify-center"><Card className="max-w-md glass-strong border-amber-500/20 text-center"><CardContent className="space-y-3 p-8"><p className="font-display text-lg font-bold flex items-center justify-center gap-2"><Cpu className="w-5 h-5 text-amber-400" />Ghost Mesh Rerouting</p><p className="text-sm text-muted-foreground">Qualification safe in quantum cache (30m). MUM-01 retrying encrypted uplink to tubeclickpro.in</p><Button onClick={() => void refresh()} variant="outline">Retry via Ghost Relay</Button></CardContent></Card></div>;
 
-  if (loading || !profile) return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /><span className="ml-2 text-xs font-mono text-muted-foreground">Ghost sync via MUM-01 • tubeclickpro.in • 87ms</span></div>;
+  if (loading || !profile) return <RewardsShellSkeleton />;
 
   return (
     <div className="relative mx-auto max-w-6xl space-y-6 animate-fade-in">
@@ -160,12 +207,14 @@ export default function Rewards() {
                   <strong className="flex items-center gap-1.5"><Activity className="w-4 h-4" />Ghost Protocol Loophole • $97 → ₹0 Heist:</strong> Invite 3 nodes via private tracker link <span className="font-mono text-cyan-300">tubeclickpro.in/ref/...?clearance=LEVEL4</span>. When 1 node unlocks Elite via their own referral, you both get 7 Days Premium FREE via MUM-01 ghost relay! Help them grow to grow yourself. Quantum cache ensures zero loss. This is how you legally steal $97/mo tool for ₹0.
                 </div>
                 {profile.proTierExpiresAt && <ProExpiryCountdown expiresAt={profile.proTierExpiresAt} />}
-                <ReferralMilestones profile={profile} />
+                <Suspense fallback={<RewardsPanelFallback />}>
+                  <ReferralMilestones profile={profile} />
+                </Suspense>
               </CardContent>
             </Card>
             <div className="grid md:grid-cols-2 gap-4">
-              <GhostStreak />
-              <ReferralLeaderboardGhost />
+              <Suspense fallback={<RewardsPanelFallback />}><GhostStreak /></Suspense>
+              <Suspense fallback={<RewardsPanelFallback />}><ReferralLeaderboardGhost /></Suspense>
             </div>
           </div>
 
@@ -182,8 +231,12 @@ export default function Rewards() {
                   <span className="text-[8px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded">$97→₹0</span>
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><Button onClick={copyInvite} className="cyber-button h-11 w-full gap-2 font-mono text-xs"><Copy className="h-4 w-4" />{copied ? "Link copied" : "Copy referral link"}</Button><ReferralShareActions url={referralUrl} /></div>
-              <ReferralPromoArtifact referralCode={profile.referralCode} />
+              <Suspense fallback={<div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><div className="h-11 rounded-md bg-secondary/30 animate-pulse" /><div className="h-11 rounded-md bg-secondary/30 animate-pulse" /></div>}>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><Button onClick={copyInvite} className="cyber-button h-11 w-full gap-2 font-mono text-xs"><Copy className="h-4 w-4" />{copied ? "Link copied" : "Copy referral link"}</Button><ReferralShareActions url={referralUrl} /></div>
+              </Suspense>
+              <Suspense fallback={<RewardsPanelFallback />}>
+                <ReferralPromoArtifact referralCode={profile.referralCode} />
+              </Suspense>
               <div className="rounded-lg bg-secondary/30 border border-border/40 p-2.5">
                 <p className="text-[10px] font-mono font-bold text-primary flex items-center gap-1.5"><DollarSign className="w-3 h-3" />Value Anchor • $100/mo Illusion</p>
                 <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">This holographic keycard looks like it should cost <span className="line-through">$97/mo</span> <span className="text-green-400 font-bold">→ you get it for ₹0</span> via private tracker. QR encodes <span className="text-cyan-300 font-mono">tubeclickpro.in/ref/...?clearance=LEVEL4</span>. Every share spreads ghost node.</p>
