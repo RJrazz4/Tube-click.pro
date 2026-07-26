@@ -234,6 +234,32 @@ async function sleepWithJitter(baseMs: number): Promise<void> {
   await new Promise(r => setTimeout(r, Math.round(baseMs + jitter)));
 }
 
+/**
+ * Peek the current Clone & Crush daily quota without consuming a run.
+ * Returns a QuotaDecision payload (allowed, tier, resetAt, remainingSeconds).
+ * Cached for 30s on the client; callers (useCloneCrushQuota) handle TTL.
+ */
+export async function fetchCloneCrushQuota(signal?: AbortSignal): Promise<any> {
+  const { url, headers, isVercel } = getApiEndpoint("clone-crush");
+  if (isVercel) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+    } catch { /* ignore */ }
+  }
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ action: "quota" }),
+    signal,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new EdgeFunctionError(text || `Quota check failed (${res.status})`, res.status);
+  }
+  return res.json();
+}
+
 export async function fetchEdgeFunctionJson<T>(functionName: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const cacheKey = qcKey(functionName, body);
   const cached = qcGet<T>(cacheKey);

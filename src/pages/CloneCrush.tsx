@@ -25,6 +25,9 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { useTranscriptExtraction, useCloneCrushMutation } from "@/hooks/useSecureQuery";
 import { useSoftGate } from "@/contexts/SoftGateContext";
 import { useWorkflowStore } from "@/stores/useWorkflowStore";
+import { DailyLimitOverlay } from "@/components/showdown/DailyLimitOverlay";
+import { useQuotaStore } from "@/stores/useQuotaStore";
+import { useCloneCrushQuota } from "@/hooks/useCloneCrushQuota";
 
 type ProfileWithKeywords = ProfiledChannel & { extractedKeywords?: string[] };
 
@@ -55,6 +58,7 @@ export default function CloneCrush() {
   const {
     profile, isProfiling, competitors, isSearchingCompetitors, envyMetrics, threatAlerts, wideningGap, rewrites, isRewriting, activeRewrite,
     setProfile, setIsProfiling, setCompetitors, setIsSearchingCompetitors, setThreatAlerts, addRewrite, setIsRewriting, setActiveRewrite, deleteRewrite,
+    beginNewWorkflow,
   } = useCloneCrushStore();
 
   const saveContent = useContentStore((s) => s.saveContent);
@@ -77,13 +81,20 @@ export default function CloneCrush() {
   const [burstTrigger, setBurstTrigger] = useState(0);
   const [xpTrigger, setXpTrigger] = useState(0);
   const [showIntelDrop, setShowIntelDrop] = useState(true);
+  const [workflowNonce, setWorkflowNonce] = useState(0);
+  const [dailyLimitActive, setDailyLimitActive] = useState(false);
 
   const transcriptMutation = useTranscriptExtraction();
   const cloneCrushMutation = useCloneCrushMutation();
+  const { quota: dailyQuota, isBlocked: dailyLimitBlocked, refresh: refreshQuota } = useCloneCrushQuota();
 
   useEffect(() => {
     if (license.tier === "free") setSelectedVideoTier("free");
   }, [license.tier]);
+
+  useEffect(() => {
+    setDailyLimitActive(license.tier !== "pro" && dailyQuota.allowed === false && (dailyQuota.remainingSeconds ?? 0) > 0);
+  }, [license.tier, dailyQuota.allowed, dailyQuota.remainingSeconds]);
 
   useEffect(() => {
     if (profile) {
@@ -147,6 +158,20 @@ export default function CloneCrush() {
   const performProfileChannel = async () => {
     const input = channelInput.trim();
     if (!input) { toast.error("Please enter a YouTube Channel URL or Handle"); return; }
+    // Atomic store reset BEFORE async work so stale competitors/rewrites don't
+    // bleed into the new scan. Local UI state is reset alongside it, and the
+    // keyed panel below forces React to unmount/remount the competitor matrix.
+    beginNewWorkflow();
+    setSelectedVideo(null);
+    setLogSteps([]);
+    setActiveTab("script");
+    setBurstTrigger(0);
+    setXpTrigger(0);
+    setShowIntelDrop(true);
+    setNicheInput("");
+    setCustomDescription("");
+    setWorkflowNonce((n) => n + 1);
+    setDailyLimitActive(false);
     setIsProfiling(true);
     toast.loading("Establishing ghost tunnel to YouTube veil layer...", { id: "profile-scrape" });
     try {
@@ -174,6 +199,19 @@ export default function CloneCrush() {
   const performCloneAndCrush = async () => {
     if (!selectedVideo) { toast.error("Select a competitor video from matrix"); return; }
     if (selectedVideo.isLocked && license.tier === "free") { toast.error("Requires Pro. Unlock via Referral Rewards"); return; }
+
+    // Free-tier daily-limit short-circuit. The server will also enforce this
+    // before running any LLM work, but checking here skips the long spinner
+    // and surfaces the paywall instantly.
+    if (license.tier !== "pro") {
+      try { await refreshQuota(true); } catch { /* server enforcement still applies */ }
+      const q = useQuotaStore.getState();
+      if (!q.allowed && q.remainingSeconds > 0) {
+        setDailyLimitActive(true);
+        toast.error("Daily free limit reached — unlock Pro for unlimited Chain-Loops", { id: "daily-limit" });
+        return;
+      }
+    }
 
     setIsRewriting(true);
     setActiveTab("script");
@@ -233,20 +271,47 @@ export default function CloneCrush() {
         if (navigator.vibrate) navigator.vibrate([20, 30, 20]);
         try { const s = JSON.parse(localStorage.getItem("ghost_streak_v2") || "{}"); const xp = (s.xp || 0) + 30; const streak = s.streak || 1; localStorage.setItem("ghost_streak_v2", JSON.stringify({ ...s, xp, streak, lastDate: new Date().toDateString() })); } catch {}
         toast.success(`🚀 ${selectedTier==="premium"?"99% GLITCH":"60% Standard"} Chain-Loop Secured via Ghost Node • ${promptCount} prompts • +30 XP`);
-      } else throw new Error(rewriteRes.error || "Compilation interference");
-    } catch (err: any) {
+        // Refresh quota immediately after a successful free-tier run so the
+        // UI flips to "locked" state without waiting for the next tick.
+        if (license.tier !== "pro") void refreshQuota(true);
+      } else if ((rewriteRes as any).code === "DAILY_LIMIT") {
+        // Server-authoritative: free user burned their run today.
+        const limitRes = rewriteRes as any;
+        useQuotaStore.getState().setQuota({
+          allowed: false,
+          tier: "free",
+          usedToday: 1,
+          limit: 1,
+          remaining: 0,
+          resetAt: typeof limitRes.resetAt === "string" ? limitRes.resetAt : null,
+          remainingSeconds: typeof limitRes.remainingSeconds === "number" ? limitRes.remainingSeconds : 24 * 3600,
+        });
+        setDailyLimitActive(true);
+        setLogSteps([]);
+        toast.error("Daily free limit reached — unlock Pro ₹0 for unlimited Chain-Loops", { id: "daily-limit" });
+        return;
+      } else throw new Error((rewriteRes as any).error || "Compilation interference");
+    } catch (err: unknown) {
       // Any failure path at this point should have been absorbed by the
       // server-side fallback (rewrite endpoint always returns a package,
       // even when the gateway/upstream fails). If we land here it's a
       // genuine transport failure — mark every still-processing step as
       // recovered so the UI doesn't sit on a spinner forever.
+      const errCode = (err as any)?.code;
+      if (errCode === "DAILY_LIMIT" || errCode === 402) {
+        setDailyLimitActive(true);
+        void refreshQuota(true);
+        toast.error("Daily free limit reached — unlock Pro ₹0", { id: "daily-limit" });
+        setIsRewriting(false);
+        return;
+      }
       const recovered = steps.map((s) =>
         s.status === "processing" || s.status === "pending"
           ? { ...s, status: "success" as const, meta: s.meta || "RECOVERED" }
           : s,
       );
       setLogSteps(recovered);
-      console.warn("[clone-crush] Chain-Loop transport error:", err?.message);
+      console.warn("[clone-crush] Chain-Loop transport error:", err instanceof Error ? err.message : String(err));
     } finally { setIsRewriting(false); }
   };
 
@@ -364,10 +429,10 @@ export default function CloneCrush() {
                 <Card className="glass-strong border-border/80 p-5 h-full flex flex-col justify-between">
                   <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">Live Velocity Matrix</span><span className="text-xs text-muted-foreground">{competitors.length} Outliers {(competitors[0] as any)?.isGhostReconstructed && <span className="text-amber-300">• Ghost</span>}</span></div>
                   {isSearchingCompetitors ? (<div className="py-10 text-center space-y-2"><Loader2 className="w-7 h-7 animate-spin text-primary mx-auto" /><p className="text-xs text-muted-foreground">Auditing via ghost mesh (6 relays)...</p><div className="flex justify-center gap-1 mt-2">{[0,1,2,3].map(i=><span key={i} className="w-1 h-1 rounded-full bg-primary/60 animate-pulse" style={{animationDelay:`${i*150}ms`}} />)}</div></div>) : competitors.length>0 ? (
-                    <div className="grid grid-cols-3 gap-2 mt-2">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400'; return (
-                      <div key={video.videoId} onClick={()=>{ if(video.isLocked) return; setSelectedVideo(video); selectWorkflowCompetitor({videoId:video.videoId,title:video.title,url:video.url,channelName:video.channelName,thumbnail:video.thumbnail}, nicheInput); }} className={`group relative rounded-xl border p-2 cursor-pointer transition-all duration-300 flex flex-col justify-between bg-secondary/30 ${isSelected?"border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow":"border-border/60 hover:border-border"} ${video.isLocked?"pointer-events-none":""}`}>
+                    <div key={workflowNonce} className="grid grid-cols-3 gap-2 mt-2">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400'; const tileLocked = video.isLocked || (license.tier!=="pro" && dailyLimitActive && !isSelected); return (
+                      <div key={video.videoId} onClick={()=>{ if(video.isLocked) return; if(license.tier!=="pro" && dailyLimitActive) { openReferralRewards(); return; } setSelectedVideo(video); selectWorkflowCompetitor({videoId:video.videoId,title:video.title,url:video.url,channelName:video.channelName,thumbnail:video.thumbnail}, nicheInput); }} className={`group relative rounded-xl border p-2 transition-all duration-300 flex flex-col justify-between bg-secondary/30 ${isSelected?"border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow":"border-border/60 hover:border-border"} ${tileLocked?"pointer-events-none":"cursor-pointer"}`}>
                         <div className="absolute top-1 left-1 z-10 bg-primary text-primary-foreground text-[7px] font-bold px-1.5 py-0.5 rounded-full">{idx===0?"Unlocked":`Locked #${idx}`}</div>
-                        {video.isLocked ? <ProtectedVideoPreview video={video} /> : <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0 mb-1.5"><img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" /></div>}
+                        {video.isLocked ? <ProtectedVideoPreview video={video} /> : <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0 mb-1.5"><img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />{license.tier!=="pro" && dailyLimitActive && <DailyLimitOverlay />}</div>}
                         <div><p className="text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p><p className="text-[8px] text-primary font-mono mt-1 font-semibold">{video.views}</p><div className="flex items-center gap-1.5 mt-1">{video.estimatedRevenue && <span className="text-[7px] font-bold text-green-400 bg-green-400/10 px-1 py-0.5 rounded flex items-center gap-0.5"><DollarSign className="w-2.5 h-2.5" />{video.estimatedRevenue}</span>}{video.viralVelocityScore!==undefined && <span className={`text-[7px] font-bold ${velocityColor} bg-secondary/60 px-1 py-0.5 rounded flex items-center gap-0.5`}><Flame className="w-2.5 h-2.5" />{video.viralVelocityScore}</span>}</div></div>
                       </div>);})}</div>) : (<div className="py-8 text-center text-xs text-muted-foreground">Profile your channel to launch ghost showdown matrix.</div>)}</div>
                   {competitors.some(v=>v.isLocked) && license.tier==="free" && (<div className="mt-3 p-2.5 rounded-lg bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex items-center justify-between gap-2"><div className="flex items-center gap-2 min-w-0"><Lock className="w-4 h-4 text-primary shrink-0" /><p className="text-[10px] font-bold text-foreground truncate">Unlock Hidden Trend Competitors via Referral</p></div><Button onClick={openReferralRewards} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">Unlock Pro ₹0</Button></div>)}
@@ -391,7 +456,7 @@ export default function CloneCrush() {
           )}
 
           {selectedVideo && (
-            <Card className="glass-strong border-border bracket">
+            <Card key={workflowNonce} className="glass-strong border-border bracket">
               <CardHeader className="pb-3"><CardTitle className="font-display text-base flex items-center gap-2"><Zap className="w-5 h-5 text-primary" />3. Chain-Loop Loophole Configurator (Ghost Mesh Active)</CardTitle><CardDescription className="text-xs">Ghost Protocol ensures never red FAILED - amber re-routing + quantum cache. 1 click = 5 assets via MUM-01 edge node.</CardDescription></CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
@@ -405,9 +470,13 @@ export default function CloneCrush() {
                   </div>
                 </div>
                 <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex gap-3 items-start"><ShieldAlert className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" /><div><p className="text-xs font-bold text-yellow-500">Stealth Disguise Protocol Active • Ghost Node MUM-01</p><p className="text-[10px] text-muted-foreground leading-relaxed">All outputs deploy Anti-Clone Illusion: analogies discarded, case studies swapped, vocabularies updated. Never cloned.</p></div></div>
-                <Button onClick={handleCloneAndCrush} disabled={isRewriting} className="w-full h-12 bg-gradient-to-r from-primary to-accent text-primary-foreground font-display font-bold uppercase tracking-wider text-sm flex gap-2">
-                  {isRewriting ? <><Loader2 className="w-4 h-4 animate-spin" />Executing Chain-Loop via Ghost Mesh...</> : <><Zap className="w-4 h-4 fill-primary-foreground" />Execute Chain-Loop (1 Click = 5 Assets) • MUM-01</>}
-                </Button>
+                <div className="relative w-full">
+                  <Button onClick={handleCloneAndCrush} disabled={isRewriting || (license.tier!=="pro" && dailyLimitActive)} className="w-full h-12 bg-gradient-to-r from-primary to-accent text-primary-foreground font-display font-bold uppercase tracking-wider text-sm flex gap-2">
+                    {isRewriting ? <><Loader2 className="w-4 h-4 animate-spin" />Executing Chain-Loop via Ghost Mesh...</> : license.tier!=="pro" && dailyLimitActive ? <><Lock className="w-4 h-4" />Daily Limit Reached — Unlock Premium</> : <><Zap className="w-4 h-4 fill-primary-foreground" />Execute Chain-Loop (1 Click = 5 Assets) • MUM-01</>}
+                  </Button>
+                  {license.tier!=="pro" && dailyLimitActive && <div className="absolute inset-0 pointer-events-none" aria-hidden="true" />}
+                  {license.tier!=="pro" && dailyLimitActive && <div className="mt-3"><DailyLimitOverlay variant="hero" /></div>}
+                </div>
 
                 {logSteps.length>0 && (
                   <div className="font-mono bg-black rounded-xl border border-primary/20 p-4 text-xs space-y-2 max-h-[260px] overflow-y-auto relative overflow-hidden">

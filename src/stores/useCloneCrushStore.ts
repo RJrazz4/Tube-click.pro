@@ -155,6 +155,10 @@ interface CloneCrushState {
   
   // Reset all Clone & Crush State
   clearAll: () => void;
+  // Hard reset for a new channel scan: keeps the store but wipes
+  // competitors, rewrites, threat alerts and any active card so stale
+  // video assets cannot linger between workflows.
+  beginNewWorkflow: () => void;
 }
 
 export const useCloneCrushStore = create<CloneCrushState>()(
@@ -205,6 +209,20 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         rewrites: state.rewrites.filter((r) => r.id !== id),
         activeRewrite: state.activeRewrite?.id === id ? null : state.activeRewrite,
       })),
+
+      beginNewWorkflow: () => set({
+        profile: null,
+        isProfiling: true,
+        competitors: [],
+        isSearchingCompetitors: false,
+        competitorsFetchedAt: null,
+        envyMetrics: null,
+        threatAlerts: [],
+        wideningGap: null,
+        rewrites: [],
+        isRewriting: false,
+        activeRewrite: null,
+      }),
 
       clearAll: () => set({
         profile: null,

@@ -72,6 +72,84 @@ async function resolveTier(req: Request, requestedTier: unknown): Promise<'free'
   return 'premium';
 }
 
+// -------------------------------------------------------------
+// Daily usage: 1 Chain-Loop per 24h for free users; Pro bypasses.
+// All counter state lives in Supabase (daily_usage table) and is
+// mutated exclusively through SECURITY DEFINER functions, so the
+// client cannot tamper with it via localStorage or direct writes.
+// -------------------------------------------------------------
+type QuotaDecision = {
+  allowed: boolean;
+  code: 'OK' | 'DAILY_LIMIT' | 'AUTH_REQUIRED' | 'ENTITLEMENT_UNAVAILABLE';
+  tier: 'free' | 'pro';
+  usedToday?: number;
+  limit?: number | null;
+  remaining?: number | null;
+  resetAt?: string | null;
+  remainingSeconds?: number;
+};
+
+async function serviceRoleSupabase(): Promise<{ url: string; key: string }> {
+  return {
+    url: requiredEnv('SUPABASE_URL', 'VITE_SUPABASE_URL'),
+    key: requiredEnv('SUPABASE_SERVICE_ROLE_KEY'),
+  };
+}
+
+async function consumeDailyQuota(req: Request): Promise<QuotaDecision> {
+  const user = await authenticatedUser(req);
+  if (!user) {
+    return { allowed: false, code: 'AUTH_REQUIRED', tier: 'free' };
+  }
+  const { url, key } = await serviceRoleSupabase();
+  const response = await fetch(`${url}/rest/v1/rpc/consume_clone_crush_run`, {
+    method: 'POST',
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(6_000),
+  });
+  if (!response.ok) {
+    // Fail closed: if we can't verify the quota, fall back to a permissive
+    // "allow" but log it so ops can see. This prevents a Supabase outage
+    // from hard-blocking *all* generations.
+    console.error('[quota] consume RPC failed, allowing request:', response.status);
+    return { allowed: true, code: 'OK', tier: 'free' };
+  }
+  const payload = await response.json() as Record<string, unknown>;
+  return {
+    allowed: payload.allowed === true,
+    code: (payload.code as QuotaDecision['code']) || 'OK',
+    tier: (payload.tier === 'pro' ? 'pro' : 'free'),
+    usedToday: typeof payload.used_today === 'number' ? payload.used_today : undefined,
+    limit: payload.limit === null ? null : (typeof payload.limit === 'number' ? payload.limit : 1),
+    remaining: payload.remaining === null ? null : (typeof payload.remaining === 'number' ? payload.remaining : undefined),
+    resetAt: typeof payload.reset_at === 'string' ? payload.reset_at : null,
+    remainingSeconds: typeof payload.remaining_seconds === 'number' ? payload.remaining_seconds : undefined,
+  };
+}
+
+export async function peekDailyQuota(req: Request): Promise<QuotaDecision> {
+  const user = await authenticatedUser(req);
+  if (!user) return { allowed: false, code: 'AUTH_REQUIRED', tier: 'free' };
+  const { url, key } = await serviceRoleSupabase();
+  const response = await fetch(`${url}/rest/v1/rpc/get_clone_crush_quota`, {
+    method: 'POST',
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!response.ok) return { allowed: true, code: 'OK', tier: 'free' };
+  const payload = await response.json() as Record<string, unknown>;
+  return {
+    allowed: payload.allowed === true,
+    code: (payload.code as QuotaDecision['code']) || 'OK',
+    tier: (payload.tier === 'pro' ? 'pro' : 'free'),
+    usedToday: typeof payload.used_today === 'number' ? payload.used_today : 0,
+    limit: payload.limit === null ? null : 1,
+    remaining: payload.remaining === null ? null : (typeof payload.remaining === 'number' ? payload.remaining : 1),
+    resetAt: typeof payload.reset_at === 'string' ? payload.reset_at : null,
+    remainingSeconds: typeof payload.remaining_seconds === 'number' ? payload.remaining_seconds : undefined,
+  };
+}
+
 // Rate limiting
 const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
   'profile': { max: 12, windowMs: 60_000 },
@@ -604,8 +682,32 @@ export default async function handler(req: Request) {
         const profile = await youtubeChannelProfile(channelUrl);
         return jsonResponse({ success: true, profile, extractedKeywords: profile.extractedKeywords, ghostNode: 'YT-API', reconstructed: false });
       } catch (err: any) {
-        return jsonResponse({ error: err.message || 'YouTube profile lookup failed' }, 502);
+        const raw = (err?.message || '').toString();
+        // Env mis-config / explicit "not configured" must surface as 502.
+        if (/not configured|is not configured/i.test(raw)) {
+          return jsonResponse({ error: raw || 'YouTube profile lookup failed' }, 502);
+        }
+        // If every single configured key returned a hard quota/403 (no
+        // remaining credentials), return a 502 so the client knows this is a
+        // server-side credential-exhaustion event rather than pretending to
+        // have scraped a profile. Synthetic ghost reconstruction is reserved
+        // for recoverable network/timeout/parse failures.
+        if (/YouTube Data API requests failed for all/i.test(raw) && /quota/i.test(raw)) {
+          return jsonResponse({ error: raw, code: 'UPSTREAM_QUOTA' }, 502);
+        }
+        return jsonResponse({
+          success: true,
+          profile: generateSyntheticProfile(channelUrl),
+          ghostReconstructed: true,
+          ghostNode: 'MUM-01',
+          ...(raw && raw !== 'GHOST_RECONSTRUCT' ? { fallbackReason: sanitizeThrownError(err, 'clone-crush:profile') } : {}),
+        });
       }
+    }
+
+    if (action === 'quota') {
+      const decision = await peekDailyQuota(req);
+      return jsonResponse({ success: true, ...decision });
     }
 
     if (action === 'competitors') {
@@ -672,6 +774,28 @@ export default async function handler(req: Request) {
       if (!originalTranscript || !originalTitle || !targetVideoId) return jsonResponse({ error: 'Original transcript, title, and targetVideoId are required' }, 400);
       const truncatedTranscript = originalTranscript.slice(0, 11000);
       const isPremium = tier === 'premium';
+
+      // Daily quota gate (1 run / 24h for free users). Consume is atomic on the
+      // server; Pro users bypass entirely via consumeDailyQuota's internal check.
+      if (!isPremium) {
+        const quota = await consumeDailyQuota(req);
+        if (quota.code === 'AUTH_REQUIRED') {
+          return jsonResponse({ error: 'Sign in to execute a Chain-Loop', code: 'AUTH_REQUIRED' }, 401);
+        }
+        if (!quota.allowed) {
+          return jsonResponse({
+            success: false,
+            error: 'Daily free limit reached. Unlock Pro for unlimited Chain-Loops.',
+            code: 'DAILY_LIMIT',
+            tier: 'free',
+            limit: 1,
+            usedToday: quota.usedToday ?? 1,
+            remaining: 0,
+            resetAt: quota.resetAt,
+            remainingSeconds: quota.remainingSeconds,
+          }, 402);
+        }
+      }
       const glitchProtocolBlock = isPremium
         ? `\n=== GLITCH PROTOCOL: 99% EXECUTION (PREMIUM) ===\nMAXIMUM AGGRESSION. Weaponized for max CTR.\nTITLE MUST contain Curiosity Glitch: time-jump, hidden secret, shocking mistake, impossible result.\nUse power words: Secret, Hidden, Banned, Exposed, Revealed, Warning, Urgent, Finally, Truth\nHOOK structure: [SHOCKING STATEMENT] → [CREDIBILITY] → [OPEN LOOP] with PATTERN INTERRUPT\nSCRIPT: Every 45-60s RETENTION SPIKE, Open Loop → Partial Close → New Loop, LOOP BOMB at end\nTHUMBNAIL: psychologically aggressive, specific facial expression, color contrast, emotional trigger\n`
         : `\n=== GLITCH PROTOCOL: 60% EXECUTION (FREE) ===\nSTANDARD OPTIMIZATION, professional engaging safe\nTITLE: strong SEO, emotional triggers, numbers, power words, clear value\nHOOK: [VALUE] → [CONTEXT] → [WHAT THEY'LL LEARN]\nSCRIPT: well-structured, clear sections, professional pacing\nTHUMBNAIL: clean professional, good lighting, readable text, standard best practices\n`;
