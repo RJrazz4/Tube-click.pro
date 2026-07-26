@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { createPerUserStorage } from "@/lib/storage/perUserStorage";
+import { useAuthStore } from "./useAuthStore";
 
 export type WorkflowStage = "profile" | "competitor-analysis" | "content-package" | "production" | "complete";
 export type WorkflowDestination = "voice" | "repurposer" | "tubebot";
@@ -122,7 +124,11 @@ export const useWorkflowStore = create<WorkflowState>()(
     }),
     {
       name: "tubeclick-creator-workflow-v1",
-      storage: createJSONStorage(() => localStorage),
+      version: 2,
+      storage: createJSONStorage(() => createPerUserStorage(
+        "tubeclick-creator-workflow-v1",
+        () => useAuthStore.getState().user?.id ?? null,
+      )),
     },
   ),
 );

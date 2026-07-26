@@ -10,6 +10,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
 import { LiveActiveCounter } from "@/components/ui/LiveActiveCounter";
+import { getCanonicalRoot } from "@/lib/domain/canonical";
+
+const getCurrentRoot = () => {
+  try { return window.location.origin; } catch { return getCanonicalRoot(); }
+};
+import { purgeAllUserStores } from "@/lib/storage/perUserStorage";
 
 export function TopBar() {
   const [ghostOpen, setGhostOpen] = useState(false);
@@ -18,9 +24,18 @@ export function TopBar() {
   const { isAuthenticated, requestAuthentication } = useSoftGate();
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
+    // Wipe user-scoped client storage BEFORE signOut so the supabase client
+    // cannot revive another account's tokens on re-render.
+    const userId = user?.id ?? null;
+    purgeAllUserStores(userId);
+    purgeAllUserStores(null);
+    try { localStorage.removeItem("tc:last-auth-user-id"); } catch {}
+    const { error } = await supabase.auth.signOut({ scope: "local" });
     if (error) toast.error("Ghost logout interference - retry via MUM-01");
     else toast.success("Ghost session terminated • MUM-01 • Quantum cache purged");
+    // Force a full reload so all in-memory Zustand state and React query
+    // caches reset to their pristine guest defaults.
+    window.setTimeout(() => window.location.replace(getCurrentRoot()), 150);
   };
 
   return (

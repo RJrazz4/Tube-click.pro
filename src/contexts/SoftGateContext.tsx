@@ -13,6 +13,10 @@ import { getCanonicalRoot } from "@/lib/domain/canonical";
 import { consumeGuestPreview, loadProEntitlement, RegistrationRequiredError } from "@/lib/auth/guestAccess";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
+import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useWorkflowStore } from "@/stores/useWorkflowStore";
+import { purgeAllUserStores } from "@/lib/storage/perUserStorage";
 
 interface SoftGateContextValue {
   /** True until Supabase has restored (or definitively rejected) local session storage. */
@@ -50,6 +54,29 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   // be bound to the popup that this provider created, rather than trusting an
   // arbitrary window that knows the message shape.
   const authPopupRef = useRef<Window | null>(null);
+  const lastUserIdRef = useRef<string | null>(null);
+
+  /**
+   * Wipe zustand-persisted client state whenever the authenticated user
+   * changes (new login, different account, sign-out). This is the CLIENT
+   * half of cross-user isolation: server-side RLS + SECURITY DEFINER
+   * RPCs already enforce that DB reads are scoped to auth.uid(), but the
+   * previous user's cached profile/scripts/workflow MUST NOT hydrate into
+   * the new session's UI.
+   */
+  const resetClientStateForUser = useCallback((userId: string | null) => {
+    // First reset the in-memory stores so any React components reading
+    // from them unmount stale data immediately (before the persist
+    // rehydration runs against the new namespace).
+    useCloneCrushStore.getState().clearAll();
+    useContentStore.getState().clearAll();
+    useWorkflowStore.getState().clearWorkflow();
+    // Then wipe the localStorage buckets for both the previous user and
+    // the guest bucket so they cannot re-hydrate.
+    purgeAllUserStores(lastUserIdRef.current);
+    if (userId) purgeAllUserStores(null); // also clear guest bucket on sign-in
+    lastUserIdRef.current = userId;
+  }, []);
 
   const finishPending = useCallback((authenticated: boolean) => {
     const current = pendingRef.current;
@@ -60,13 +87,21 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const syncSession = useCallback(async (session: Session | null) => {
+    const incomingUserId = session?.user?.id ?? null;
+
+    // If the authenticated user identity has changed since the last sync
+    // (new login, account switch, or sign-out), wipe client-side state
+    // BEFORE hydrating the new user's blobs so there is zero flash of the
+    // prior user's channel / scripts / workflow.
+    if (incomingUserId !== lastUserIdRef.current) {
+      resetClientStateForUser(incomingUserId);
+    }
+
     if (!session?.user) {
       setIsAuthenticated(false);
       setUser(null);
-      if (license.tier === "pro" && license.expiresAt) {
-        setLicense({ tier: "free", status: "active", expiresAt: undefined });
-        setAppTier("free");
-      }
+      setLicense({ tier: "free", status: "active", expiresAt: undefined });
+      setAppTier("free");
       return;
     }
 
@@ -216,17 +251,45 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
     setSubmitting(true);
     setAuthError("");
     try {
+      const canonicalRoot = getCanonicalRoot();
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${getCanonicalRoot()}/auth/callback`,
+          redirectTo: `${canonicalRoot}/auth/callback`,
           skipBrowserRedirect: true,
+          queryParams: {
+            // Request refresh-token so sessions survive browser close across
+            // devices (fixes the "friend's device logs in but session
+            // doesn't stick" symptom).
+            access_type: "offline",
+            prompt: "consent",
+          },
         },
       });
       if (error) throw error;
       if (!data.url) throw new Error("Google authentication could not be started");
+
+      // If we're already on the canonical domain, pop-up flow works because
+      // the popup and opener share localStorage (PKCE code_verifier lives
+      // there). If we're on a preview/non-canonical origin the popup runs
+      // on canonical — which has a DIFFERENT localStorage — so PKCE exchange
+      // fails in the popup and the opener never sees a session. Fall back
+      // to a full-page redirect in that case. The callback posts back to
+      // the opener only for popup flows; for redirects finishNavigation()
+      // uses window.location.replace() back to the app.
+      const isCanonical = window.location.origin === canonicalRoot;
+      if (!isCanonical) {
+        window.location.assign(data.url);
+        return;
+      }
+
       const popup = window.open(data.url, "tubeclick-google-auth", "popup=yes,width=520,height=720");
-      if (!popup) throw new Error("Pop-up blocked. Allow pop-ups and try again.");
+      if (!popup) {
+        // Popup blocked — fall back to top-level redirect so the user
+        // always gets a working sign-in path.
+        window.location.assign(data.url);
+        return;
+      }
       authPopupRef.current = popup;
       popup.focus();
     } catch (error) {

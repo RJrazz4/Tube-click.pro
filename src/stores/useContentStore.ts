@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { createPerUserStorage } from "@/lib/storage/perUserStorage";
+import { useAuthStore } from "./useAuthStore";
 
 export interface Stats {
   scriptsGenerated: number;
@@ -98,7 +100,11 @@ export const useContentStore = create<ContentState>()(
     }),
     {
       name: "tubegenius-content-store-v2", // New key — triggers migration from old localStorage keys
-      storage: createJSONStorage(() => localStorage),
+      version: 3,
+      storage: createJSONStorage(() => createPerUserStorage(
+        "tubegenius-content-store-v2",
+        () => useAuthStore.getState().user?.id ?? null,
+      )),
       // Only persist stats + contents
       partialize: (state) => ({ stats: state.stats, contents: state.contents }),
       // On rehydration, merge with old localStorage if exists (one-time migration)

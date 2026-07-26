@@ -1,0 +1,118 @@
+/**
+ * Per-user localStorage adapter for zustand persist.
+ *
+ * Problem: zustand's default createJSONStorage(() => localStorage) persists
+ * to a fixed key per origin. When User A signs out of a shared browser and
+ * User B signs in on the same device (or when the Supabase session is
+ * restored slowly on first paint), the persisted blobs for profile,
+ * generated content, and workflow state from the PREVIOUS user hydrate
+ * into the new user's session. To the new user it looks like another
+ * person's YouTube channel / scripts / history are "theirs".
+ *
+ * This adapter wraps localStorage under a NAMESPACED key
+ *   `<baseKey>:u:<userId>`
+ * and exposes a `purge()` helper that wipes both the namespaced key and
+ * the legacy un-namespaced key for that store. When no userId is known
+ * (pre-auth), the store reads/writes to `<baseKey>:guest` which is
+ * explicitly wiped on any successful sign-in so guest demo data never
+ * bleeds into an authenticated session.
+ *
+ * Server data (Supabase) is already isolated by RLS + SECURITY DEFINER
+ * RPCs using auth.uid(); this fixes the CLIENT-SIDE cross-user leak.
+ */
+import { createJSONStorage, type StateStorage } from "zustand/middleware";
+
+const NAMESPACE_PREFIX = "tc:u:";
+const GUEST_SUFFIX = ":guest";
+const LEGACY_KEYS = new Set([
+  "tubegenius-auth-store",
+  "tubegenius-app-store",
+  "tubegenius-clone-crush-store",
+  "tubegenius-content-store-v2",
+  "tubeclick-creator-workflow-v1",
+]);
+
+function storageKey(baseKey: string, userId: string | null): string {
+  if (!userId) return `${NAMESPACE_PREFIX}${baseKey}${GUEST_SUFFIX}`;
+  return `${NAMESPACE_PREFIX}${baseKey}:u:${userId}`;
+}
+
+function readRaw(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function writeRaw(key: string, value: string): void {
+  try { localStorage.setItem(key, value); } catch {}
+}
+function removeRaw(key: string): void {
+  try { localStorage.removeItem(key); } catch {}
+}
+
+export function createPerUserStorage(baseKey: string, getUserId: () => string | null): StateStorage {
+  // A tiny JSONStorage that proxies getItem/setItem/removeItem to a
+  // userId-namespaced key. The zustand persist middleware will call
+  // these methods on every read/write, so the namespace is recomputed
+  // against the CURRENT session every time — no stale closures.
+  const getKey = () => storageKey(baseKey, getUserId());
+  return {
+    getItem: (name) => {
+      // `name` is the persist `name` field; we ignore it and use our
+      // namespaced key derived from the live userId.
+      void name;
+      const key = getKey();
+      const raw = readRaw(key);
+      // Migration on first read for the authenticated bucket: if the
+      // namespaced key is empty but a legacy un-namespaced copy exists
+      // (pre-isolation build), copy it into the namespaced slot once so
+      // existing users don't lose their own saved content.
+      if (!raw && LEGACY_KEYS.has(baseKey)) {
+        const legacy = readRaw(baseKey);
+        if (legacy && getUserId()) {
+          writeRaw(key, legacy);
+          // Best-effort: leave legacy in place for one session so the
+          // migration is non-destructive; a future sign-out clears it.
+        }
+      }
+      return raw ?? null;
+    },
+    setItem: (name, value) => {
+      void name;
+      writeRaw(getKey(), value);
+    },
+    removeItem: (name) => {
+      void name;
+      removeRaw(getKey());
+    },
+  };
+}
+
+/**
+ * Wipe every persisted zustand blob for the previous user (both the
+ * userId-namespaced bucket and any legacy un-namespaced keys) AND the
+ * guest bucket. Called from SoftGateProvider the instant a new auth
+ * session is established or a sign-out happens so the next user starts
+ * from a clean slate.
+ */
+export function purgeAllUserStores(userId?: string | null): void {
+  try {
+    const keysToRemove = new Set<string>();
+    LEGACY_KEYS.forEach((k) => keysToRemove.add(k));
+    LEGACY_KEYS.forEach((k) => keysToRemove.add(`${NAMESPACE_PREFIX}${k}${GUEST_SUFFIX}`));
+    if (userId) {
+      LEGACY_KEYS.forEach((k) => keysToRemove.add(storageKey(k, userId)));
+    }
+    // Also sweep any namespaced keys we can find (covers future stores).
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith(NAMESPACE_PREFIX) || LEGACY_KEYS.has(key))) {
+        keysToRemove.add(key);
+      }
+    }
+    keysToRemove.forEach((k) => removeRaw(k));
+  } catch {}
+}
+
+/**
+ * Re-export of the JSON storage wrapper so callers can still opt-in to
+ * standard JSON serialization without re-implementing it.
+ */
+export { createJSONStorage };

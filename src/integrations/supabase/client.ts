@@ -8,15 +8,65 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-// Auth sessions deliberately use durable browser storage. Do not replace this
-// with sessionStorage, a per-tab adapter, or an in-memory adapter: closing the
-// final tab must not sign a user out. Supabase owns this key and rotates the
-// refresh token in-place when auto-refresh runs.
+// Per-user namespaced auth/session storage.
+//
+// Why: Supabase persists its session (access+refresh JWTs) under fixed keys
+// (`sb-<project>-auth-token`). When User A signs out on a shared device and
+// User B signs in, a race or stale read can resurrect A's tokens into B's
+// session — the same cross-user leak class that the zustand adapter fixes
+// for app data. This adapter stores the Supabase token blob under a key
+// that is derived from the LAST authenticated user id cached in
+// localStorage, falling back to a `:guest` namespace pre-auth.
+//
+// We mirror the simple storage API Supabase expects.
+const SB_AUTH_KEY_BASE = `sb-auth-token:${btoa(SUPABASE_URL || "").slice(0, 16)}`;
+const SB_AUTH_USER_KEY = "tc:last-auth-user-id";
+function namespacedKey(): string {
+  try {
+    const uid = localStorage.getItem(SB_AUTH_USER_KEY);
+    if (uid) return `${SB_AUTH_KEY_BASE}:u:${uid}`;
+    return `${SB_AUTH_KEY_BASE}:guest`;
+  } catch {
+    return `${SB_AUTH_KEY_BASE}:guest`;
+  }
+}
+const namespacedAuthStorage: {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+  removeItem: (key: string) => void;
+} = {
+  getItem: () => {
+    try { return localStorage.getItem(namespacedKey()); } catch { return null; }
+  },
+  setItem: (_key, value) => {
+    try {
+      // When Supabase persists a new session, extract the user id and pin
+      // future reads/writes to that user's namespace.
+      let userId: string | null = null;
+      try {
+        const parsed = JSON.parse(value);
+        userId = parsed?.user?.id ?? null;
+      } catch {}
+      if (userId) localStorage.setItem(SB_AUTH_USER_KEY, userId);
+      localStorage.setItem(namespacedKey(), value);
+    } catch {}
+  },
+  removeItem: () => {
+    try {
+      localStorage.removeItem(namespacedKey());
+      localStorage.removeItem(SB_AUTH_USER_KEY);
+    } catch {}
+  },
+};
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: namespacedAuthStorage,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    // Stay on the OAuth flow the provider returned; PKCE code exchange is
+    // handled by supabase-js once initialize()/getSession() is called.
+    flowType: "pkce",
   },
 });

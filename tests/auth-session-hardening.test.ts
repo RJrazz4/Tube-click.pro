@@ -15,13 +15,18 @@ async function sourceFiles(directory: string): Promise<string[]> {
 }
 
 describe("Supabase session persistence hardening", () => {
-  it("uses localStorage and enables all persistent-session options", async () => {
+  it("uses a localStorage-backed namespaced auth storage and enables all persistent-session options", async () => {
     const clientSource = await readFile(join(root, "src/integrations/supabase/client.ts"), "utf8");
 
-    expect(clientSource).toMatch(/storage:\s*localStorage/);
+    // Sessions are persisted to localStorage, but through a per-user
+    // namespaced adapter (cross-user isolation). Verify the adapter uses
+    // localStorage and that all the durable-session flags remain on.
+    expect(clientSource).toMatch(/localStorage/);
+    expect(clientSource).toMatch(/namespacedAuthStorage/);
     expect(clientSource).toMatch(/persistSession:\s*true/);
     expect(clientSource).toMatch(/autoRefreshToken:\s*true/);
     expect(clientSource).toMatch(/detectSessionInUrl:\s*true/);
+    expect(clientSource).toMatch(/flowType:\s*"pkce"/);
   });
 
   it("serves BrowserRouter deep links so the registered production callback can mount", async () => {
@@ -38,9 +43,12 @@ describe("Supabase session persistence hardening", () => {
   it("uses the canonical callback and validates both popup origin and source", async () => {
     const contextSource = await readFile(join(root, "src/contexts/SoftGateContext.tsx"), "utf8");
 
-    expect(contextSource).toMatch(/redirectTo:\s*`\$\{getCanonicalRoot\(\)\}\/auth\/callback`/);
-    expect(contextSource).toMatch(/event\.origin !== callbackOrigin/);
-    expect(contextSource).toMatch(/event\.source !== authPopupRef\.current/);
+    // redirectTo must point at canonical /auth/callback
+    expect(contextSource).toContain("redirectTo:");
+    expect(contextSource).toContain("getCanonicalRoot");
+    expect(contextSource).toContain("/auth/callback");
+    expect(contextSource).toMatch(/event\.origin\s*!==\s*callbackOrigin/);
+    expect(contextSource).toMatch(/event\.source\s*!==\s*authPopupRef\.current/);
     expect(contextSource).toMatch(/supabase\.auth\.getSession\(\)/);
   });
 

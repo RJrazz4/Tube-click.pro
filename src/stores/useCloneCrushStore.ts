@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { createPerUserStorage } from "@/lib/storage/perUserStorage";
+import { useAuthStore } from "./useAuthStore";
 
 export interface ProfiledChannel {
   id: string;
@@ -240,12 +242,20 @@ export const useCloneCrushStore = create<CloneCrushState>()(
     }),
     {
       name: "tubegenius-clone-crush-store",
-      version: 2,
-      storage: createJSONStorage(() => localStorage),
-      migrate: (persistedState: any) => ({
-        ...persistedState,
-        competitors: Array.isArray(persistedState?.competitors) ? viralOnly(persistedState.competitors) : [],
-      }),
+      version: 3,
+      storage: createJSONStorage(() => createPerUserStorage(
+        "tubegenius-clone-crush-store",
+        () => useAuthStore.getState().user?.id ?? null,
+      )),
+      migrate: (persistedState: any, version) => {
+        // Version 2 → 3: previous un-namespaced blobs are discarded;
+        // the perUserStorage migrates them once on first read.
+        void version;
+        return {
+          ...(persistedState && typeof persistedState === "object" ? persistedState : {}),
+          competitors: Array.isArray(persistedState?.competitors) ? viralOnly(persistedState.competitors) : [],
+        };
+      },
       partialize: (state) => ({
         profile: state.profile,
         competitors: viralOnly(state.competitors),
