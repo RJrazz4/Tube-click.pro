@@ -2,7 +2,7 @@
  * Settings Dashboard
  * Central hub for user account, preferences, licensing, and data management
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   User,
@@ -36,9 +36,35 @@ import {
   useLicense,
   useUser,
   useFeatures,
-  useDailyUsage,
+  isProTier,
 } from "@/stores/useAuthStore";
+// useDailyUsage removed — legacy 10/day counter replaced by 24h conveyor.
 import { useAppStore } from "@/stores/useAppStore";
+import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
+
+function useFreeCooldownRemaining(): number {
+  const freeCooldownUntil = useCloneCrushStore((s) => s.freeCooldownUntil);
+  const [remaining, setRemaining] = useState(() =>
+    freeCooldownUntil ? Math.max(0, freeCooldownUntil - Date.now()) : 0,
+  );
+  useEffect(() => {
+    const compute = () => setRemaining(freeCooldownUntil ? Math.max(0, freeCooldownUntil - Date.now()) : 0);
+    compute();
+    if (!freeCooldownUntil || freeCooldownUntil <= Date.now()) return;
+    const id = window.setInterval(compute, 1000);
+    return () => window.clearInterval(id);
+  }, [freeCooldownUntil]);
+  return remaining;
+}
+
+function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
 
 // The Supabase token and the auth-store snapshot are deliberately excluded.
 // Clearing preferences/content must never become an implicit sign-out; only the
@@ -178,8 +204,10 @@ function GeneralSection() {
 function AccountSection() {
   const license = useLicense();
   const features = useFeatures();
-  const dailyUsage = useDailyUsage();
   const navigate = useNavigate();
+  const isPro = isProTier(license);
+  const cooldownRemaining = useFreeCooldownRemaining();
+  const onCooldown = !isPro && cooldownRemaining > 0;
 
   return (
     <div className="space-y-6">
@@ -189,7 +217,7 @@ function AccountSection() {
       </div>
 
       {/* Current Plan */}
-      <Card className={cn("cyber-card border-border", license.tier === "pro" && "neon-glow-purple")}>
+      <Card className={cn("cyber-card border-border", isPro && "neon-glow-purple")}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -208,13 +236,25 @@ function AccountSection() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-3 mb-4">
+            {/* Daily Chain-Loop conveyor status — replaces legacy
+                "Generations Today 0/10" which contradicted the 1-per-24h
+                free-tier model. */}
             <div className="p-3 rounded-lg bg-secondary/50">
-              <p className="text-xs text-muted-foreground">Generations Today</p>
+              <p className="text-xs text-muted-foreground">Daily Chain-Loop</p>
               <p className="text-2xl font-display font-bold text-foreground">
-                {dailyUsage.generationsUsed}
-                <span className="text-sm text-muted-foreground ml-1">
-                  / {features.maxGenerationsPerDay === Infinity ? "∞" : features.maxGenerationsPerDay}
-                </span>
+                {isPro ? (
+                  <span className="text-primary">Unlimited</span>
+                ) : onCooldown ? (
+                  <span className="text-amber-400 font-mono text-xl tracking-wider">{formatCountdown(cooldownRemaining)}</span>
+                ) : (
+                  <>
+                    <span className="text-green-400">Available</span>
+                    <span className="text-sm text-muted-foreground ml-1">now</span>
+                  </>
+                )}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {isPro ? "No cooldown • 3-slot conveyor unlocked" : "1 Chain-Loop / 24h • Niche-strict conveyor"}
               </p>
             </div>
             <div className="p-3 rounded-lg bg-secondary/50">
@@ -230,11 +270,11 @@ function AccountSection() {
               </p>
             </div>
           </div>
-          
-          {license.tier === "free" && (
+
+          {!isPro && (
             <Button onClick={() => navigate("/rewards")} className="w-full cyber-button" size="lg">
               <Crown className="w-4 h-4 mr-2" />
-              Unlock Pro for Free
+              Unlock Pro for Free — Skip 24h Cooldown
             </Button>
           )}
         </CardContent>
@@ -267,7 +307,10 @@ function AccountSection() {
 function DashboardSection() {
   const { tier, setTier } = useAppStore();
   const features = useFeatures();
-  const dailyUsage = useDailyUsage();
+  const license = useLicense();
+  const isPro = isProTier(license);
+  const cooldownRemaining = useFreeCooldownRemaining();
+  const onCooldown = !isPro && cooldownRemaining > 0;
 
   return (
     <div className="space-y-6">
@@ -331,15 +374,18 @@ function DashboardSection() {
 
       <Card className="cyber-card border-border">
         <CardHeader>
-          <CardTitle className="text-base font-display">Generation Limits</CardTitle>
-          <CardDescription className="text-xs">Your current tier limits</CardDescription>
+          <CardTitle className="text-base font-display">Chain-Loop Limits</CardTitle>
+          <CardDescription className="text-xs">Your current tier limits — Niche-Strict Daily Conveyor Belt</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-              <span className="text-sm text-foreground">Daily Generations</span>
+              <div>
+                <span className="text-sm text-foreground">Daily Chain-Loops (Free)</span>
+                <p className="text-[10px] text-muted-foreground">1 per 24h • 3-slot conveyor • Niche-locked</p>
+              </div>
               <Badge variant="secondary">
-                {dailyUsage.generationsUsed} / {features.maxGenerationsPerDay === Infinity ? "∞" : features.maxGenerationsPerDay}
+                {isPro ? "Unlimited" : onCooldown ? `Next in ${formatCountdown(cooldownRemaining)}` : "1 Available"}
               </Badge>
             </div>
             <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
@@ -349,6 +395,10 @@ function DashboardSection() {
             <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
               <span className="text-sm text-foreground">Max Storyboard Scenes</span>
               <Badge variant="secondary">{features.maxScenes === Infinity ? "Unlimited" : features.maxScenes}</Badge>
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
+              <span className="text-sm text-foreground">Niche Targeting</span>
+              <Badge variant="secondary" className="bg-primary/20 text-primary">Strict (URL-deduced)</Badge>
             </div>
           </div>
         </CardContent>

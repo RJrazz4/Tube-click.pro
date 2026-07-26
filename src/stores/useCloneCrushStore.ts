@@ -12,7 +12,6 @@ export interface ProfiledChannel {
   banner: string;
   description: string;
   profiledAt: string;
-  // Envy Engine — profile metrics
   subscriberCount?: number;
   subscriberCountText?: string;
   videoCount?: number;
@@ -24,13 +23,13 @@ export interface CompetitorVideo {
   title: string;
   url: string;
   thumbnail: string;
-  views: string; // Formatted views, e.g., "1.2M views"
+  views: string; // Formatted views, e.g. "1.2M views"
   viewsCount: number; // Raw views for sorting
-  publishedAt: string; // ISO date or relative, e.g., "3 days ago"
+  publishedAt: string; // ISO date or relative, e.g. "3 days ago"
   publishedDate: string; // Raw date string for Recency Bias filtering
   channelName: string;
   duration?: string;
-  isLocked: boolean; // True for locked videos (premium/login gate)
+  isLocked: boolean; // True for locked videos (conveyor slot1/2 OR premium gate)
   // Envy Engine — FOMO metrics
   estimatedRevenue?: string;
   estimatedRevenueNum?: number;
@@ -47,20 +46,18 @@ export interface ScriptRewriteResult {
   targetVideoTitle: string;
   originalTitle: string;
   rewrittenTitle: string;
-  glitchHook: string; // High-curiosity "Glitch" in first 15 seconds
+  glitchHook: string;
   fullScript: string;
   retentionKeywordsUsed: string[];
   seoTags: string[];
   thumbnailPrompt: string;
   editingGuide: string;
   tier: "free" | "premium";
-  isStealthDisguised: boolean; // Tracks enforcement of the "Stealth Disguise Protocol"
+  isStealthDisguised: boolean;
   changedAnalogiesCount: number;
   changedExamplesCount: number;
-  // Glitch Protocol metadata
   glitchTechniques?: string[];
-  glitchIntensity?: number; // 60 or 99
-  // Reverse-engineered thumbnail prompts (from thumbnail-reverse action)
+  glitchIntensity?: number;
   reverseEngineeredPrompts?: string[];
   reverseEngineeredSource?: {
     videoId: string;
@@ -124,77 +121,66 @@ interface CloneCrushState {
   // Channel Profile
   profile: ProfiledChannel | null;
   isProfiling: boolean;
-  // The last channel URL/handle the user submitted. Persisted per-user so
-  // the input is pre-filled on return visits (Daily Retention Loop #1).
   lastChannelUrl: string | null;
-  
-  // Competitors Matrix
+  savedNiche: string | null;
+
+  // Daily Conveyor Belt: always exactly 3 tiles (slot0 unlocked, slot1+2 locked).
+  conveyorQueue: CompetitorVideo[];
+  activeVideoId: string | null;
+
+  // Flat competitor view mirrors conveyorQueue for backward compatibility.
   competitors: CompetitorVideo[];
   isSearchingCompetitors: boolean;
   competitorsFetchedAt: string | null;
-  
-  // Envy Engine — aggregate metrics
+
   envyMetrics: EnvyMetrics | null;
-  
-  // Threat Alerts
   threatAlerts: ThreatAlert[];
   wideningGap: WideningGap | null;
-  
-  // Script Rewrites
+
   rewrites: ScriptRewriteResult[];
   isRewriting: boolean;
   activeRewrite: ScriptRewriteResult | null;
 
-  // Free-tier 24h cooldown (monetization lock)
-  //
-  // After a free user's FIRST successful Chain-Loop generation their result
-  // is locked on screen for FREE_COOLDOWN_MS (24h). During that window they
-  // cannot start a new channel scan, select a different competitor, or wipe
-  // the result. All other competitor tiles render under a cooldown
-  // overlay with a live countdown and a "Skip Wait - Unlock Pro" CTA.
-  // Pro users skip the cooldown entirely; becoming Pro clears it.
-  freeCooldownUntil: number | null;   // epoch ms at which cooldown ends
-  freeLockedVideoId: string | null;   // videoId whose result is locked on screen
-  // Flag set by expireFreeCooldownCycle() to tell the page it should
-  // immediately run a fresh competitor fetch against the saved profile.
-  autoRefreshPending: boolean;
+  freeCooldownUntil: number | null;
+  freeLockedVideoId: string | null;
+  conveyorShiftPending: boolean;
 
-  // Actions
   setProfile: (profile: ProfiledChannel | null, sourceUrl?: string | null) => void;
   setIsProfiling: (isProfiling: boolean) => void;
+  setSavedNiche: (niche: string | null) => void;
   setLastChannelUrl: (url: string | null) => void;
-  
+
   setCompetitors: (competitors: CompetitorVideo[], envyMetrics?: EnvyMetrics | null) => void;
+  setConveyorQueue: (queue: CompetitorVideo[]) => void;
+  setActiveVideoId: (id: string | null) => void;
   setIsSearchingCompetitors: (isSearchingCompetitors: boolean) => void;
   setThreatAlerts: (alerts: ThreatAlert[], wideningGap: WideningGap | null) => void;
-  
+
   addRewrite: (rewrite: Omit<ScriptRewriteResult, "id" | "createdAt">) => ScriptRewriteResult;
   setIsRewriting: (isRewriting: boolean) => void;
   setActiveRewrite: (rewrite: ScriptRewriteResult | null) => void;
   deleteRewrite: (id: string) => void;
 
-  // Cooldown controls
   startFreeCooldown: (videoId: string, durationMs?: number) => void;
   clearFreeCooldown: () => void;
   isInFreeCooldown: () => boolean;
-  // Called the moment the 24h window hits zero. Wipes the locked script,
-  // the day's competitors, and sets autoRefreshPending=true so the page
-  // can kick off a fresh competitor fetch against the saved profile.
-  // Does NOT clear profile or lastChannelUrl — those stay pinned so the
-  // retention loop is seamless.
   expireFreeCooldownCycle: () => void;
-  markAutoRefreshConsumed: () => void;
-  
-  // Reset all Clone & Crush State
+  appendConveyorTile: (video: CompetitorVideo) => void;
+  markConveyorShiftConsumed: () => void;
+
   clearAll: () => void;
-  // Hard reset for a new channel scan: keeps the store but wipes
-  // competitors, rewrites, threat alerts and any active card so stale
-  // video assets cannot linger between workflows. Disabled during free
-  // cooldown so the locked 24h result cannot be evicted.
   beginNewWorkflow: () => void;
 }
 
-export const FREE_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h
+export const FREE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const CONVEYOR_SIZE = 3;
+
+/** Stamp a competitor list into conveyor shape: 3 tiles, slot0 unlocked, slot1+2 locked. */
+function stampConveyor(competitors: CompetitorVideo[]): CompetitorVideo[] {
+  return viralOnly(competitors)
+    .slice(0, CONVEYOR_SIZE)
+    .map((c, i) => ({ ...c, isLocked: i > 0 }));
+}
 
 export const useCloneCrushStore = create<CloneCrushState>()(
   persist(
@@ -202,6 +188,9 @@ export const useCloneCrushStore = create<CloneCrushState>()(
       profile: null,
       isProfiling: false,
       lastChannelUrl: null,
+      savedNiche: null,
+      conveyorQueue: [],
+      activeVideoId: null,
       competitors: [],
       isSearchingCompetitors: false,
       competitorsFetchedAt: null,
@@ -213,25 +202,35 @@ export const useCloneCrushStore = create<CloneCrushState>()(
       activeRewrite: null,
       freeCooldownUntil: null,
       freeLockedVideoId: null,
-      autoRefreshPending: false,
+      conveyorShiftPending: false,
 
       setProfile: (profile, sourceUrl = null) => set((state) => ({
         profile,
-        // Remember the channel URL the user submitted so future visits
-        // can pre-fill the input and auto-refresh competitors after the
-        // 24h cooldown expires. Persist under the per-user namespace.
         lastChannelUrl: sourceUrl ?? state.lastChannelUrl,
       })),
       setIsProfiling: (isProfiling) => set({ isProfiling }),
       setLastChannelUrl: (url) => set({
         lastChannelUrl: url && url.trim().length > 0 ? url.trim() : null,
       }),
-
-      setCompetitors: (competitors, envyMetrics = null) => set({
-        competitors: viralOnly(competitors),
-        competitorsFetchedAt: new Date().toISOString(),
-        envyMetrics,
+      setSavedNiche: (niche) => set({
+        savedNiche: niche && niche.trim().length > 0 ? niche.trim() : null,
       }),
+
+      setCompetitors: (competitors, envyMetrics = null) => {
+        const queue = stampConveyor(competitors);
+        set({
+          conveyorQueue: queue,
+          competitors: queue,
+          competitorsFetchedAt: new Date().toISOString(),
+          envyMetrics,
+          activeVideoId: get().activeVideoId ?? (queue[0]?.videoId ?? null),
+        });
+      },
+      setConveyorQueue: (queue) => {
+        const stamped = stampConveyor(queue);
+        set({ conveyorQueue: stamped, competitors: stamped });
+      },
+      setActiveVideoId: (id) => set({ activeVideoId: id }),
       setIsSearchingCompetitors: (isSearchingCompetitors) => set({ isSearchingCompetitors }),
       setThreatAlerts: (alerts, gap) => set({ threatAlerts: alerts, wideningGap: gap }),
 
@@ -241,20 +240,17 @@ export const useCloneCrushStore = create<CloneCrushState>()(
           id: `rewrite_${Math.random().toString(36).substr(2, 9)}_${Date.now().toString(36)}`,
           createdAt: new Date().toISOString(),
         };
-
         set((state) => ({
-          rewrites: [newRewrite, ...state.rewrites].slice(0, 50), // Keep last 50 rewrites
+          rewrites: [newRewrite, ...state.rewrites].slice(0, 50),
           activeRewrite: newRewrite,
         }));
-
         return newRewrite;
       },
 
       setIsRewriting: (isRewriting) => set({ isRewriting }),
       setActiveRewrite: (activeRewrite) => set({ activeRewrite }),
-      
+
       deleteRewrite: (id) => set((state) => {
-        // During cooldown the locked rewrite cannot be deleted.
         const now = Date.now();
         if (state.freeCooldownUntil && state.freeCooldownUntil > now) {
           const lockedRewrite = state.rewrites.find((r) => r.targetVideoId === state.freeLockedVideoId);
@@ -269,13 +265,13 @@ export const useCloneCrushStore = create<CloneCrushState>()(
       startFreeCooldown: (videoId, durationMs = FREE_COOLDOWN_MS) => set({
         freeCooldownUntil: Date.now() + durationMs,
         freeLockedVideoId: videoId,
-        autoRefreshPending: false,
+        conveyorShiftPending: false,
       }),
 
       clearFreeCooldown: () => set({
         freeCooldownUntil: null,
         freeLockedVideoId: null,
-        autoRefreshPending: false,
+        conveyorShiftPending: false,
       }),
 
       isInFreeCooldown: () => {
@@ -284,40 +280,47 @@ export const useCloneCrushStore = create<CloneCrushState>()(
       },
 
       expireFreeCooldownCycle: () => set((state) => {
-        // Only expire once — guard against double-fires from the ticker.
         if (!state.freeCooldownUntil || state.freeCooldownUntil > Date.now()) return state;
+        // Shift: slot0 evicted, slot1->0 unlocked, slot2->1 locked.
+        const shifted = stampConveyor(state.conveyorQueue.slice(1));
+        const evictedVideoId = state.conveyorQueue[0]?.videoId ?? state.freeLockedVideoId;
         return {
-          // Keep profile + lastChannelUrl. Wipe the day's generated
-          // script, locked video, stale competitors/threats/widening-gap
-          // so the UI is clean before the auto-refresh fires.
-          freeCooldownUntil: null,
-          freeLockedVideoId: null,
+          conveyorQueue: shifted,
+          competitors: shifted,
+          activeVideoId: shifted[0]?.videoId ?? null,
           activeRewrite: null,
-          rewrites: [],
-          competitors: [],
-          competitorsFetchedAt: null,
+          rewrites: state.rewrites.filter((r) => r.targetVideoId !== evictedVideoId),
           threatAlerts: [],
           wideningGap: null,
-          // Signal to the page that a fresh fetch must run against the
-          // saved profile.
-          autoRefreshPending: true,
+          freeCooldownUntil: null,
+          freeLockedVideoId: null,
+          conveyorShiftPending: true,
         };
       }),
 
-      markAutoRefreshConsumed: () => set({ autoRefreshPending: false }),
+      appendConveyorTile: (video) => set((state) => {
+        const filtered = viralOnly([video]);
+        if (filtered.length === 0) return state;
+        const next = stampConveyor([...state.conveyorQueue, filtered[0]]);
+        return {
+          conveyorQueue: next,
+          competitors: next,
+          competitorsFetchedAt: new Date().toISOString(),
+        };
+      }),
+
+      markConveyorShiftConsumed: () => set({ conveyorShiftPending: false }),
 
       beginNewWorkflow: () => {
-        // A free-tier user mid-cooldown MUST NOT be allowed to wipe the
-        // currently-locked result. The server will also reject any new
-        // run (daily_quota SECURITY DEFINER), but the client must refuse
-        // to reset the UI too so the 24h lock holds even before the RPC
-        // round-trip.
         const s = get();
         if (s.freeCooldownUntil && s.freeCooldownUntil > Date.now() && s.freeLockedVideoId) return;
         set({
           profile: null,
           isProfiling: true,
+          savedNiche: null,
+          conveyorQueue: [],
           competitors: [],
+          activeVideoId: null,
           isSearchingCompetitors: false,
           competitorsFetchedAt: null,
           envyMetrics: null,
@@ -326,7 +329,9 @@ export const useCloneCrushStore = create<CloneCrushState>()(
           rewrites: [],
           isRewriting: false,
           activeRewrite: null,
-          autoRefreshPending: false,
+          freeCooldownUntil: null,
+          freeLockedVideoId: null,
+          conveyorShiftPending: false,
         });
       },
 
@@ -334,7 +339,10 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         profile: null,
         isProfiling: false,
         lastChannelUrl: null,
+        savedNiche: null,
+        conveyorQueue: [],
         competitors: [],
+        activeVideoId: null,
         isSearchingCompetitors: false,
         competitorsFetchedAt: null,
         envyMetrics: null,
@@ -345,7 +353,7 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         activeRewrite: null,
         freeCooldownUntil: null,
         freeLockedVideoId: null,
-        autoRefreshPending: false,
+        conveyorShiftPending: false,
       }),
     }),
     {
@@ -356,27 +364,43 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         () => useAuthStore.getState().user?.id ?? null,
       )),
       migrate: (persistedState: any, version) => {
-        // v4 -> v5: add lastChannelUrl + autoRefreshPending defaults.
         void version;
         const base = persistedState && typeof persistedState === "object" ? persistedState : {};
+        const existingCompetitors = Array.isArray(base.competitors) ? viralOnly(base.competitors) : [];
+        const queue = Array.isArray(base.conveyorQueue) && base.conveyorQueue.length
+          ? stampConveyor(base.conveyorQueue)
+          : stampConveyor(existingCompetitors);
         return {
           ...base,
-          competitors: Array.isArray(base.competitors) ? viralOnly(base.competitors) : [],
+          competitors: queue,
+          conveyorQueue: queue,
           freeCooldownUntil: typeof base.freeCooldownUntil === "number" ? base.freeCooldownUntil : null,
           freeLockedVideoId: typeof base.freeLockedVideoId === "string" ? base.freeLockedVideoId : null,
           lastChannelUrl: typeof base.lastChannelUrl === "string" ? base.lastChannelUrl : null,
-          autoRefreshPending: false,
+          savedNiche: typeof base.savedNiche === "string" ? base.savedNiche : null,
+          activeVideoId: typeof base.activeVideoId === "string" ? base.activeVideoId : (queue[0]?.videoId ?? null),
+          conveyorShiftPending: false,
         };
       },
       partialize: (state) => ({
         profile: state.profile,
         lastChannelUrl: state.lastChannelUrl,
-        competitors: viralOnly(state.competitors),
+        savedNiche: state.savedNiche,
+        conveyorQueue: state.conveyorQueue,
+        competitors: state.conveyorQueue,
         competitorsFetchedAt: state.competitorsFetchedAt,
         rewrites: state.rewrites,
         freeCooldownUntil: state.freeCooldownUntil,
         freeLockedVideoId: state.freeLockedVideoId,
+        activeVideoId: state.activeVideoId,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        const queue = stampConveyor(state.conveyorQueue?.length ? state.conveyorQueue : state.competitors ?? []);
+        state.conveyorQueue = queue;
+        state.competitors = queue;
+        if (!state.activeVideoId) state.activeVideoId = queue[0]?.videoId ?? null;
+      },
     }
   )
 );

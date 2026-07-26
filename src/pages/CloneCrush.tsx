@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { useCloneCrushStore, CompetitorVideo, ProfiledChannel } from "@/stores/useCloneCrushStore";
+import { useCloneCrushStore, CompetitorVideo, ProfiledChannel, FREE_COOLDOWN_MS } from "@/stores/useCloneCrushStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useAuthStore, isProTier } from "@/stores/useAuthStore";
 import { useTranscriptExtraction, useCloneCrushMutation } from "@/hooks/useSecureQuery";
@@ -70,10 +70,10 @@ export default function CloneCrush() {
   })();
 
   const {
-    profile, isProfiling, lastChannelUrl, competitors, isSearchingCompetitors, envyMetrics, threatAlerts, wideningGap, rewrites, isRewriting, activeRewrite,
-    freeCooldownUntil, freeLockedVideoId, autoRefreshPending,
-    setProfile, setIsProfiling, setLastChannelUrl, setCompetitors, setIsSearchingCompetitors, setThreatAlerts, addRewrite, setIsRewriting, setActiveRewrite, deleteRewrite,
-    startFreeCooldown, clearFreeCooldown, expireFreeCooldownCycle, markAutoRefreshConsumed, beginNewWorkflow,
+    profile, isProfiling, lastChannelUrl, savedNiche, competitors, conveyorQueue, isSearchingCompetitors, envyMetrics, threatAlerts, wideningGap, rewrites, isRewriting, activeRewrite,
+    freeCooldownUntil, freeLockedVideoId, conveyorShiftPending, activeVideoId,
+    setProfile, setIsProfiling, setLastChannelUrl, setSavedNiche, setCompetitors, setConveyorQueue, setActiveVideoId, setIsSearchingCompetitors, setThreatAlerts, addRewrite, setIsRewriting, setActiveRewrite, deleteRewrite,
+    startFreeCooldown, clearFreeCooldown, expireFreeCooldownCycle, appendConveyorTile, markConveyorShiftConsumed, beginNewWorkflow,
   } = useCloneCrushStore();
 
   const saveContent = useContentStore((s) => s.saveContent);
@@ -88,8 +88,9 @@ export default function CloneCrush() {
   // Live-ticking cooldown remaining (ms). Set from a 1s interval so the
   // UI overlays update in real time without triggering a full store
   // subscriber cascade every second. When the countdown hits zero the
-  // store's expireFreeCooldownCycle() wipes the locked state and flips
-  // autoRefreshPending so a fresh competitor fetch fires below.
+  // store's expireFreeCooldownCycle() shifts the conveyor queue and
+  // flips conveyorShiftPending so the append-one-niche-video effect
+  // fires below.
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState(() =>
     freeCooldownUntil ? Math.max(0, freeCooldownUntil - Date.now()) : 0,
   );
@@ -100,11 +101,11 @@ export default function CloneCrush() {
       const remaining = Math.max(0, (freeCooldownUntil ?? 0) - Date.now());
       setCooldownRemainingMs(remaining);
       if (remaining <= 0) {
-        // Cycle the cooldown: wipes locked video/rewrite/stale
-        // competitors + sets autoRefreshPending=true. Auto-refresh is
-        // kicked off by a separate effect that reads that flag.
+        // Cycle the cooldown: evicts slot0 + its script, shifts
+        // slot1→0/slot2→1, and sets conveyorShiftPending=true so the
+        // auto-refresh effect can append one new niche-strict tile.
         expireFreeCooldownCycle();
-        // Force a re-render so downstream effects see the cleared state
+        // Force a re-render so downstream effects see the shifted queue
         // immediately (persist writes are synchronous in zustand).
         setTick((n) => n + 1);
       }
@@ -124,9 +125,16 @@ export default function CloneCrush() {
   // Persistent target: pre-fill from the per-user namespaced store so the
   // user never has to re-enter their channel URL on future visits.
   const [channelInput, setChannelInput] = useState<string>(() => lastChannelUrl ?? "");
-  const [nicheInput, setNicheInput] = useState("");
+  const [nicheInput, setNicheInput] = useState<string>(() => savedNiche ?? "");
   const [customDescription, setCustomDescription] = useState("");
-  const [selectedVideo, setSelectedVideo] = useState<CompetitorVideo | null>(null);
+
+  // selectedVideo is derived from conveyorQueue + activeVideoId. The queue
+  // is the source of truth so the 24h conveyor shift can change the
+  // actionable slot without UI state getting out of sync.
+  const selectedVideo: CompetitorVideo | null = (() => {
+    if (activeVideoId) return competitors.find((v) => v.videoId === activeVideoId) ?? competitors[0] ?? null;
+    return competitors[0] ?? null;
+  })();
   const [selectedTier, setSelectedVideoTier] = useState<"free" | "premium">(isPro ? "premium" : "free");
   const [copiedText, setCopiedText] = useState(false);
   const [activeTab, setActiveTab] = useState("script");
@@ -193,23 +201,21 @@ export default function CloneCrush() {
   }, [isPro, freeCooldownUntil, freeLockedVideoId, clearFreeCooldown]);
 
   // On reload / rehydration during an active cooldown, force the
-  // originally-locked video as the selected competitor so the "LOCKED"
-  // result panel renders exactly where the user left off, regardless of
-  // which tile was previously clicked.
+  // originally-locked video as activeVideoId so the "LOCKED" result
+  // panel renders exactly where the user left off. Also restore the
+  // rewrite result panel for the locked video if we have it in history.
   useEffect(() => {
     if (!isFreeCooldownActive) return;
     const lockedVideo = competitors.find((v) => v.videoId === freeLockedVideoId);
-    if (lockedVideo && selectedVideo?.videoId !== lockedVideo.videoId) {
-      setSelectedVideo(lockedVideo);
-      // Also restore the rewrite result panel for the locked video if
-      // we have it in history.
-      const lockedRewrite = rewrites.find((r) => r.targetVideoId === freeLockedVideoId);
-      if (lockedRewrite && activeRewrite?.id !== lockedRewrite.id) {
-        setActiveRewrite(lockedRewrite);
-        setActiveTab("script");
-      }
+    if (lockedVideo && activeVideoId !== lockedVideo.videoId) {
+      setActiveVideoId(lockedVideo.videoId);
     }
-  }, [isFreeCooldownActive, competitors, freeLockedVideoId, rewrites, selectedVideo?.videoId, activeRewrite?.id, setActiveRewrite]);
+    const lockedRewrite = rewrites.find((r) => r.targetVideoId === freeLockedVideoId);
+    if (lockedRewrite && activeRewrite?.id !== lockedRewrite.id) {
+      setActiveRewrite(lockedRewrite);
+      setActiveTab("script");
+    }
+  }, [isFreeCooldownActive, competitors, freeLockedVideoId, rewrites, activeVideoId, activeRewrite?.id, setActiveVideoId, setActiveRewrite]);
 
   // Mark tier as hydrated once the SoftGateProvider finishes its first
   // session/entitlement load. Until then, Execute stays disabled.
@@ -239,56 +245,72 @@ export default function CloneCrush() {
     }
   }, [profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Daily Retention Loop #1 + #3:
+  // Daily Conveyor Belt auto-advance:
   //  - When a returning free user has a saved channelUrl but no profile
   //    hydrated yet, pre-fill the input and re-profile in the background
   //    so they don't have to paste the URL again.
-  //  - When autoRefreshPending flips to true (either because the 24h
-  //    timer just expired or because a returning user loaded the page
-  //    after expiry), wipe the selection and fire a fresh competitor
-  //    fetch against the saved profile — guarantees the matrix shows
-  //    new/updated videos for the day's single free run.
+  //  - When conveyorShiftPending flips to true (either because the 24h
+  //    timer just expired in-place or because a returning user loaded
+  //    the page after expiry), fetch ONE new niche-strict video and
+  //    append it to the conveyor queue. We do NOT blow away the queue —
+  //    slots 1/2 just shifted left, and slot3 needs a fresh teaser.
   const autoRefreshRunningRef = useRef(false);
   useEffect(() => {
     // Never interrupt an in-flight generation.
     if (isRewriting || isProfiling || isSearchingCompetitors) return;
-    // Pro users don't participate in the daily lock.
+    // Pro users don't participate in the daily conveyor.
     if (isPro) {
-      if (autoRefreshPending) markAutoRefreshConsumed();
+      if (conveyorShiftPending) markConveyorShiftConsumed();
       return;
     }
 
-    // Case A: cooldown just expired (ticker set autoRefreshPending) AND
-    // we still have a profile — refresh competitors only.
-    if (autoRefreshPending && profile && !isFreeCooldownActive) {
+    // Case A: 24h cooldown just expired → queue has been shifted in
+    // place by expireFreeCooldownCycle(). Append ONE new niche-strict
+    // trending video to fill slot3. The queue must remain exactly 3
+    // tiles after this.
+    if (conveyorShiftPending && profile && !isFreeCooldownActive) {
       if (autoRefreshRunningRef.current) return;
       autoRefreshRunningRef.current = true;
-      // Wipe UI state that belonged to yesterday's run.
-      setSelectedVideo(null);
+      // Wipe per-run UI state that belonged to yesterday's evicted run.
       setActiveRewrite(null);
       setLogSteps([]);
       setActiveTab("script");
       setCopiedText(false);
       setDailyLimitActive(false);
-      setWorkflowNonce((n) => n + 1);
-      toast.loading("New 24h window opened • refreshing ghost matrix...", { id: "auto-refresh" });
-      // Refresh server-side quota too (cooldown expiry = new day token).
+      toast.loading("24h conveyor advanced • sourcing next niche trend...", { id: "conveyor-shift" });
+      // Refresh server-side quota so the client matches the reset.
       void refreshQuota(true).catch(() => {});
-      const prof: ProfileWithKeywords = { ...profile, extractedKeywords: [] };
-      autoDiscoverCompetitors(prof)
+      const strictNiche = savedNiche || nicheInput || "General YouTube Content";
+      const existingIds = new Set(useCloneCrushStore.getState().conveyorQueue.map((v) => v.videoId));
+      cloneCrushMutation
+        .mutateAsync({ action: "competitors", niche: strictNiche, description: strictNiche })
+        .then((res: any) => {
+          if (!res?.success || !Array.isArray(res.competitors)) throw new Error(res?.error || "No competitors");
+          const viral = (res.competitors as any[]).filter((v: any) => clientViewCount(v) >= VIRAL_VIEW_THRESHOLD);
+          const fresh = viral.find((v: any) => v?.videoId && !existingIds.has(v.videoId));
+          if (fresh) {
+            // Normalize to CompetitorVideo shape before appending; the
+            // store's appendConveyorTile + stampConveyor enforces
+            // isLocked = (i > 0) so the new slot3 stays a teaser.
+            appendConveyorTile(fresh as CompetitorVideo);
+          }
+          // Activate slot0 (now the previously-locked slot1 video).
+          const nextQueue = useCloneCrushStore.getState().conveyorQueue;
+          if (nextQueue[0]?.videoId) setActiveVideoId(nextQueue[0].videoId);
+        })
         .catch(() => {})
         .finally(() => {
-          markAutoRefreshConsumed();
+          markConveyorShiftConsumed();
           autoRefreshRunningRef.current = false;
-          toast.dismiss("auto-refresh");
+          toast.dismiss("conveyor-shift");
         });
       return;
     }
 
     // Case B: returning user with a saved lastChannelUrl but no profile
-    // in memory (fresh tab / reload after expiry). Re-run the profile
-    // flow so the page is ready without the user re-pasting the URL.
-    if (!profile && lastChannelUrl && !isAuthLoading && tierHydrated && !autoRefreshPending) {
+    // in memory (fresh tab / reload). Re-run the profile flow so the
+    // page is ready without the user re-pasting the URL.
+    if (!profile && lastChannelUrl && !isAuthLoading && tierHydrated && !conveyorShiftPending) {
       if (autoRefreshRunningRef.current) return;
       autoRefreshRunningRef.current = true;
       if (!channelInput) setChannelInput(lastChannelUrl);
@@ -309,8 +331,6 @@ export default function CloneCrush() {
         })
         .catch(() => {
           toast.dismiss("returning-profile");
-          // Silent fail — leave input pre-filled so user can press the
-          // button themselves if the ghost mesh was down.
         })
         .finally(() => {
           autoRefreshRunningRef.current = false;
@@ -318,13 +338,10 @@ export default function CloneCrush() {
         });
     }
   }, [
-    autoRefreshPending, profile, isFreeCooldownActive, isPro, lastChannelUrl,
+    conveyorShiftPending, profile, isFreeCooldownActive, isPro, lastChannelUrl, savedNiche, nicheInput,
     isAuthLoading, tierHydrated, isRewriting, isProfiling, isSearchingCompetitors,
-    channelInput, markAutoRefreshConsumed, refreshQuota, setProfile, setIsProfiling,
-    startWorkflowProfile,
-    // autoDiscoverCompetitors is defined below this effect in the
-    // original file but is function-scoped and stable by reference;
-    // leave it out of deps to avoid stale-closure churn.
+    channelInput, markConveyorShiftConsumed, refreshQuota, setProfile, setIsProfiling,
+    startWorkflowProfile, appendConveyorTile, setActiveVideoId,
   ]);
 
   const autoDiscoverCompetitors = async (prof: ProfileWithKeywords) => {
@@ -344,6 +361,10 @@ export default function CloneCrush() {
 
     const discoveryDescription = [prof.description, keywordContext].filter(Boolean).join(" ").trim() || deducedNiche;
     setNicheInput(deducedNiche);
+    // Persist the deduced niche so EVERY future conveyor shift /
+    // auto-refresh stays strictly within this category — zero-friction
+    // niche-strict targeting from the saved URL.
+    setSavedNiche(deducedNiche);
     setCustomDescription((prof.description || discoveryDescription).slice(0, 150));
     setIsSearchingCompetitors(true);
     toast.loading(`AI deducing niche "${deducedNiche}" & auditing viral velocity via ghost mesh...`, { id: "competitors-find" });
@@ -356,7 +377,7 @@ export default function CloneCrush() {
         const envyData = (res as any).envyMetrics || null;
         setCompetitors(viralCompetitors, envyData);
         const unlocked = viralCompetitors.find((v: any) => !v.isLocked) || viralCompetitors[0];
-        setSelectedVideo(unlocked);
+        setActiveVideoId(unlocked?.videoId ?? null);
         selectWorkflowCompetitor({ videoId: unlocked.videoId, title: unlocked.title, url: unlocked.url, channelName: unlocked.channelName, thumbnail: unlocked.thumbnail }, deducedNiche);
         const isGhost = (res as any).ghostReconstructed;
         toast.success(isGhost ? `Ghost Matrix Reconstructed! ${viralCompetitors.length} viral competitors via MUM-01 mesh` : `Showdown Matrix Ready! ${viralCompetitors.length} 50k+ live competitors`, { id: "competitors-find" });
@@ -386,7 +407,7 @@ export default function CloneCrush() {
     // bleed into the new scan. Local UI state is reset alongside it, and the
     // keyed panel below forces React to unmount/remount the competitor matrix.
     beginNewWorkflow();
-    setSelectedVideo(null);
+    setActiveVideoId(null);
     setLogSteps([]);
     setActiveTab("script");
     setCopiedText(false);
@@ -709,7 +730,7 @@ export default function CloneCrush() {
                     if (next.trim().length > 0 && (activeRewrite || logSteps.length > 0 || rewrites.length > 0)) {
                       setActiveRewrite(null);
                       setLogSteps([]);
-                      setSelectedVideo(null);
+                      setActiveVideoId(null);
                     }
                   }} className="pl-10 bg-secondary/40 border-border/80 h-11 text-sm placeholder:text-muted-foreground/60" readOnly={isFreeCooldownActive} />
                 </div>
@@ -759,19 +780,20 @@ export default function CloneCrush() {
                   <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">Live Velocity Matrix</span><span className="text-xs text-muted-foreground">{competitors.length} Outliers {(competitors[0] as any)?.isGhostReconstructed && <span className="text-amber-300">• Ghost</span>}</span></div>
                   {isSearchingCompetitors ? (<div className="py-10 text-center space-y-2"><Loader2 className="w-7 h-7 animate-spin text-primary mx-auto" /><p className="text-xs text-muted-foreground">Auditing via ghost mesh (6 relays)...</p><div className="flex justify-center gap-1 mt-2">{[0,1,2,3].map(i=><span key={i} className="w-1 h-1 rounded-full bg-primary/60 animate-pulse" style={{animationDelay:`${i*150}ms`}} />)}</div></div>) : competitors.length>0 ? (
                     <div key={workflowNonce} className="grid grid-cols-3 gap-2 mt-2">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400';
-                      // 24h cooldown: the locked video (the one the user
-                      // just generated) is the only tile that remains
-                      // visible/interactable; every other tile is covered
-                      // by the cooldown overlay and non-clickable.
-                      const isCooldownLockedTile = isFreeCooldownActive && freeLockedVideoId !== video.videoId;
-                      const isCooldownPinnedTile = isFreeCooldownActive && freeLockedVideoId === video.videoId;
-                      // Preserve the pre-existing Pro-lock for non-first
-                      // tiles (isLocked) and the daily-limit mask.
-                      const tileLocked = video.isLocked || (!isPro && dailyLimitActive && !isSelected) || isCooldownLockedTile;
+                      // Conveyor semantics: slot0 (idx===0) is the
+                      // actionable tile (or the pinned 24h-locked result
+                      // during cooldown). Slots 1+2 are always future
+                      // teaser tiles and show the countdown overlay.
+                      const isTeaserSlot = idx > 0;
+                      const isCooldownPinnedTile = isFreeCooldownActive && idx === 0 && freeLockedVideoId === video.videoId;
+                      const showTileCooldown = isTeaserSlot && !isPro && freeCooldownUntil;
+                      // Free users can never click teaser slots — they
+                      // require pro to unlock early.
+                      const tileLocked = (isTeaserSlot && !isPro) || (!isPro && dailyLimitActive && !isSelected);
+                      const tileLabel = isCooldownPinnedTile ? "Locked • 24h" : isTeaserSlot ? `Next #${idx}` : "Unlocked";
                       return (
                       <div key={video.videoId} onClick={()=>{
-                        if (isCooldownLockedTile) { routeToProUpsell("premium"); return; }
-                        if (video.isLocked) { routeToProUpsell("locked"); return; }
+                        if (isTeaserSlot && !isPro) { routeToProUpsell("locked"); return; }
                         if (!isPro && dailyLimitActive) { openReferralRewards(); return; }
                         // During cooldown the pinned tile remains
                         // selectable but cannot trigger a new generation
@@ -783,13 +805,48 @@ export default function CloneCrush() {
                         setLogSteps([]);
                         setActiveTab("script");
                         setCopiedText(false);
-                        setSelectedVideo(video); selectWorkflowCompetitor({videoId:video.videoId,title:video.title,url:video.url,channelName:video.channelName,thumbnail:video.thumbnail}, nicheInput);
+                        setActiveVideoId(video.videoId); selectWorkflowCompetitor({videoId:video.videoId,title:video.title,url:video.url,channelName:video.channelName,thumbnail:video.thumbnail}, nicheInput);
                       }} className={`group relative rounded-xl border p-2 transition-all duration-300 flex flex-col justify-between bg-secondary/30 ${isSelected||isCooldownPinnedTile?"border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow":"border-border/60 hover:border-border"} ${tileLocked?"pointer-events-none":"cursor-pointer"}`}>
-                        <div className="absolute top-1 left-1 z-10 bg-primary text-primary-foreground text-[7px] font-bold px-1.5 py-0.5 rounded-full">{isCooldownPinnedTile?"Locked • 24h":video.isLocked?`Locked #${idx}`:"Unlocked"}</div>
-                        {video.isLocked ? <ProtectedVideoPreview video={video} /> : <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0 mb-1.5"><img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />{!isPro && dailyLimitActive && <DailyLimitOverlay />}{isCooldownLockedTile && freeCooldownUntil && <FreeCooldownOverlay unlocksAt={freeCooldownUntil} views={video.views} onUpgrade={()=>routeToProUpsell("premium")} variant="tile" />}</div>}
-                        <div><p className="text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p><p className="text-[8px] text-primary font-mono mt-1 font-semibold">{video.views}</p><div className="flex items-center gap-1.5 mt-1">{video.estimatedRevenue && <span className="text-[7px] font-bold text-green-400 bg-green-400/10 px-1 py-0.5 rounded flex items-center gap-0.5"><DollarSign className="w-2.5 h-2.5" />{video.estimatedRevenue}</span>}{video.viralVelocityScore!==undefined && !isCooldownLockedTile && <span className={`text-[7px] font-bold ${velocityColor} bg-secondary/60 px-1 py-0.5 rounded flex items-center gap-0.5`}><Flame className="w-2.5 h-2.5" />{video.viralVelocityScore}</span>}</div></div>
+                        <div className="absolute top-1 left-1 z-10 bg-primary text-primary-foreground text-[7px] font-bold px-1.5 py-0.5 rounded-full">{tileLabel}</div>
+                        <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0 mb-1.5">
+                          <img src={video.thumbnail} alt={video.title} className={`w-full h-full object-cover ${isTeaserSlot && !isPro ? "opacity-30 blur-[3px]" : ""}`} />
+                          {isTeaserSlot && !isPro ? (
+                            // Teaser slots: countdown band ABOVE
+                            // thumbnail + large-font view count.
+                            // During cooldown the overlay ticks live;
+                            // outside cooldown show a static "NEXT"
+                            // teaser mask (FreeCooldownOverlay's tile
+                            // variant owns the FOMO hierarchy).
+                            showTileCooldown && freeCooldownUntil ? (
+                              <FreeCooldownOverlay unlocksAt={freeCooldownUntil} views={video.views} onUpgrade={()=>routeToProUpsell("premium")} variant="tile" />
+                            ) : (
+                              <div className="absolute inset-0 z-20 flex flex-col overflow-hidden rounded-lg border border-primary/40 bg-gradient-to-b from-black/85 via-black/70 to-black/90 backdrop-blur-md">
+                                <div className="flex items-center justify-center gap-1.5 border-b border-primary/30 bg-primary/15 px-2 py-1.5">
+                                  <Lock className="h-3 w-3 text-primary" />
+                                  <span className="font-mono text-[11px] font-black text-primary tracking-widest">NEXT • LOCKED</span>
+                                </div>
+                                <div className="flex flex-1 flex-col items-center justify-center gap-1 px-2 text-center">
+                                  <p className="font-display text-xl md:text-2xl font-black text-foreground drop-shadow-[0_2px_8px_rgba(139,92,246,0.6)] leading-none">
+                                    {video.views}
+                                  </p>
+                                  <p className="text-[9px] font-mono uppercase tracking-widest text-primary/80">views • upcoming</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); routeToProUpsell("locked"); }}
+                                  className="m-1.5 cyber-button flex h-7 items-center justify-center gap-1 rounded-md text-[9px] font-display font-bold uppercase tracking-wider"
+                                >
+                                  <Sparkles className="h-2.5 w-2.5" /> Unlock Early — Pro
+                                </button>
+                              </div>
+                            )
+                          ) : (
+                            !isPro && dailyLimitActive && <DailyLimitOverlay />
+                          )}
+                        </div>
+                        <div><p className="text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p><p className="text-[11px] md:text-sm text-primary font-display font-black mt-1 leading-none">{video.views}</p><div className="flex items-center gap-1.5 mt-1">{video.estimatedRevenue && <span className="text-[7px] font-bold text-green-400 bg-green-400/10 px-1 py-0.5 rounded flex items-center gap-0.5"><DollarSign className="w-2.5 h-2.5" />{video.estimatedRevenue}</span>}{video.viralVelocityScore!==undefined && !showTileCooldown && <span className={`text-[7px] font-bold ${velocityColor} bg-secondary/60 px-1 py-0.5 rounded flex items-center gap-0.5`}><Flame className="w-2.5 h-2.5" />{video.viralVelocityScore}</span>}</div></div>
                       </div>);})}</div>) : (<div className="py-8 text-center text-xs text-muted-foreground">Profile your channel to launch ghost showdown matrix.</div>)}</div>
-                  {competitors.some(v=>v.isLocked) && !isPro && (<div className="mt-3 p-2.5 rounded-lg bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex items-center justify-between gap-2"><div className="flex items-center gap-2 min-w-0"><Lock className="w-4 h-4 text-primary shrink-0" /><p className="text-[10px] font-bold text-foreground truncate">Unlock Hidden Trend Competitors via Referral</p></div><Button onClick={openReferralRewards} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">Unlock Pro ₹0</Button></div>)}
+                  {!isPro && (<div className="mt-3 p-2.5 rounded-lg bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex items-center justify-between gap-2"><div className="flex items-center gap-2 min-w-0"><Lock className="w-4 h-4 text-primary shrink-0" /><p className="text-[10px] font-bold text-foreground truncate">Conveyor Belt: 1 Chain-Loop per 24h • Unlock Pro to skip the queue</p></div><Button onClick={openReferralRewards} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">Unlock Pro ₹0</Button></div>)}
                 </Card>
               </div>
             </div>
