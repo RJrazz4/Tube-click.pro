@@ -73,7 +73,8 @@ export default function CloneCrush() {
   const [nicheInput, setNicheInput] = useState("");
   const [customDescription, setCustomDescription] = useState("");
   const [selectedVideo, setSelectedVideo] = useState<CompetitorVideo | null>(null);
-  const [selectedTier, setSelectedVideoTier] = useState<"free" | "premium">(license.tier === "free" ? "free" : "premium");
+  const isPro = license.tier === "pro";
+  const [selectedTier, setSelectedVideoTier] = useState<"free" | "premium">(isPro ? "premium" : "free");
   const [copiedText, setCopiedText] = useState(false);
   const [activeTab, setActiveTab] = useState("script");
   const [logSteps, setLogSteps] = useState<{ label: string; status: "pending" | "processing" | "success" | "rerouting" | "error"; meta?: string }[]>([]);
@@ -198,18 +199,29 @@ export default function CloneCrush() {
 
   const performCloneAndCrush = async () => {
     if (!selectedVideo) { toast.error("Select a competitor video from matrix"); return; }
-    if (selectedVideo.isLocked && license.tier === "free") { toast.error("Requires Pro. Unlock via Referral Rewards"); return; }
 
-    // Pre-flight: free users cannot fire 99% Glitch at all — bounce to /rewards.
-    if (license.tier !== "pro" && selectedTier === "premium") {
+    // HARD PREFLIGHT — free users cannot run 99% Glitch. Bounce instantly,
+    // before any state mutation (setIsRewriting / setLogSteps) so the fake
+    // console never renders. Checks both the persisted tier field AND any
+    // in-flight selection edge-case where selectedTier is "premium" for a
+    // free user.
+    const userIsPro = license.tier === "pro";
+    if (!userIsPro && (selectedTier === "premium" || selectedVideo.isLocked)) {
       routeFreeToProUpsell();
       return;
     }
 
-    // Free-tier daily-limit short-circuit. The server will also enforce this
-    // before running any LLM work, but checking here skips the long spinner
-    // and surfaces the paywall instantly.
-    if (license.tier !== "pro") {
+    // WIPE STATE AT THE MILLISECOND A NEW EXECUTION STARTS. The old
+    // activeRewrite / console / copy state is dropped synchronously so a
+    // previously-generated package never bleeds over the new run.
+    setActiveRewrite(null);
+    setLogSteps([]);
+    setCopiedText(false);
+    setActiveTab("script");
+
+    // Free-tier daily-limit short-circuit. Check BEFORE we set isRewriting or
+    // populate logSteps so no fake console animation paints on blocked runs.
+    if (!userIsPro) {
       try { await refreshQuota(true); } catch { /* server enforcement still applies */ }
       const q = useQuotaStore.getState();
       if (!q.allowed && q.remainingSeconds > 0) {
@@ -220,7 +232,6 @@ export default function CloneCrush() {
     }
 
     setIsRewriting(true);
-    setActiveTab("script");
 
     const steps: { label: string; status: "pending" | "processing" | "success" | "rerouting" | "error"; meta?: string }[] = [
       { label: "Establishing Secure Tunnel via Ghost Node MUM-01...", status: "processing", meta: "ENCRYPTED" },
@@ -328,7 +339,19 @@ export default function CloneCrush() {
     const txt = `TITLE: ${activeRewrite.rewrittenTitle}\nHOOK: ${activeRewrite.glitchHook}\nSCRIPT:\n${activeRewrite.fullScript}\n\nTHUMBNAIL PROMPT: ${activeRewrite.thumbnailPrompt}\nSEO TAGS: ${(activeRewrite.seoTags || []).join(", ")}\nEDITING GUIDE: ${activeRewrite.editingGuide}`;
     try { await navigator.clipboard.writeText(txt); toast.success("Full Chain-Loop package copied to clipboard"); } catch { toast.error("Copy failed"); }
   };
-  const handleCloneAndCrush = () => { if (!selectedVideo || (selectedVideo.isLocked && license.tier==="free")) return performCloneAndCrush(); return runGuarded("unlock next Clone & Crush result", performCloneAndCrush); };
+  // SYNCHRONOUS EXECUTE-BUTTON INTERCEPT — before any guarded wrapper runs
+  // (which could itself trigger a soft gate delay / animation), check the
+  // 99% Glitch paywall and stale-wipe synchronously. This is THE single
+  // entry point for the big blue button.
+  const handleCloneAndCrush = () => {
+    if (!selectedVideo) { toast.error("Select a competitor video from matrix"); return; }
+    // 99% Glitch paywall: instant redirect, never fires runGuarded/performClone.
+    if (!isPro && (selectedTier === "premium" || selectedVideo.isLocked)) {
+      routeFreeToProUpsell();
+      return;
+    }
+    return runGuarded("unlock next Clone & Crush result", performCloneAndCrush);
+  };
   const handleCopyThumbnailPrompt = async () => { if (!activeRewrite) return; try { await navigator.clipboard.writeText(activeRewrite.thumbnailPrompt || "Cinematic thumbnail"); toast.success("Thumbnail prompt copied!"); } catch { toast.error("Copy failed"); } };
   const handleCopySeoTags = async () => { if (!activeRewrite) return; try { await navigator.clipboard.writeText((activeRewrite.seoTags||[]).join(", ")); toast.success("SEO tags copied!"); } catch { toast.error("Copy failed"); } };
   const handleCopyScript = async () => { if (!activeRewrite) return; const txt = `TITLE: ${activeRewrite.rewrittenTitle}\nHOOK: ${activeRewrite.glitchHook}\nSCRIPT: ${activeRewrite.fullScript}`; try { await navigator.clipboard.writeText(txt); setCopiedText(true); toast.success("Script copied!"); setTimeout(()=>setCopiedText(false),2000); } catch { toast.error("Copy failed"); } };
