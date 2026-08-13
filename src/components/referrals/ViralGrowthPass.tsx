@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, Check, Copy, Crown, Gift, Loader2, UserRoundCheck, Users, Terminal, Cpu, Flame, DollarSign } from "lucide-react";
+import { ArrowRight, Check, Copy, Crown, Gift, Loader2, Users, Terminal, Cpu, Flame, DollarSign } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -70,7 +70,8 @@ export function ViralGrowthPass() {
   // complete), not raw signups.
   const milestoneTarget = profile?.requiredForReward || MILESTONE_SIZE;
   const inviteProgress = Math.min(profile?.qualifiedReferrals || 0, milestoneTarget);
-  const unlockProgress = profile?.proActive ? 1 : 0;
+  const invitePct = milestoneTarget > 0 ? Math.round((inviteProgress / milestoneTarget) * 100) : 0;
+  const rewardDays = profile?.rewardDays || 21;
   const promotionalInvite = buildReferralPromo(referralUrl);
 
   const copyInvite = async () => {
@@ -112,18 +113,15 @@ export function ViralGrowthPass() {
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
           <div className="flex min-w-0 flex-1 flex-col gap-4">
             {status === "loading" && <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Syncing ghost uplink via MUM-01 quantum cache...</p>}
-            {status === "signed-out" && <p className="mt-1 text-xs text-muted-foreground">Sign in to get your ghost keycard (holographic + QR). Invite 3 nodes, help 1 unlock Elite → 7-Day Pass via ghost relay. No card. Ever. tubeclickpro.in</p>}
+            {status === "signed-out" && <p className="mt-1 text-xs text-muted-foreground">Sign in to get your ghost keycard (holographic + QR). Two qualified referrals unlock 21 days of Pro via ghost relay. No card. Ever. tubeclickpro.in</p>}
             {status === "unavailable" && <p className="mt-1 text-xs text-muted-foreground">Ghost mesh rerouting - your progress safe in quantum cache (30m). Retry via MUM-01 relay.</p>}
             {status === "ready" && profile && (
               <>
                 <div className="space-y-3 rounded-xl border border-border/40 bg-card/40 p-3.5 backdrop-blur-sm">
-                  <div className="flex items-center justify-between"><p className="text-xs font-bold font-mono flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-primary" /> SYNC NODES • Friends Invited</p><span className="text-[11px] font-mono font-bold text-primary">{inviteProgress}/3</span></div>
-                  <TerminalProgress value={inviteProgress} total={3} label={`> GHOST SYNC [${inviteProgress}/3] • MUM-01 ENCRYPTED`} />
-                  <Progress value={(inviteProgress / 3) * 100} className="h-2" />
-                  <div className="flex items-center justify-between mt-3"><p className="text-xs font-bold font-mono flex items-center gap-1.5"><UserRoundCheck className="w-3.5 h-3.5 text-cyan-300" /> ELITE NODES • Pro Unlocks</p><span className="text-[11px] font-mono font-bold text-cyan-300">{unlockProgress}/1</span></div>
-                  <TerminalProgress value={unlockProgress} total={1} label={`> ELITE UNLOCK [${unlockProgress}/1] • GHOST RELAY MUM-01`} />
-                  <Progress value={unlockProgress * 100} className="h-2 [&>div]:bg-cyan-400" />
-                  <p className="text-[11px] text-muted-foreground mt-2">Establish 3-node private tracker uplink via <span className="text-cyan-300 font-mono">tubeclickpro.in/ref/...?clearance=LEVEL4</span>. When 1 node unlocks Elite, your 7-Day Pass auto-activates via ghost relay - no checkout, no card, ever. Value anchor: <span className="text-foreground line-through">$97/mo</span> <span className="text-green-400 font-bold">→ ₹0</span></p>
+                  <div className="flex items-center justify-between"><p className="text-xs font-bold font-mono flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-primary" /> QUALIFIED REFERRALS</p><span className="text-[11px] font-mono font-bold text-primary">{inviteProgress}/{milestoneTarget}</span></div>
+                  <TerminalProgress value={inviteProgress} total={milestoneTarget} label={`> QUALIFIED [${inviteProgress}/${milestoneTarget}] • MUM-01 ENCRYPTED`} />
+                  <Progress value={invitePct} className="h-2" />
+                  <p className="text-[11px] text-muted-foreground mt-2">Share your private tracker uplink via <span className="text-cyan-300 font-mono">tubeclickpro.in/ref/...?clearance=LEVEL4</span>. When {milestoneTarget} invited creators each complete a real action, {rewardDays} days of Pro auto-activate via ghost relay - no checkout, no card, ever. Value anchor: <span className="text-foreground line-through">$97/mo</span> <span className="text-green-400 font-bold">→ ₹0</span></p>
                   <div className="flex items-center gap-2 mt-2">
                     <Button asChild variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs text-primary"><Link to="/rewards">Open War Room • Live Intel <ArrowRight className="h-3.5 w-3.5" /></Link></Button>
                     <span className="text-[9px] font-mono text-muted-foreground flex items-center gap-1"><Cpu className="w-3 h-3" /> Quantum cache 87ms • Encrypted • Ghost mesh 3 nodes</span>

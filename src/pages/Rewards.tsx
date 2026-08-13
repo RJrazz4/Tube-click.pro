@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, Copy, Crown, Gift, Loader2, LockKeyhole, ShieldCheck, Sparkles, UserRoundCheck, Users, Terminal, Activity, Cpu, Flame, DollarSign } from "lucide-react";
+import { ArrowRight, Check, Copy, Crown, Gift, Loader2, LockKeyhole, ShieldCheck, Sparkles, Users, Terminal, Activity, Cpu, Flame, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -121,8 +121,17 @@ export default function Rewards() {
   }, [profile]);
 
   const referralUrl = profile ? buildReferralUrl(profile.referralCode) : "";
-  const inviteProgress = Math.min(profile?.qualifiedReferrals || 0, profile?.requiredForReward || 2);
-  const unlockProgress = profile?.proActive ? 1 : 0;
+  // 2-Node model: the ONLY gate is qualified referrals (proof-of-work
+  // complete). The former second stage — "help 1 invited friend unlock
+  // Elite" — was the chain-loop from evaluate_qualified_referral_chain(),
+  // which migration 202608140006 dropped. Rendering it kept promising a
+  // step the backend no longer has.
+  const requiredForReward = profile?.requiredForReward || 2;
+  const qualified = profile?.qualifiedReferrals || 0;
+  const inviteProgress = Math.min(qualified, requiredForReward);
+  const invitePct = requiredForReward > 0 ? Math.round((inviteProgress / requiredForReward) * 100) : 0;
+  const rewardDays = profile?.rewardDays || 21;
+  const pendingReferrals = profile?.pendingReferrals || 0;
 
   const copyInvite = async () => {
     if (!referralUrl) return;
@@ -174,7 +183,7 @@ export default function Rewards() {
             <div>
               <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-300"><Crown className="h-3.5 w-3.5" /> Qualified Growth Loop • Ghost Protocol • Private Tracker</div>
               <h1 className="font-display text-3xl font-black md:text-4xl">Unlock Pro for <span className="bg-gradient-to-r from-primary to-cyan-300 bg-clip-text text-transparent">₹0</span> <span className="text-lg font-mono font-bold text-muted-foreground line-through decoration-primary/50">$97/mo</span> <span className="text-[11px] font-mono bg-green-500/10 text-green-300 border border-green-500/20 px-2 py-0.5 rounded-full">YOUR PRICE: ₹0 via ghost uplink</span></h1>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">Ghost Protocol: Establish 3-node private tracker uplink via <span className="text-cyan-300 font-mono">tubeclickpro.in/ref/...?clearance=LEVEL4&node=MUM01</span>. When 1 node unlocks Elite, backend auto-activates your 7-Day Pass via MUM-01 ghost relay. No checkout, no card, no subscription. Value anchor $97 → ₹0 illusion makes free feel like heist. <span className="text-primary/60 font-mono text-xs">Encrypted • Quantum cached • 87ms</span></p>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">Ghost Protocol: share your private tracker uplink via <span className="text-cyan-300 font-mono">tubeclickpro.in/ref/...?clearance=LEVEL4&node=MUM01</span>. When {requiredForReward} invited creators each complete a real action, the backend auto-activates {rewardDays} days of Pro via MUM-01 ghost relay. No checkout, no card, no subscription. <span className="text-primary/60 font-mono text-xs">Encrypted • Quantum cached • 87ms</span></p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="text-[10px] font-mono bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded-full">◢◤ PRIVATE UPLINK • LEVEL 4</span>
                 <span className="text-[10px] font-mono bg-cyan-400/10 text-cyan-300 border border-cyan-400/20 px-2 py-1 rounded-full">tubeclickpro.in • Canonical • Never Vercel</span>
@@ -191,20 +200,16 @@ export default function Rewards() {
         <div className="grid gap-6 lg:grid-cols-5">
           <div className="lg:col-span-3 space-y-6">
             <Card className="glass-strong border-primary/20 bracket">
-              <CardHeader><CardTitle className="flex items-center gap-2 font-display"><Gift className="h-5 w-5 text-primary" />Ghost Uplink Progress • 2-Step • Terminal</CardTitle><CardDescription className="flex items-center gap-2 font-mono text-[11px]"><Terminal className="w-3 h-3" />Both must complete via ghost relay • Signups alone never unlock • Quantum cached • tubeclickpro.in</CardDescription></CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2 font-display"><Gift className="h-5 w-5 text-primary" />Ghost Uplink Progress • Terminal</CardTitle><CardDescription className="flex items-center gap-2 font-mono text-[11px]"><Terminal className="w-3 h-3" />Proof-of-work required • Signups alone never unlock • Quantum cached • tubeclickpro.in</CardDescription></CardHeader>
               <CardContent className="space-y-6">
                 <div className="rounded-2xl border border-border/60 bg-background/35 p-4 backdrop-blur-sm">
-                  <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 font-mono text-sm font-bold text-primary">1</span><div><p className="text-sm font-bold flex items-center gap-2">Nodes Synced <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded">FRIENDS INVITED</span></p><p className="text-[11px] text-muted-foreground font-mono">Verified via tubeclickpro.in/ref/...?clearance=LEVEL4 • Private tracker</p></div></div><span className="font-mono text-lg font-black text-primary">{inviteProgress}/3</span></div>
-                  <div className="font-mono text-[10px] text-muted-foreground mb-1">{`> GHOST SYNC [${"█".repeat(inviteProgress)}${"░".repeat(3-inviteProgress)}] ${Math.round((inviteProgress/3)*100)}% • MUM-01 ENCRYPTED`}</div>
-                  <Progress value={(inviteProgress / 3) * 100} className="h-3" />
-                </div>
-                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.03] p-4">
-                  <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-400/15 font-mono text-sm font-bold text-cyan-300">2</span><div><p className="flex items-center gap-1.5 text-sm font-bold"><UserRoundCheck className="h-4 w-4 text-cyan-300" />Elite Nodes Unlocked <span className="text-[10px] font-mono bg-cyan-400/10 text-cyan-300 px-1.5 py-0.5 rounded">PRO UNLOCKS</span></p><p className="text-[11px] text-muted-foreground font-mono">Help 1 invited friend complete loop via ghost mesh • Private tracker</p></div></div><span className="font-mono text-lg font-black text-cyan-300">{unlockProgress}/1</span></div>
-                  <div className="font-mono text-[10px] text-muted-foreground mb-1">{`> ELITE UNLOCK [${"█".repeat(unlockProgress)}${"░".repeat(1-unlockProgress)}] ${unlockProgress*100}% • GHOST RELAY MUM-01`}</div>
-                  <Progress value={unlockProgress * 100} className="h-3 [&>div]:bg-cyan-400" />
+                  <div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15 font-mono text-sm font-bold text-primary">1</span><div><p className="text-sm font-bold flex items-center gap-2">Qualified Referrals <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded">PROOF-OF-WORK</span></p><p className="text-[11px] text-muted-foreground font-mono">Counts only after your invite completes a real action • Signups alone never count</p></div></div><span className="font-mono text-lg font-black text-primary">{inviteProgress}/{requiredForReward}</span></div>
+                  <div className="font-mono text-[10px] text-muted-foreground mb-1">{`> QUALIFIED [${"█".repeat(inviteProgress)}${"░".repeat(Math.max(requiredForReward - inviteProgress, 0))}] ${invitePct}% • MUM-01 ENCRYPTED`}</div>
+                  <Progress value={invitePct} className="h-3" />
+                  {pendingReferrals > 0 && <p className="mt-2 text-[11px] font-mono text-muted-foreground">{pendingReferrals} invited{pendingReferrals === 1 ? "" : "s"} signed up but haven&apos;t completed a core action yet — they don&apos;t count until they do.</p>}
                 </div>
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.07] p-4 text-sm leading-relaxed text-amber-100">
-                  <strong className="flex items-center gap-1.5"><Activity className="w-4 h-4" />Ghost Protocol Loophole • $97 → ₹0 Heist:</strong> Invite 3 nodes via private tracker link <span className="font-mono text-cyan-300">tubeclickpro.in/ref/...?clearance=LEVEL4</span>. When 1 node unlocks Elite via their own referral, you both get 7 Days Premium FREE via MUM-01 ghost relay! Help them grow to grow yourself. Quantum cache ensures zero loss. This is how you legally steal $97/mo tool for ₹0.
+                  <strong className="flex items-center gap-1.5"><Activity className="w-4 h-4" />How the {requiredForReward}-Node reward works:</strong> Share your private tracker link <span className="font-mono text-cyan-300">tubeclickpro.in/ref/...?clearance=LEVEL4</span>. When <strong>{requiredForReward}</strong> invited creators each complete a real action in the app, you get <strong>{rewardDays} days of Pro</strong> — granted automatically, no checkout, no card. Signing up alone never unlocks it.
                 </div>
                 {profile.proTierExpiresAt && <ProExpiryCountdown expiresAt={profile.proTierExpiresAt} />}
                 <Suspense fallback={<RewardsPanelFallback />}>

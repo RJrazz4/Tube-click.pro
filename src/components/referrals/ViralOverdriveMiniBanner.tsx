@@ -16,7 +16,7 @@ import { buildReferralUrl } from "@/lib/domain/canonical";
 
 export function ViralOverdriveMiniBanner() {
   const [show, setShow] = useState(false);
-  const [progress, setProgress] = useState({ invited: 0, unlocked: 0 });
+  const [progress, setProgress] = useState({ invited: 0, required: 2, rewardDays: 21 });
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
@@ -34,9 +34,8 @@ export function ViralOverdriveMiniBanner() {
         if (!data.session) return;
         const profile = await loadReferralProfile();
         const invited = Math.min(profile.qualifiedReferrals, profile.requiredForReward);
-        const unlocked = profile.proActive ? 1 : 0;
         if (!profile.proActive) {
-          setProgress({ invited, unlocked });
+          setProgress({ invited, required: profile.requiredForReward, rewardDays: profile.rewardDays });
           setShow(true);
         }
       } catch {}
@@ -62,7 +61,7 @@ export function ViralOverdriveMiniBanner() {
           <Gift className="w-4 h-4 text-amber-400 animate-pulse" />
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-mono font-bold text-foreground">Ghost Uplink Progress • {progress.invited}/3 nodes • {progress.unlocked}/1 elite • $97→₹0</p>
+          <p className="text-xs font-mono font-bold text-foreground">Ghost Uplink Progress • {progress.invited}/{progress.required} qualified • {progress.rewardDays}d Pro • $97→₹0</p>
           <p className="text-[10px] font-mono text-muted-foreground">Establish uplink via <span className="text-cyan-300">tubeclickpro.in/ref/...?clearance=LEVEL4</span> • Private tracker • MUM-01</p>
         </div>
       </div>
