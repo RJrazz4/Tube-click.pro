@@ -106,7 +106,7 @@ export default function Rewards() {
   }, [isAuthenticated, isAuthLoading, refresh]);
 
   useEffect(() => {
-    if (profile && (profile.verifiedReferrals >= 3 || profile.qualified)) {
+    if (profile && (profile.qualifiedReferrals >= profile.requiredForReward || profile.proActive)) {
       // Celebration - only once per session
       try {
         const key = `ghost_celebrated_${profile.referralCode}`;
@@ -121,8 +121,8 @@ export default function Rewards() {
   }, [profile]);
 
   const referralUrl = profile ? buildReferralUrl(profile.referralCode) : "";
-  const inviteProgress = Math.min(profile?.verifiedReferrals || 0, 3);
-  const unlockProgress = Math.min(profile?.friendsUnlockedPro || 0, 1);
+  const inviteProgress = Math.min(profile?.qualifiedReferrals || 0, profile?.requiredForReward || 2);
+  const unlockProgress = profile?.proActive ? 1 : 0;
 
   const copyInvite = async () => {
     if (!referralUrl) return;
@@ -181,8 +181,8 @@ export default function Rewards() {
                 <span className="text-[10px] font-mono bg-green-500/10 text-green-300 border border-green-500/20 px-2 py-1 rounded-full">MUM-01 • 87ms • Encrypted</span>
               </div>
             </div>
-            <div className={`rounded-2xl border px-5 py-4 backdrop-blur-md min-w-[240px] ${profile.qualified ? "border-green-500/30 bg-green-500/10 text-green-300" : "border-primary/20 bg-background/40 text-muted-foreground"}`}>
-              <div className="flex items-center gap-2 text-sm font-bold">{profile.qualified ? <ShieldCheck className="h-5 w-5" /> : <Sparkles className="h-5 w-5 text-primary" />}{profile.qualified ? "Elite Pass Unlocked • Ghost Node Active" : "Qualification Sync via MUM-01"}</div>
+            <div className={`rounded-2xl border px-5 py-4 backdrop-blur-md min-w-[240px] ${profile.proActive ? "border-green-500/30 bg-green-500/10 text-green-300" : "border-primary/20 bg-background/40 text-muted-foreground"}`}>
+              <div className="flex items-center gap-2 text-sm font-bold">{profile.proActive ? <ShieldCheck className="h-5 w-5" /> : <Sparkles className="h-5 w-5 text-primary" />}{profile.proActive ? "Elite Pass Unlocked • Ghost Node Active" : "Qualification Sync via MUM-01"}</div>
               {profile.proTierExpiresAt ? <div className="mt-2"><ProExpiryCountdown expiresAt={profile.proTierExpiresAt} compact /></div> : <p className="mt-1 text-[10px] font-mono text-primary/60">Ghost mesh: 3 nodes • 87ms • Encrypted • Quantum cached</p>}
             </div>
           </div>

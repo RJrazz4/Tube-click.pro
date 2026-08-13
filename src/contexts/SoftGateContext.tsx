@@ -343,11 +343,11 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
             <DialogHeader>
               <DialogTitle className="font-display text-2xl font-black">You’ve unlocked your free preview!</DialogTitle>
               <DialogDescription className="text-sm leading-relaxed">
-                Sign in to {pending?.actionLabel || "continue"}, keep your work, and start the <span className="font-semibold text-foreground">2-step path to a free 7-Day Pro Pass.</span>
+                Sign in to {pending?.actionLabel || "continue"}, keep your work, and start the <span className="font-semibold text-foreground">2-step path to a free 21-Day Pro Pass.</span>
               </DialogDescription>
             </DialogHeader>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[10px] text-muted-foreground">
-              {["Keep your result", "Get your invite toolkit", "Earn 7-Day Pro"].map((benefit) => (
+              {["Keep your result", "Get your invite toolkit", "Earn 21-Day Pro"].map((benefit) => (
                 <div key={benefit} className="rounded-lg border border-border/50 bg-background/40 px-2 py-2">
                   <CheckCircle2 className="mx-auto mb-1 h-3.5 w-3.5 text-cyan-400" />{benefit}
                 </div>

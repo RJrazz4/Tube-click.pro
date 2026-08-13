@@ -275,21 +275,30 @@ grant execute on function public.ghost_dawn_patrol_due_users(int) to service_rol
 --    "lazy generate" on first Dashboard load for the day so we never lose
 --    a brief due to missing extensions).
 -- ---------------------------------------------------------------------------
-do $$
+-- MP7 follow-up fix: the original block nested a $$-quoted cron command
+-- inside a $$-quoted DO body. PostgreSQL terminates the outer body at the
+-- first inner $$, so this raised a hard syntax error at parse time. A parse
+-- error cannot be caught by the EXCEPTION handler below (that only traps
+-- runtime errors), so the entire DO block failed and the dispatch job was
+-- NEVER scheduled — silently, because the migration otherwise succeeded.
+-- Distinct dollar-quote tags ($do$ / $cron$) keep the nesting unambiguous.
+do $do$
 begin
   if exists (select 1 from pg_extension where extname = 'pg_cron')
      and exists (select 1 from pg_extension where extname = 'pg_net') then
 
-    -- Idempotent schedule: hourly at :03 UTC.
+    -- Idempotent schedule: drop any previous definition first so re-running
+    -- the migration cannot leave a stale duplicate job behind.
+    perform cron.unschedule('ghost-dawn-patrol-dispatch')
+      where exists (select 1 from cron.job where jobname = 'ghost-dawn-patrol-dispatch');
+
+    -- Hourly at :03 UTC.
     perform cron.schedule(
       'ghost-dawn-patrol-dispatch',
       '3 * * * *',
-      $$
+      $cron$
         select net.http_post(
-          url := coalesce(
-            current_setting('app.dawn_patrol_webhook_url', true),
-            (select base_url from net._http_request limit 1) -- placeholder
-          ),
+          url := current_setting('app.dawn_patrol_webhook_url', true),
           headers := jsonb_build_object(
             'content-type', 'application/json',
             'authorization', 'Bearer ' || coalesce(current_setting('app.dawn_patrol_cron_secret', true), '')
@@ -299,11 +308,11 @@ begin
           )
         )
         where coalesce(current_setting('app.dawn_patrol_webhook_url', true), '') <> '';
-      $$
+      $cron$
     );
   end if;
 exception when others then
-  -- pg_cron unavailable in this environment — lazy client dispatch handles it.
-  null;
+  -- pg_cron/pg_net unavailable — lazy client dispatch handles it.
+  raise notice 'dawn patrol cron scheduling skipped: %', sqlerrm;
 end;
-$$;
+$do$;

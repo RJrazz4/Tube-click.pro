@@ -64,7 +64,7 @@ export default function About() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">How It Works</h2>
           <p className="text-muted-foreground leading-relaxed">
-            TubeClick Pro uses a free Viral Growth Loop instead of paid subscriptions. Invite three creator friends and help one unlock their own Pro access; the qualified chain automatically activates your 7-Day Pro Pass. AI providers are routed securely through our managed server infrastructure.
+            TubeClick Pro uses a free Viral Growth Loop instead of paid subscriptions. Invite two creator friends; once each one completes a real action in the product, your 21-Day Pro Pass activates automatically. Signing up alone does not count — the referral must be earned. AI providers are routed securely through our managed server infrastructure.
           </p>
         </section>
 

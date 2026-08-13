@@ -18,7 +18,8 @@ import { GhostStreak } from "@/components/referrals/GhostStreak";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
 
-const MILESTONE_SIZE = 3;
+// Fallback only; the server is authoritative via profile.requiredForReward.
+const MILESTONE_SIZE = 2;
 
 function TerminalProgress({ value, total, label }: { value: number; total: number; label: string }) {
   const percent = Math.round((value / total) * 100);
@@ -65,8 +66,11 @@ export function ViralGrowthPass() {
   }, [refresh]);
 
   const referralUrl = profile ? buildReferralUrl(profile.referralCode) : "";
-  const inviteProgress = Math.min(profile?.verifiedReferrals || 0, MILESTONE_SIZE);
-  const unlockProgress = Math.min(profile?.friendsUnlockedPro || 0, 1);
+  // 2-Node: progress is measured in QUALIFIED referrals (proof-of-work
+  // complete), not raw signups.
+  const milestoneTarget = profile?.requiredForReward || MILESTONE_SIZE;
+  const inviteProgress = Math.min(profile?.qualifiedReferrals || 0, milestoneTarget);
+  const unlockProgress = profile?.proActive ? 1 : 0;
   const promotionalInvite = buildReferralPromo(referralUrl);
 
   const copyInvite = async () => {

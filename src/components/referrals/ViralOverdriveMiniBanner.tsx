@@ -33,9 +33,9 @@ export function ViralOverdriveMiniBanner() {
         const { data } = await supabase.auth.getSession();
         if (!data.session) return;
         const profile = await loadReferralProfile();
-        const invited = Math.min(profile.verifiedReferrals, 3);
-        const unlocked = Math.min(profile.friendsUnlockedPro, 1);
-        if (!profile.qualified) {
+        const invited = Math.min(profile.qualifiedReferrals, profile.requiredForReward);
+        const unlocked = profile.proActive ? 1 : 0;
+        if (!profile.proActive) {
           setProgress({ invited, unlocked });
           setShow(true);
         }

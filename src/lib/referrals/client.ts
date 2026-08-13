@@ -1,14 +1,27 @@
 import { supabase } from "@/integrations/supabase/client";
 
+/**
+ * 2-Node referral profile.
+ *
+ * Progress only — the dashboard RPC deliberately exposes no anti-abuse state
+ * (risk scores, rejection reasons). Surfacing those would tell an attacker
+ * which control rejected them.
+ */
 export interface ReferralProfile {
   referralCode: string;
   totalInvites: number;
-  verifiedReferrals: number;
-  friendsUnlockedPro: number;
-  qualified: boolean;
-  proUnlockedAt: string | null;
+  /** Referrals that completed proof-of-work. Only these count toward reward. */
+  qualifiedReferrals: number;
+  /** Attributed but not yet proven by a core action. */
+  pendingReferrals: number;
+  /** Qualified referrals needed per reward (2 under the 2-Node model). */
+  requiredForReward: number;
+  /** Pro days granted per completed milestone (21). */
+  rewardDays: number;
+  proActive: boolean;
   proTierExpiresAt: string | null;
-  proUnlockSource: "qualified_loop" | "admin_seed" | null;
+  lifetimeDaysGranted: number;
+  lifetimeDayCap: number;
 }
 
 interface ReferralResponse {
@@ -59,14 +72,14 @@ function parseReferralProfile(value: unknown): ReferralProfile {
   return {
     referralCode: profile.referral_code,
     totalInvites: Number(profile.total_invites || 0),
-    verifiedReferrals: Number(profile.verified_referrals || 0),
-    friendsUnlockedPro: Number(profile.friends_unlocked_pro || 0),
-    qualified: profile.qualified === true,
-    proUnlockedAt: typeof profile.pro_unlocked_at === "string" ? profile.pro_unlocked_at : null,
-    proTierExpiresAt: typeof profile.pro_tier_expires_at === "string" ? profile.pro_tier_expires_at : null,
-    proUnlockSource: profile.pro_unlock_source === "qualified_loop" || profile.pro_unlock_source === "admin_seed"
-      ? profile.pro_unlock_source
-      : null,
+    qualifiedReferrals: Number(profile.qualified_referrals || 0),
+    pendingReferrals: Number(profile.pending_referrals || 0),
+    requiredForReward: Number(profile.required_for_reward || 2),
+    rewardDays: Number(profile.reward_days || 21),
+    proActive: profile.pro_active === true,
+    proTierExpiresAt: typeof profile.pro_expires_at === "string" ? profile.pro_expires_at : null,
+    lifetimeDaysGranted: Number(profile.lifetime_days_granted || 0),
+    lifetimeDayCap: Number(profile.lifetime_day_cap || 180),
   };
 }
 

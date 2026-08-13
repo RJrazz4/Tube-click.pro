@@ -115,6 +115,15 @@ async function consumeDailyQuota(req: Request): Promise<QuotaDecision> {
     return { allowed: true, code: 'OK', tier: 'free' };
   }
   const payload = await response.json() as Record<string, unknown>;
+
+  // Phase 4 (2-Node referral) — proof-of-work hook. Clone Crush is a
+  // qualifying core action. Fires only on an ALLOWED run (a paywalled or
+  // rate-limited attempt is not work), and is fire-and-forget so referral
+  // accounting can never delay or fail the user's generation.
+  if (payload.allowed === true) {
+    void registerReferralProofOfWork(user.id, 'clone_crush_run');
+  }
+
   return {
     allowed: payload.allowed === true,
     code: (payload.code as QuotaDecision['code']) || 'OK',
@@ -1066,5 +1075,24 @@ Execute Chain-Loop. Return STRICT JSON matching the schema, nothing else.`;
   } catch (e: unknown) {
     console.error('[clone-crush] unexpected:', e);
     return jsonResponse({ error: sanitizeThrownError(e, 'clone-crush'), code: 'INTERNAL', service: 'clone-crush' }, 500);
+  }
+}
+
+/**
+ * Register a qualifying Clone Crush run with the 2-Node referral engine.
+ * Fire-and-forget by design: referral accounting is a side-effect of the
+ * user's action and must never become a precondition for it.
+ */
+async function registerReferralProofOfWork(userId: string, action: string): Promise<void> {
+  try {
+    const { url, key } = await serviceRoleSupabase();
+    await fetch(`${url}/rest/v1/rpc/register_core_action`, {
+      method: 'POST',
+      headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_user_id: userId, p_action: action }),
+      signal: AbortSignal.timeout(4_000),
+    });
+  } catch (error) {
+    console.warn('[quota] referral proof-of-work hook failed:', error);
   }
 }

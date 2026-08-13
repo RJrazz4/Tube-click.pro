@@ -684,7 +684,7 @@ function ReferralRewardsSection() {
         </div>
         <h2 className="font-display text-2xl font-black text-foreground md:text-3xl">Unlock Pro for Free</h2>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          TubeClick Pro has no paid checkout. Complete the qualified referral loop to activate your 7-Day Pro Pass.
+          TubeClick Pro has no paid checkout. Two qualified referrals activate your 21-Day Pro Pass.
         </p>
       </div>
 

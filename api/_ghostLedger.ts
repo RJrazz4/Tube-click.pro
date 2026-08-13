@@ -182,6 +182,28 @@ export async function consumeGhostAction(
       };
     }
     const payload = (await res.json()) as GhostConsumeResult;
+
+    // ---------------------------------------------------------------------
+    // Phase 4 (2-Node referral) — PROOF-OF-WORK hook.
+    //
+    // This is the single choke point every metered Ghost action passes
+    // through, so referral qualification is registered here exactly once
+    // rather than being re-implemented per route. Scattering an
+    // authorisation-adjacent concern across routes is precisely the drift
+    // that produced the MP7 auth bypass.
+    //
+    // Semantics that matter:
+    //  - Only fires when the action was actually ALLOWED. A rate-limited or
+    //    paywalled attempt is not work, and must never qualify a referral.
+    //  - Fire-and-forget: qualification must never add latency to, or fail,
+    //    a user's action. Errors are swallowed by design.
+    //  - register_core_action() is idempotent and filters the action
+    //    allowlist server-side, so repeat calls cannot double-credit.
+    // ---------------------------------------------------------------------
+    if (payload?.allowed === true) {
+      void registerReferralProofOfWork(verified.userId, action);
+    }
+
     return payload;
   } catch (err) {
     console.error(`[ghost-ledger] consume(${action}) error:`, err);
@@ -211,4 +233,31 @@ export async function handleGhostCredits(req: Request): Promise<Response> {
   }
   const snap = await getGhostQuota(req);
   return jsonResponse(snap, snap.code === "OK" || snap.code === "AUTH_REQUIRED" ? 200 : 503);
+}
+
+/**
+ * Notify the referral engine that a user completed a qualifying core action.
+ *
+ * Intentionally fire-and-forget. Referral accounting is a side-effect of the
+ * user's action, never a precondition for it: if the referral service is slow
+ * or down, the user's interrogate/squad/recon call must still succeed. The
+ * promise is deliberately not awaited by the caller.
+ */
+async function registerReferralProofOfWork(userId: string, action: string): Promise<void> {
+  try {
+    const { url, key } = supabaseCreds();
+    await fetch(`${url}/rest/v1/rpc/register_core_action`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ p_user_id: userId, p_action: action }),
+      signal: AbortSignal.timeout(4_000),
+    });
+  } catch (err) {
+    // Never surfaced: a failed qualification must not affect the action.
+    console.warn(`[ghost-ledger] referral proof-of-work hook failed (${action}):`, err);
+  }
 }

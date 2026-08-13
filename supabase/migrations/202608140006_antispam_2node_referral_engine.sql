@@ -487,6 +487,33 @@ revoke all on function public.attach_referral(uuid, text, text, text, text) from
 grant execute on function public.attach_referral(uuid, text, text, text, text) to service_role;
 
 -- ===========================================================================
+-- STEP 9b — validate_referral_code(): share-link click validation.
+-- ===========================================================================
+-- Replaces the legacy record_referral_click(). The click path runs BEFORE the
+-- invitee has an account, so it cannot create an attribution row; it only
+-- confirms the code is real so the edge layer can set a signed attribution
+-- cookie. Deliberately returns a bare boolean and records nothing: writing a
+-- row per click would let an unauthenticated visitor inflate a referrer's
+-- stats, and would make the endpoint a free write amplifier.
+
+create or replace function public.validate_referral_code(p_ref_code text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select exists (
+    select 1 from public.referral_profiles
+     where referral_code = upper(trim(p_ref_code))
+       and referral_banned_at is null
+  );
+$$;
+
+revoke all on function public.validate_referral_code(text) from public, anon, authenticated;
+grant execute on function public.validate_referral_code(text) to service_role;
+
+-- ===========================================================================
 -- STEP 10 — Blocked-domain list (table-driven).
 -- ===========================================================================
 

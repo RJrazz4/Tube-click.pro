@@ -64,6 +64,31 @@ async function ipHash(req: Request): Promise<string> {
   return hmac(`ip:v1:${clientIp(req)}`);
 }
 
+/**
+ * Salted device fingerprint used purely as an anti-abuse signal.
+ *
+ * Phase 4 anti-abuse is device-strict: one referrer may never bank two
+ * qualified referrals from the same device. The fingerprint is derived from
+ * stable request characteristics and salted through HMAC, so the raw
+ * signature is never stored and the hash is not reversible.
+ *
+ * A client-supplied fingerprint is accepted when present (it is far more
+ * stable than header inference) but is never trusted on its own: it is mixed
+ * with server-observed headers, so a client that forges or omits it still
+ * produces a usable, non-colliding hash rather than being able to opt out of
+ * device tracking entirely.
+ *
+ * Note this is deliberately NOT tied to user id — it must be comparable
+ * across different invitees to detect one person farming many accounts.
+ */
+async function deviceHash(req: Request, _userId: string): Promise<string> {
+  const clientFingerprint = req.headers.get('x-tc-device') || '';
+  const userAgent = req.headers.get('user-agent') || '';
+  const language = req.headers.get('accept-language') || '';
+  const platform = req.headers.get('sec-ch-ua-platform') || '';
+  return hmac(`device:v1:${clientFingerprint}|${userAgent}|${language}|${platform}`);
+}
+
 function cookieValue(req: Request, name: string): string | null {
   const cookieHeader = req.headers.get('cookie') || '';
   for (const part of cookieHeader.split(';')) {
@@ -141,9 +166,12 @@ export default async function handler(req: Request) {
     if (action === 'click') {
       const code = String(bodyResult.data?.code || '').trim().toUpperCase();
       if (!CODE_PATTERN.test(code)) return response({ error: 'Invalid referral code' }, 400);
-      const accepted = await supabaseRpc<boolean>('record_referral_click', {
+      // Phase 4: the click path only validates that the code is real so we can
+      // set a signed attribution cookie. It deliberately writes nothing —
+      // recording a row per click would let an unauthenticated visitor inflate
+      // a referrer's stats and turn this endpoint into a write amplifier.
+      const accepted = await supabaseRpc<boolean>('validate_referral_code', {
         p_ref_code: code,
-        p_ip_hash: await ipHash(req),
       });
       if (!accepted) return response({ error: 'Referral code not found' }, 404);
       const signedValue = await createSignedAttribution(code);
@@ -161,24 +189,36 @@ export default async function handler(req: Request) {
       const code = await verifySignedAttribution(cookieValue(req, COOKIE_NAME));
       if (!code) return response({ success: true, verified: false, reason: 'no_attribution' });
       const emailDomain = user.email?.split('@').pop()?.toLowerCase() || '';
-      const outcome = await supabaseRpc<{
-        verified: boolean;
-        reason?: string;
-        verified_referrals?: number;
-        friends_unlocked_pro?: number;
-        qualified?: boolean;
-        pro_tier_expires_at?: string;
-      }>(
-        'claim_referral_reward',
+
+      // Phase 4 (2-Node): attaching is NOT earning. This records a pending
+      // attribution only; the referrer is credited later, by
+      // register_core_action(), and only once the invitee performs real work.
+      //
+      // The RPC returns an intentionally opaque {attached} with no reason
+      // string. Anti-abuse verdicts (device duplication, disposable domain,
+      // ring membership) are written server-side and never surfaced, so an
+      // attacker cannot probe which control rejected them.
+      const outcome = await supabaseRpc<{ attached: boolean }>(
+        'attach_referral',
         {
+          p_invitee_id: user.id,
           p_ref_code: code,
-          p_referred_user_id: user.id,
+          p_device_hash: await deviceHash(req, user.id),
           p_ip_hash: await ipHash(req),
           p_email_domain: emailDomain,
         },
       );
+
       return response(
-        { success: true, ...outcome },
+        {
+          success: true,
+          // `verified` is retained for wire compatibility with existing
+          // clients, but under the 2-Node model it means "attribution
+          // recorded", never "reward granted".
+          verified: outcome.attached === true,
+          attached: outcome.attached === true,
+          pending: outcome.attached === true,
+        },
         200,
         { 'Set-Cookie': attributionCookie('', 0), 'Cache-Control': 'no-store' },
       );
@@ -186,26 +226,32 @@ export default async function handler(req: Request) {
 
     if (action === 'profile') {
       const profile = await supabaseRpc<{
+        exists: boolean;
         referral_code: string;
         total_invites: number;
-        verified_referrals: number;
-        friends_unlocked_pro: number;
-        qualified: boolean;
-        pro_unlocked_at: string | null;
-        pro_tier_expires_at: string | null;
-        pro_unlock_source: 'qualified_loop' | 'admin_seed' | null;
+        qualified_referrals: number;
+        pending_referrals: number;
+        required_for_reward: number;
+        reward_days: number;
+        pro_active: boolean;
+        pro_expires_at: string | null;
+        lifetime_days_granted: number;
+        lifetime_day_cap: number;
       }>('get_referral_dashboard', { p_user_id: user.id });
+
       return response({
         success: true,
         profile: {
           referralCode: profile.referral_code,
           totalInvites: profile.total_invites,
-          verifiedReferrals: profile.verified_referrals,
-          friendsUnlockedPro: profile.friends_unlocked_pro,
-          qualified: profile.qualified,
-          proUnlockedAt: profile.pro_unlocked_at,
-          proTierExpiresAt: profile.pro_tier_expires_at,
-          proUnlockSource: profile.pro_unlock_source,
+          qualifiedReferrals: profile.qualified_referrals,
+          pendingReferrals: profile.pending_referrals,
+          requiredForReward: profile.required_for_reward,
+          rewardDays: profile.reward_days,
+          proActive: profile.pro_active,
+          proTierExpiresAt: profile.pro_expires_at,
+          lifetimeDaysGranted: profile.lifetime_days_granted,
+          lifetimeDayCap: profile.lifetime_day_cap,
         },
       }, 200, { 'Cache-Control': 'private, no-store' });
     }
