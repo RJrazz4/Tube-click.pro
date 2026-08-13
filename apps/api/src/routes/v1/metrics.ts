@@ -15,6 +15,7 @@
 
 import { metrics } from "../../../../../packages/ai/metrics.js";
 import { logger } from "../../../../../packages/ai/logger.js";
+import { headroomTelemetrySnapshot } from "../../../../../packages/orchestrator/ai-gateway.js";
 import { corsHeaders } from "../shared.js";
 
 export async function handleMetricsV1(req: Request): Promise<Response> {
@@ -44,14 +45,26 @@ export async function handleMetricsV1(req: Request): Promise<Response> {
 
   const snapshot = metrics.snapshot();
 
+  // Headroom Ghost Layer telemetry (transparent compression savings).
+  let headroom = null;
+  try {
+    headroom = headroomTelemetrySnapshot();
+  } catch {
+    // Routes that run in environments without the orchestrator loaded
+    // (edge cold-start race, unit tests without the module) degrade
+    // gracefully — the field is optional.
+    headroom = null;
+  }
+
   logger.info("metrics.snapshot", "Metrics snapshot served", {
     totalGenerations: snapshot.totalGenerations,
     fallbackRate: snapshot.fallbackRate,
     p95: snapshot.latency.p95,
+    headroomTokensSaved: headroom?.totalTokensSavedEstimate ?? 0,
   });
 
   return new Response(
-    JSON.stringify({ success: true, data: snapshot }),
+    JSON.stringify({ success: true, data: { ...snapshot, headroom } }),
     { status: 200, headers: corsHeaders }
   );
 }

@@ -28,6 +28,9 @@
  */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
+import { compressHeadroom, headroomTelemetrySnapshot } from "./headroom/headroom.js";
+
+export { headroomTelemetrySnapshot, type HeadroomReport } from "./headroom/headroom.js";
 
 /** Approved default fallback chain (primary injected separately). */
 const DEFAULT_FALLBACKS = [
@@ -156,6 +159,12 @@ export interface GatewayChatOptions {
    * gateway call. In production the native global fetch is used.
    */
   fetchImpl?: typeof fetch;
+  /** When true, skip Headroom compression on this call. */
+  skipHeadroom?: boolean;
+  /** Headroom budget cap for the user prompt in chars. */
+  headroomMaxUserChars?: number;
+  /** Relevance hint terms for SmartCrush. */
+  headroomHints?: string[];
 }
 
 export interface GatewayChatResult {
@@ -171,6 +180,14 @@ export interface GatewayChatResult {
   failedOver: boolean;
   /** Token usage, when surfaced by the gateway. */
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  /** Headroom compression report — how much context was optimized pre-call. */
+  headroom?: {
+    strategiesApplied: string[];
+    tokensSavedEstimate: number;
+    compressionRatio: number;
+    originalChars: number;
+    compressedChars: number;
+  };
 }
 
 /**
@@ -196,11 +213,50 @@ export async function gatewayChatText(opts: GatewayChatOptions): Promise<Gateway
   const fallbacks = readList("AI_GATEWAY_FALLBACKS", DEFAULT_FALLBACKS);
   const modelsAttempted = [primary];
 
+  // ---- HEADROOM GHOST LAYER ----
+  // Transparent pre-call compression. Opt-out via `skipHeadroom: true`.
+  // Any internal error is swallowed and we fall through to the original
+  // prompts — compression is best-effort, never a failure mode.
+  let headroomReport: GatewayChatResult["headroom"] = undefined;
+  let effectiveSystem = opts.systemPrompt;
+  let effectiveUser = opts.userPrompt;
+  try {
+    if (!opts.skipHeadroom) {
+      const compressed = compressHeadroom({
+        systemPrompt: opts.systemPrompt,
+        userPrompt: opts.userPrompt,
+        relevanceHints: opts.headroomHints,
+        maxUserChars: opts.headroomMaxUserChars,
+      });
+      effectiveSystem = compressed.systemPrompt;
+      effectiveUser = compressed.userPrompt;
+      if (compressed.report.strategiesApplied.length > 0 && compressed.report.compressionRatio > 0) {
+        headroomReport = {
+          strategiesApplied: compressed.report.strategiesApplied,
+          tokensSavedEstimate: compressed.report.tokensSavedEstimate,
+          compressionRatio: compressed.report.compressionRatio,
+          originalChars: compressed.report.originalChars,
+          compressedChars: compressed.report.compressedChars,
+        };
+        if (compressed.report.tokensSavedEstimate > 0) {
+          console.log(
+            `[headroom] ratio=${(compressed.report.compressionRatio * 100).toFixed(1)}% tokens_saved~${compressed.report.tokensSavedEstimate} strategies=${compressed.report.strategiesApplied.join(",")}`,
+          );
+        }
+      }
+    }
+  } catch (hrErr) {
+    console.warn("[headroom] compression error, passthrough:", hrErr);
+    effectiveSystem = opts.systemPrompt;
+    effectiveUser = opts.userPrompt;
+  }
+  // ---- /HEADROOM ----
+
   try {
     const result = await generateText({
       model,
-      system: opts.systemPrompt,
-      prompt: opts.userPrompt,
+      system: effectiveSystem,
+      prompt: effectiveUser,
       temperature: opts.temperature ?? 0.9,
       maxOutputTokens: opts.maxTokens ?? 8192,
       abortSignal: controller.signal,
@@ -244,6 +300,7 @@ export async function gatewayChatText(opts: GatewayChatOptions): Promise<Gateway
       modelsAttempted,
       failedOver,
       usage,
+      headroom: headroomReport,
     };
   } finally {
     clearTimeout(timer);
