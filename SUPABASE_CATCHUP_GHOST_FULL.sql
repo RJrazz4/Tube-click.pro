@@ -1351,7 +1351,7 @@ begin
     perform cron.schedule(
       'ghost-dawn-patrol-dispatch',
       '3 * * * *',
-      $fn001$
+      $fn022$
         select net.http_post(
           url := current_setting('app.dawn_patrol_webhook_url', true),
           headers := jsonb_build_object(
@@ -1363,7 +1363,7 @@ begin
           )
         )
         where coalesce(current_setting('app.dawn_patrol_webhook_url', true), '') <> '';
-      $fn001$
+      $fn022$
     );
   end if;
 exception when others then
@@ -1387,7 +1387,7 @@ language plpgsql
 stable
 security definer
 set search_path = public, pg_temp
-as $fn022$
+as $fn023$
 declare
   v_is_pro boolean;
   v_black  boolean;
@@ -1411,7 +1411,7 @@ begin
     'is_black_ops', v_black
   );
 end;
-$fn022$;
+$fn023$;
 
 create or replace function public.get_ghost_tier()
 returns jsonb
@@ -1419,11 +1419,11 @@ language plpgsql
 stable
 security definer
 set search_path = public, pg_temp
-as $fn023$
+as $fn024$
 begin
   return public.get_ghost_tier_for(auth.uid());
 end;
-$fn023$;
+$fn024$;
 
 revoke all on function public.get_ghost_tier() from public, anon;
 grant execute on function public.get_ghost_tier() to authenticated, service_role;
@@ -1455,7 +1455,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $fn024$
+as $fn025$
 declare
   v_out jsonb;
 begin
@@ -1478,7 +1478,7 @@ begin
      );
   return v_out;
 end;
-$fn024$;
+$fn025$;
 
 revoke all on function public.ghost_dawn_patrol_due_users(int) from public, anon, authenticated;
 grant execute on function public.ghost_dawn_patrol_due_users(int) to service_role;
@@ -1495,7 +1495,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $fn025$
+as $fn026$
 declare
   uid            uuid := auth.uid();
   v_is_pro       boolean := false;
@@ -1543,14 +1543,14 @@ begin
     'remaining_seconds', v_remaining_s
   );
 end;
-$fn025$;
+$fn026$;
 
 create or replace function public.consume_clone_crush_run()
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $fn026$
+as $fn027$
 declare
   uid            uuid := auth.uid();
   v_is_pro       boolean := false;
@@ -1625,7 +1625,7 @@ begin
     'reset_at', v_window_end, 'remaining_seconds', 24*60*60
   );
 end;
-$fn026$;
+$fn027$;
 
 revoke all on function public.consume_clone_crush_run() from public, anon, authenticated;
 revoke all on function public.get_clone_crush_quota()   from public, anon, authenticated;

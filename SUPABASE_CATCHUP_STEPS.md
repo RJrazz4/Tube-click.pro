@@ -215,3 +215,47 @@ the catch-up on PostgreSQL 17.10.
 One repo change accompanies this: `202608140001_ghost_intel_ledger.sql` had a
 bare `create type public.ghost_action` (no `IF NOT EXISTS` form exists for
 `CREATE TYPE`), which made re-runs fail. It is now guarded by a `DO` block.
+
+---
+
+## Fresh environments: migration 202608140007
+
+The catch-up script repairs **production**. A brand-new environment built by
+replaying the migration chain was still broken, because three of the four
+defects lived in the migration files themselves, not in production's state.
+`202608140007_entitlement_consistency.sql` closes that gap.
+
+Verified on a fresh 13-migration replay:
+
+| Check | Before 007 | After 007 |
+|---|---|---|
+| `referral_profiles.niche` exists | no | yes |
+| `ghost_dawn_patrol_due_users(7)` | throws 42703 | returns `[]` |
+| due-users gates on `is_pro()` | no | yes |
+| Clone & Crush calls `public.is_pro()` | no | yes |
+| Free user due for Dawn Patrol | yes (would bill free base) | no |
+
+Both routes now converge on an identical schema — 10 tables, 188 functions,
+7 policies, 100 columns:
+
+- production + `SUPABASE_CATCHUP_GHOST_FULL.sql` + `202608140007`
+- fresh replay of all 13 migrations
+
+You do **not** need to run 007 by hand after the catch-up. The catch-up
+already contains these repairs; 007 exists so the migration chain produces
+the same result on its own. Applying it anyway is harmless — it is idempotent
+and was verified clean on top of the catch-up.
+
+## Regenerating the bundle
+
+`SUPABASE_CATCHUP_GHOST_FULL.sql` is generated. Do not hand-edit it.
+
+```
+node scripts/build-catchup-bundle.mjs           # rebuild
+node scripts/build-catchup-bundle.mjs --check   # CI: stale or unsafe -> exit 1
+```
+
+The generator re-applies the splitter hardening (unique `$fnNNN$` tags, no `$`
+or `;` in comments) and refuses to write a bundle that would produce orphaned
+fragments. This is what prevents the `relation "v_black" does not exist`
+failure from returning if the bundle is ever rebuilt.
