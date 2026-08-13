@@ -59,7 +59,19 @@ create index if not exists ghost_usage_user_action_idx
 -- squad       = Ghost Intel Squad dossier
 -- recon       = Ghost Visual Recon per-video ingestion
 -- dawn_patrol = Dawn Patrol daily brief delivery
-create type public.ghost_action as enum ('interrogate', 'squad', 'recon', 'dawn_patrol');
+-- Guarded so the migration is safely re-runnable (CREATE TYPE has no
+-- IF NOT EXISTS form).
+do $ghost_action$
+begin
+  if not exists (
+    select 1 from pg_type t
+      join pg_namespace n on n.oid = t.typnamespace
+     where n.nspname = 'public' and t.typname = 'ghost_action'
+  ) then
+    create type public.ghost_action as enum ('interrogate', 'squad', 'recon', 'dawn_patrol');
+  end if;
+end
+$ghost_action$;
 
 -- ---------------------------------------------------------------------------
 -- 4. RPC: get_ghost_tier() -> {tier, is_black_ops}. Centralized entitlement
