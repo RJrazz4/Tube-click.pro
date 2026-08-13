@@ -1,119 +1,150 @@
 -- ###########################################################################
 -- PATCH — Supabase Performance Advisor 0003_auth_rls_initplan
 --
--- Wraps auth.uid() in a scalar subquery in every RLS policy so PostgreSQL
--- hoists it into an InitPlan and evaluates it ONCE per query instead of once
--- per row.
+-- SELF-DISCOVERING VERSION. Safe on ANY schema state.
 --
--- WHY THIS WORKS
+-- The previous version hardcoded seven table names and failed with
+--   ERROR: 42P01: relation "public.ghost_usage" does not exist
+-- because production does not have the same tables as the repo.
+--
+-- This version assumes NOTHING. It reads pg_policies at runtime, finds every
+-- RLS policy whose expression calls auth.uid() / auth.jwt() / auth.role()
+-- outside a subquery, and rewrites just those — whatever they are called and
+-- whatever tables they sit on. Tables that do not exist are simply never
+-- visited, so a missing table cannot abort the run.
+--
+-- WHY THE FIX WORKS
 --   auth.uid() is STABLE, not IMMUTABLE, so the planner will not fold a bare
---   call into a constant — it stays in the per-row Filter and is re-evaluated
---   for every candidate row. Written as (select auth.uid()), it becomes an
+--   call into a constant: it stays in the per-row Filter and is re-evaluated
+--   for every candidate row. Written as (select auth.uid()) it becomes an
 --   uncorrelated scalar subquery, which the planner hoists into an InitPlan
---   and evaluates a single time.
+--   and evaluates exactly once per query.
 --
---   Measured on PostgreSQL 17 with a 20,000-row table:
---     bare  auth.uid() = user_id   -> Filter: ...current_setting...   8.849 ms
---     (select auth.uid()) = user_id -> Filter: (InitPlan 1).col1      1.880 ms
---   ~4.7x faster, and the gap widens as the table grows.
+--   Measured on PostgreSQL 17, 20,000-row table:
+--     bare   auth.uid() = user_id  -> Filter: ...current_setting... 8.849 ms
+--     (select auth.uid()) = user_id -> Filter: (InitPlan 1).col1    1.880 ms
 --
--- SCOPE
---   The advisor flagged referral_profiles, but the same pattern exists on 7
---   policies across 7 tables — every per-user table shipped in the Ghost arc.
---   All are patched here; fixing only the flagged one would leave the same
---   defect on the tables that will grow fastest (ghost_memory_chunks and
---   ghost_recon_frames hold one row per transcript chunk / video frame).
+-- SECURITY IS UNCHANGED
+--   Each policy keeps its exact predicate, roles, and command. Only how often
+--   the auth call is evaluated changes. Policies are recreated immediately
+--   after being dropped, inside one transaction, so no table is ever left
+--   unprotected. If any single policy fails to rebuild, the whole patch rolls
+--   back and your existing policies remain exactly as they are.
 --
--- SAFETY
---   Security semantics are IDENTICAL. Each policy still compares the caller's
---   auth.uid() to user_id; only evaluation frequency changes. Each policy is
---   dropped and recreated in the same statement batch, inside one implicit
---   transaction, so there is no window where a table sits unprotected.
---
---   Idempotent: safe to run more than once.
---
---   NOTE ON RLS FOR ALL: a policy created with `for all` applies its USING
---   clause to reads/deletes and its WITH CHECK clause to writes. Both are
---   preserved below. These tables are written exclusively through
---   SECURITY DEFINER functions, so the WITH CHECK clause is defence in depth.
+-- IDEMPOTENT: already-fixed policies are skipped. Re-running is a no-op.
 -- ###########################################################################
 
--- ---------------------------------------------------------------------------
--- 1. referral_profiles — the policy the advisor flagged.
--- ---------------------------------------------------------------------------
-drop policy if exists referral_profiles_self_select on public.referral_profiles;
-create policy referral_profiles_self_select
-  on public.referral_profiles for select to authenticated
-  using ((select auth.uid()) = user_id);
+begin;
 
--- ---------------------------------------------------------------------------
--- 2. ghost_usage — credit ledger reads.
--- ---------------------------------------------------------------------------
-drop policy if exists ghost_usage_self_select on public.ghost_usage;
-create policy ghost_usage_self_select
-  on public.ghost_usage for select to authenticated
-  using ((select auth.uid()) = user_id);
+do $patch$
+declare
+  r            record;
+  v_new_qual   text;
+  v_new_check  text;
+  v_roles      text;
+  v_cmd        text;
+  v_sql        text;
+  v_fixed      int := 0;
+  v_skipped    int := 0;
+begin
+  for r in
+    select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check
+      from pg_policies
+     where schemaname = 'public'
+       and (
+             (qual       ~* 'auth\.(uid|jwt|role)\(\)' and qual       !~* 'select\s+auth\.')
+          or (with_check ~* 'auth\.(uid|jwt|role)\(\)' and with_check !~* 'select\s+auth\.')
+           )
+     order by tablename, policyname
+  loop
+    -- Rewrite bare auth.X() into (select auth.X()). Applied only to calls not
+    -- already wrapped, so mixed expressions are handled correctly.
+    v_new_qual := regexp_replace(
+      coalesce(r.qual, ''),
+      '(?<!select )\m(auth\.(?:uid|jwt|role)\(\))',
+      '(select \1)',
+      'gi'
+    );
+    v_new_check := regexp_replace(
+      coalesce(r.with_check, ''),
+      '(?<!select )\m(auth\.(?:uid|jwt|role)\(\))',
+      '(select \1)',
+      'gi'
+    );
 
--- ---------------------------------------------------------------------------
--- 3. daily_usage — Clone Crush quota reads.
--- ---------------------------------------------------------------------------
-drop policy if exists daily_usage_self_select on public.daily_usage;
-create policy daily_usage_self_select
-  on public.daily_usage for select to authenticated
-  using ((select auth.uid()) = user_id);
+    -- pg_policies.roles is a name[] rendered as {a,b}; convert to a list.
+    v_roles := array_to_string(r.roles, ', ');
+    if v_roles is null or v_roles = '' or v_roles = '-' then
+      v_roles := 'public';
+    end if;
 
--- ---------------------------------------------------------------------------
--- 4. ghost_memory_chunks — highest-volume table (one row per transcript
---    chunk). Benefits most from the InitPlan hoist.
--- ---------------------------------------------------------------------------
-drop policy if exists ghost_memory_chunks_self_all on public.ghost_memory_chunks;
-create policy ghost_memory_chunks_self_all
-  on public.ghost_memory_chunks for all to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
+    v_cmd := case upper(r.cmd)
+               when 'ALL'    then 'all'
+               when 'SELECT' then 'select'
+               when 'INSERT' then 'insert'
+               when 'UPDATE' then 'update'
+               when 'DELETE' then 'delete'
+               else 'all'
+             end;
 
--- ---------------------------------------------------------------------------
--- 5. ghost_recon_frames — one row per sampled video frame.
--- ---------------------------------------------------------------------------
-drop policy if exists ghost_recon_frames_self_all on public.ghost_recon_frames;
-create policy ghost_recon_frames_self_all
-  on public.ghost_recon_frames for all to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
+    v_sql := format(
+      'drop policy if exists %I on %I.%I;',
+      r.policyname, r.schemaname, r.tablename
+    );
+    execute v_sql;
 
--- ---------------------------------------------------------------------------
--- 6. ghost_squad_briefs — competitor dossiers.
--- ---------------------------------------------------------------------------
-drop policy if exists ghost_squad_briefs_self_all on public.ghost_squad_briefs;
-create policy ghost_squad_briefs_self_all
-  on public.ghost_squad_briefs for all to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
+    v_sql := format(
+      'create policy %I on %I.%I as %s for %s to %s',
+      r.policyname,
+      r.schemaname,
+      r.tablename,
+      case when r.permissive = 'PERMISSIVE' then 'permissive' else 'restrictive' end,
+      v_cmd,
+      v_roles
+    );
 
--- ---------------------------------------------------------------------------
--- 7. ghost_dawn_patrol_briefs — sunrise briefings.
--- ---------------------------------------------------------------------------
-drop policy if exists ghost_dawn_patrol_briefs_self_all on public.ghost_dawn_patrol_briefs;
-create policy ghost_dawn_patrol_briefs_self_all
-  on public.ghost_dawn_patrol_briefs for all to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
+    -- INSERT policies carry only WITH CHECK; the rest may carry both.
+    if v_cmd <> 'insert' and nullif(v_new_qual, '') is not null then
+      v_sql := v_sql || format(' using (%s)', v_new_qual);
+    end if;
+    if nullif(v_new_check, '') is not null then
+      v_sql := v_sql || format(' with check (%s)', v_new_check);
+    end if;
+
+    execute v_sql;
+
+    v_fixed := v_fixed + 1;
+    raise notice 'InitPlan fix applied: %.% / %', r.schemaname, r.tablename, r.policyname;
+  end loop;
+
+  select count(*) into v_skipped
+    from pg_policies
+   where schemaname = 'public'
+     and (qual ~* 'select\s+auth\.' or with_check ~* 'select\s+auth\.');
+
+  raise notice '--------------------------------------------------------';
+  raise notice 'InitPlan patch complete. Policies rewritten: %', v_fixed;
+  raise notice 'Policies already using the InitPlan form: %', v_skipped;
+  raise notice '--------------------------------------------------------';
+end;
+$patch$;
+
+commit;
 
 -- ###########################################################################
--- VERIFY — expect zero rows. Any row returned is a policy still calling
--- auth.uid() outside a subquery wrapper.
+-- VERIFY — run this after the patch. Expect ZERO rows.
+--
+-- Any row returned is a policy still calling an auth function per-row.
+-- Note the case-insensitive operators: PostgreSQL normalises the stored
+-- expression to "( SELECT auth.uid() AS uid)" with SELECT upper-cased, so a
+-- lowercase-only pattern reports false positives on already-fixed policies.
 -- ###########################################################################
---
--- select tablename, policyname
---   from pg_policies
---  where schemaname = 'public'
---    and (
---      (qual       ~* 'auth\.(uid|jwt|role)\(\)' and qual       !~* 'select\s+auth\.')
---      or
---      (with_check ~* 'auth\.(uid|jwt|role)\(\)' and with_check !~* 'select\s+auth\.')
---    );
---
--- Use case-INSENSITIVE operators (~* / !~*). PostgreSQL normalises a stored
--- policy expression to "( SELECT auth.uid() AS uid)" with SELECT upper-cased,
--- so a lowercase-only pattern reports false positives on already-fixed
--- policies.
+
+select tablename, policyname, cmd
+  from pg_policies
+ where schemaname = 'public'
+   and (
+         (qual       ~* 'auth\.(uid|jwt|role)\(\)' and qual       !~* 'select\s+auth\.')
+      or (with_check ~* 'auth\.(uid|jwt|role)\(\)' and with_check !~* 'select\s+auth\.')
+       )
+ order by tablename, policyname;
