@@ -417,7 +417,7 @@ The blueprint is complete. **Requesting approval to execute Micro-Phase 1 (Headr
 | 1 (Headroom) | `e8eed00` | SmartCrush + CacheAligner + RollingWindow wrapper on gatewayChatText/Json, /api/v1/metrics telemetry, 9 tests | ✅ shipped |
 | 2 (Ledger) | `4ee8c4b` | `ghost_usage` table, `consume_ghost_action/get_ghost_quota` SECURITY DEFINER RPCs, /api/ghost/credits, useGhostCreditsStore + GhostCreditBadge, 8 tests | ✅ shipped |
 | 3 (Interrogate) | `79e902e` | embeddings (text-embedding-3-small, 1536d), `ghost_memory_chunks` vector store + ivfflat, 4-agent index/chat RPCs, GhostInterrogationDrawer with [MM:SS] citations, 4 chunker tests | ✅ shipped |
-| 4 (Squad) | — | `ghost_squad_briefs` table + persist/get RPCs, 4-agent Scout/Crawler/Analyst/Comparator pipeline + Critic ≥85 gate with self-heal, Piped-mesh comment crawl, `/api/ghost/squad-brief` edge route, GhostSquadDossier panel with red THREAT LEVEL bar, 3 new tests | ✅ ready |
-| 5 (Visual Recon) | — | — | ⏳ |
+| 4 (Squad) | `96d3fe3` | `ghost_squad_briefs` table + persist/get RPCs, 4-agent Scout/Crawler/Analyst/Comparator pipeline + Critic ≥85 gate with self-heal, Piped-mesh comment crawl, `/api/ghost/squad-brief` edge route, GhostSquadDossier panel with red THREAT LEVEL bar, 3 new tests | ✅ shipped |
+| 5 (Visual Recon) | — | `ghost_recon_frames` table (vector(1536)) + upsert/search/count SECURITY DEFINER RPCs, multimodal `images` array on gatewayChatText/Json, 12-frame YouTube thumbnail-ladder sampler (no ffmpeg, Edge-safe), multimodal Flash captioning with batched text-embedding-3-small vectors, `/api/ghost/recon-ingest` + `/api/ghost/recon-search` edge routes, per-user useReconStore, GhostVisualRecon BLACK-OPS panel with clickable ?t= deep-links, 3 new tests | ✅ ready |
 | 6 (Dawn Patrol) | — | — | ⏳ |
 | 7 (Perf pass) | — | — | ⏳ |

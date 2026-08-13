@@ -143,6 +143,15 @@ export function logBootConfig(): void {
   }
 }
 
+export interface GatewayChatImage {
+  /** data: URL (data:image/<mime>;base64,<...>) or https:// URL. */
+  url: string;
+  /** Optional mime type hint (derived from url when possible). */
+  mimeType?: string;
+  /** Optional short detail hint: 'low' | 'high' | 'auto' — passed through to the provider. */
+  detail?: "low" | "high" | "auto";
+}
+
 export interface GatewayChatOptions {
   systemPrompt: string;
   userPrompt: string;
@@ -165,6 +174,13 @@ export interface GatewayChatOptions {
   headroomMaxUserChars?: number;
   /** Relevance hint terms for SmartCrush. */
   headroomHints?: string[];
+  /**
+   * Multimodal image inputs attached to the user turn. Each entry is
+   * either a data: URL (preferred; base64 inlined) or an https:// URL the
+   * provider can fetch. Used by Visual Recon to caption thumbnails.
+   * Text-only callers leave this undefined.
+   */
+  images?: GatewayChatImage[];
 }
 
 export interface GatewayChatResult {
@@ -253,17 +269,32 @@ export async function gatewayChatText(opts: GatewayChatOptions): Promise<Gateway
   // ---- /HEADROOM ----
 
   try {
+    // Build the user turn as a multi-part message when images are attached.
+    // AI SDK v6 accepts [{type:'text',text:'...'},{type:'image',image:new URL(...) | data:...}].
+    const promptParts: Array<{ type: "text"; text: string } | { type: "image"; image: URL | string; mimeType?: string; }> = [];
+    if (Array.isArray(opts.images) && opts.images.length > 0) {
+      for (const img of opts.images) {
+        if (!img?.url) continue;
+        if (img.url.startsWith("data:")) {
+          promptParts.push({ type: "image", image: img.url, mimeType: img.mimeType });
+        } else {
+          try {
+            promptParts.push({ type: "image", image: new URL(img.url), mimeType: img.mimeType });
+          } catch {
+            promptParts.push({ type: "image", image: img.url, mimeType: img.mimeType });
+          }
+        }
+      }
+    }
+    promptParts.push({ type: "text", text: effectiveUser });
+
     const result = await generateText({
       model,
       system: effectiveSystem,
-      prompt: effectiveUser,
+      messages: [{ role: "user", content: promptParts }],
       temperature: opts.temperature ?? 0.9,
       maxOutputTokens: opts.maxTokens ?? 8192,
       abortSignal: controller.signal,
-      // Retries and model fallback are owned by the Vercel AI Gateway
-      // (via the x-vercel-ai-gateway-fallbacks header). The SDK's own
-      // retry loop is disabled so errors propagate immediately and our
-      // deadline/AbortController governs wall time.
       maxRetries: 0,
     });
 

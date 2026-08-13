@@ -127,6 +127,8 @@ const VERCEL_ROUTE_MAP: Record<string, string> = {
   "ghost/interrogate-index": "/api/ghost/interrogate-index",
   "ghost/interrogate-chat": "/api/ghost/interrogate-chat",
   "ghost/squad-brief": "/api/ghost/squad-brief",
+  "ghost/recon-ingest": "/api/ghost/recon-ingest",
+  "ghost/recon-search": "/api/ghost/recon-search",
 };
 
 function makeRequestId(): string {
@@ -178,6 +180,8 @@ function requestTimeoutMs(functionName: string, body: unknown): number {
   if (functionName === "generate-content") return 52_000; // server maxDuration 55s; match raised gateway deadline so client doesn't abort mid-fallback
   if (functionName === "transcript") return 8_000;
   if (functionName === "ghost/squad-brief") return 48_000;
+  if (functionName === "ghost/recon-ingest") return 55_000;
+  if (functionName === "ghost/recon-search") return 20_000;
   if (functionName === "ghost/interrogate-index") return 25_000;
   if (functionName === "ghost/interrogate-chat") return 30_000;
   if (functionName === "ghost/credits") return 8_000;

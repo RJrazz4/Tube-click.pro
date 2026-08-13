@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { GhostInterrogationDrawer } from "@/components/ghost/GhostInterrogationDrawer";
 import { GhostSquadDossier } from "@/components/ghost/GhostSquadDossier";
+import { GhostVisualRecon } from "@/components/ghost/GhostVisualRecon";
 import { GhostBootSequence } from "@/components/ui/GhostBootSequence";
 import { WarRoomTicker } from "@/components/ui/WarRoomTicker";
 import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
@@ -1119,6 +1120,26 @@ export default function CloneCrush() {
                 savedNiche={nicheInput || savedNiche || "General YouTube Content"}
                 slotId={activeSlotIndex}
                 onUpgrade={() => routeToProUpsell("squad")}
+              />
+            </div>
+          )}
+
+          {/* Ghost Visual Recon panel (MP5 · BLACK-OPS) */}
+          {profile && competitors.length > 0 && (
+            <div id="ghost-visual-recon" className="animate-fade-in">
+              <GhostVisualRecon
+                video={selectedVideo ? {
+                  videoId: selectedVideo.videoId,
+                  title: selectedVideo.title,
+                  url: selectedVideo.url,
+                  thumbnail: selectedVideo.thumbnail,
+                } : null}
+                savedNiche={nicheInput || savedNiche || "General YouTube Content"}
+                slotId={activeSlotIndex}
+                onUpgrade={() => {
+                  toast.error("Visual Recon is Black-Ops • Rerouting to clearance", { id: "recon-paywall" });
+                  navigate("/rewards?upsell=recon&tier=pro");
+                }}
               />
             </div>
           )}
