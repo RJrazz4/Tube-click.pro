@@ -24,6 +24,7 @@ function requireEnv(name: string, fallback?: string): string {
 import { gatewayChatText } from "../packages/orchestrator/ai-gateway.js";
 import { embedText } from "../packages/orchestrator/embeddings.js";
 import { consumeGhostAction, type GhostAction } from "./_ghostLedger.js";
+import { verifyGhostAuth, extractBearer } from "./_ghostAuth.js";
 
 export const INTERROGATE_ACTION: GhostAction = "interrogate";
 
@@ -58,20 +59,10 @@ function supabaseCreds() {
   };
 }
 
-async function verifyAuth(req: Request): Promise<{ userId: string; jwt: string } | null> {
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  const token = auth.slice("bearer ".length).trim();
-  if (!token) return null;
-  const { url, key } = supabaseCreds();
-  const res = await fetch(`${url}/auth/v1/user`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
-    signal: AbortSignal.timeout(5_000),
-  });
-  if (!res.ok) return null;
-  const u = (await res.json()) as { id?: string };
-  return u?.id ? { userId: u.id, jwt: token } : null;
-}
+// MP7: identity now resolved by the shared, memoised Ghost auth layer.
+// The former local copy validated the caller's JWT using the service-role
+// key, which authenticated the service rather than the caller.
+const verifyAuth = verifyGhostAuth;
 
 async function supaRpc<T = unknown>(
   fn: string,
@@ -347,8 +338,22 @@ interface RetrievedChunk {
 }
 
 export async function handleInterrogateChat(req: Request): Promise<Response> {
-  const auth = await verifyAuth(req);
-  if (!auth) return jsonResponse({ error: "Auth required" }, 401);
+  // MP7 latency pass. The former ordering was three strictly serialised
+  // blocking hops before any retrieval could start:
+  //
+  //     verify auth (GoTrue) -> parse body -> embed query (OpenAI) -> search
+  //
+  // Body parsing is local and cheap, so it is hoisted first. Auth
+  // verification and query embedding are mutually independent, so they are
+  // issued concurrently and the pair costs max(a, b) instead of a + b.
+  // Against the §6 budget (chat turn P95 < 3.5s) this removes one full
+  // network round-trip — typically 120-400ms — from every chat turn.
+  //
+  // Cost guard: the embedding is only issued when a syntactically valid
+  // bearer token is present, so unauthenticated traffic cannot induce
+  // billable embedding calls. A token that is well-formed but invalid may
+  // waste one embed (~$0.000002); that is an acceptable trade for removing
+  // a round-trip from every legitimate turn.
   const body = await safeJsonBody(req);
   if (body.error) return jsonResponse({ error: body.error }, 400);
   const { videoId, query } = body.data || {};
@@ -357,14 +362,30 @@ export async function handleInterrogateChat(req: Request): Promise<Response> {
     return jsonResponse({ error: "query required" }, 400);
   }
 
-  // Embed the query.
-  let qEmbed: number[];
-  try {
-    qEmbed = await embedText(query.trim());
-  } catch (e) {
-    console.error("[interrogate] query embed error:", e);
+  const hasBearer = extractBearer(req.headers.get("authorization")) !== null;
+  if (!hasBearer) return jsonResponse({ error: "Auth required" }, 401);
+
+  interface EmbedOutcome {
+    value: number[] | null;
+    error: unknown;
+  }
+
+  const authPromise = verifyAuth(req);
+  const embedPromise: Promise<EmbedOutcome> = embedText(query.trim()).then(
+    (value): EmbedOutcome => ({ value, error: null }),
+    (error: unknown): EmbedOutcome => ({ value: null, error }),
+  );
+
+  const auth = await authPromise;
+  const embedOutcome = await embedPromise;
+
+  if (!auth) return jsonResponse({ error: "Auth required" }, 401);
+
+  if (embedOutcome.value === null) {
+    console.error("[interrogate] query embed error:", embedOutcome.error);
     return jsonResponse({ error: "Embedding failed" }, 502);
   }
+  const qEmbed: number[] = embedOutcome.value;
 
   // Vector search.
   let chunks: RetrievedChunk[] = [];

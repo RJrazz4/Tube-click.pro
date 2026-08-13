@@ -42,6 +42,14 @@ export default defineConfig(({ mode }) => ({
             "@radix-ui/react-tooltip",
           ],
           "icons": ["lucide-react"],
+          // MP7 bundle audit. Recharts (~290kB raw) was being inlined into
+          // the CompetitorShowdown route chunk, which made that single
+          // lazy chunk 424kB and — worse — invalidated the whole thing on
+          // every app-code deploy, forcing repeat downloads of an
+          // unchanged charting library. Hoisting it into its own vendor
+          // chunk restores a stable cache key and lets the route chunk
+          // shrink to just its own component code.
+          "charts": ["recharts"],
         },
       },
     },

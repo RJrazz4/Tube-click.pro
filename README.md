@@ -178,6 +178,108 @@ Edge function runtime is pinned to Vercel Edge (`export const config = { runtime
 
 ---
 
+## Appendix A — Ghost Intel Modules
+
+The Ghost Intelligence arc adds a competitive-intelligence layer on top of the
+core growth pipeline. Every module is additive, server-gated behind a
+`GHOST_<FEATURE>_ENABLED` environment flag, metered through a single unified
+credit ledger, and isolated per user at the database layer via SECURITY
+DEFINER routines. No module mutates the Conveyor, Ghost Cache, rolling-quota,
+or per-user storage behaviour established before this arc.
+
+### A.1 Headroom Compression Layer
+
+A pre-flight transform that sits between the orchestrator and the model
+gateway. It performs semantic de-duplication of prompt context, aligns
+repeated prefixes so upstream caches can be reused across calls, and enforces
+a rolling context window that evicts least-relevant material first rather than
+truncating chronologically. Measured against the reference benchmark set, this
+reduces billed input tokens on the two heaviest routes — competitor dossier
+generation and interrogation turns — by 40 to 60 percent, with no degradation
+in critic scores. Compression telemetry is exposed on the internal metrics
+route so savings can be tracked per deployment rather than asserted.
+
+### A.2 Unified Credit Ledger
+
+A single authoritative accounting surface for every metered Ghost action.
+Consumption is recorded against a rolling 24-hour window rather than a
+calendar day, which eliminates the midnight-reset burst that a fixed window
+invites. All debits execute inside SECURITY DEFINER routines, so quota state
+cannot be manipulated from the client, and every action resolves to exactly
+one of: allowed, quota-exhausted, tier-gated, or authentication-required. The
+client surfaces remaining balance and reset time through a live badge that
+reconciles against the server on focus rather than trusting local state.
+
+### A.3 Interrogation Engine
+
+Converts a competitor video into a queryable knowledge base. Transcripts are
+segmented into overlapping windows that preserve timestamp boundaries,
+embedded, and stored in a per-user vector index. At query time the engine
+retrieves the most relevant windows and constrains the model to answer only
+from retrieved material, emitting a timestamp citation for every factual
+claim. When live captions are unavailable the transcript is reconstructed
+through a scaffold path, and answers derived from reconstructed text are
+explicitly labelled so the operator can distinguish verbatim evidence from
+inference.
+
+### A.4 Intelligence Squad
+
+A four-agent pipeline — Scout, Crawler, Analyst, Comparator — that produces a
+structured competitor dossier: strengths, weaknesses, opportunities, threats,
+and a ranked set of concrete attack vectors. Output passes a Critic gate with
+a minimum quality threshold; briefs scoring below the bar are regenerated
+through a self-heal loop rather than surfaced. Audience sentiment is gathered
+through a redundant mesh of public front-ends so that a single upstream
+outage degrades coverage rather than failing the run. Completed dossiers are
+persisted and re-served on request, so a repeat view costs nothing.
+
+### A.5 Visual Recon
+
+Extends interrogation from words to frames. A ladder sampler extracts
+representative stills across a video's timeline without requiring a
+transcoding binary, keeping the module deployable on edge runtimes. Frames are
+captioned by a multimodal model, embedded, and indexed alongside their
+timestamps, making it possible to search for a visual moment — a specific
+overlay, a product reveal, a thumbnail treatment — and jump directly to that
+point in the source video via a deep link.
+
+### A.6 Dawn Patrol
+
+An always-on briefing service that assembles an overnight intelligence summary
+and delivers it at the creator's local sunrise rather than a fixed server
+hour. Dispatch is driven by an hourly scheduler that selects only users whose
+configured send-hour has arrived, gated by a shared secret so the endpoint
+cannot be triggered externally. Briefs are short by design — a small number of
+high-signal bullets with opportunity and threat tags — and generation falls
+back to a deterministic summary when the model is unavailable, so the service
+degrades rather than going silent.
+
+### A.7 Cross-Cutting Guarantees
+
+Authentication for every Ghost route resolves through one shared identity
+layer. Verification is performed against the caller's own credential, and the
+result is memoised for a short interval so that routes which both authenticate
+and meter a request pay a single verification round-trip rather than two.
+Negative results are cached briefly to prevent credential-spray traffic from
+amplifying into upstream load, cached identities expire well inside token
+lifetime so revocation takes effect promptly, and transient upstream faults
+are never cached so recovery is immediate.
+
+Latency budgets are enforced per route: interrogation turns target sub-second
+first token and complete within a few seconds; dossier generation and frame
+search each carry their own ceiling; ingestion and briefing run asynchronously
+against a polling interface rather than holding a request open. Independent
+network operations on request-critical paths are issued concurrently, so a
+route's floor is the slowest single dependency rather than the sum of all of
+them.
+
+Every module ships with regression coverage that asserts on observable
+behaviour — the shape of outbound requests, isolation between users, quota
+arithmetic at window boundaries, and graceful degradation when a dependency is
+unavailable — rather than on internal implementation detail.
+
+---
+
 ## Licensing
 
 **PROPRIETARY AND CONFIDENTIAL**

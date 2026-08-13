@@ -24,6 +24,7 @@
 
 import { jsonResponse, safeJsonBody } from "./_shared.js";
 import { consumeGhostAction } from "./_ghostLedger.js";
+import { verifyGhostAuth } from "./_ghostAuth.js";
 import { extractVideoId } from "./_youtube.js";
 import { gatewayChatJson } from "../packages/orchestrator/ai-gateway.js";
 
@@ -42,25 +43,10 @@ function supabaseCreds() {
   };
 }
 
-async function verifyAuth(req: Request): Promise<{ userId: string; jwt: string } | null> {
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  const token = auth.slice("bearer ".length).trim();
-  if (!token) return null;
-  const { url, key } = supabaseCreds();
-  if (!url || !key) return null;
-  try {
-    const res = await fetch(`${url}/auth/v1/user`, {
-      headers: { apikey: key, Authorization: `Bearer ${key}` },
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!res.ok) return null;
-    const u = (await res.json()) as { id?: string };
-    return u?.id ? { userId: u.id, jwt: token } : null;
-  } catch {
-    return null;
-  }
-}
+// MP7: identity now resolved by the shared, memoised Ghost auth layer.
+// The former local copy validated the caller's JWT using the service-role
+// key, which authenticated the service rather than the caller.
+const verifyAuth = verifyGhostAuth;
 
 async function supaRpc<T = unknown>(fn: string, params: Record<string, unknown>, jwt?: string): Promise<T | null> {
   const { url, key } = supabaseCreds();

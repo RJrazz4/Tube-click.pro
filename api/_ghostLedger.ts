@@ -12,6 +12,7 @@
  */
 
 import { jsonResponse } from "./_shared.js";
+import { verifyGhostAuthHeader } from "./_ghostAuth.js";
 
 export type GhostAction = "interrogate" | "squad" | "recon" | "dawn_patrol";
 
@@ -60,19 +61,19 @@ function supabaseCreds() {
   };
 }
 
+/**
+ * MP7: delegates to the shared Ghost auth layer.
+ *
+ * Two defects are resolved here. (1) The previous implementation passed the
+ * service-role key as the Authorization bearer when calling GoTrue, which
+ * authenticated the service rather than the caller. (2) Ghost mutation routes
+ * verify once in the route handler and again here; because the shared layer
+ * memoises by token for a short TTL, that second verification is now served
+ * from memory instead of a second blocking round-trip to GoTrue.
+ */
 async function verifyBearerToken(authorization: string | null): Promise<{ userId: string; jwt: string } | null> {
-  if (!authorization || !authorization.toLowerCase().startsWith("bearer ")) return null;
-  const token = authorization.slice("bearer ".length).trim();
-  if (!token) return null;
-  const { url, key } = supabaseCreds();
-  const res = await fetch(`${url}/auth/v1/user`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
-    signal: AbortSignal.timeout(5_000),
-  });
-  if (!res.ok) return null;
-  const user = (await res.json()) as { id?: string };
-  if (!user?.id) return null;
-  return { userId: user.id, jwt: token };
+  const identity = await verifyGhostAuthHeader(authorization);
+  return identity ? { userId: identity.userId, jwt: identity.jwt } : null;
 }
 
 /**
