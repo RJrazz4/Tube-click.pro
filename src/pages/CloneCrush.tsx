@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import {
   Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, Award, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio, Database, PlusCircle,
 } from "lucide-react";
+import { GhostInterrogationDrawer } from "@/components/ghost/GhostInterrogationDrawer";
 import { GhostBootSequence } from "@/components/ui/GhostBootSequence";
 import { WarRoomTicker } from "@/components/ui/WarRoomTicker";
 import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
@@ -166,16 +167,24 @@ export default function CloneCrush() {
   const isExecutingRef = useRef(false);
 
   // Single paywall route helper — also resets selectedTier to "free" so if
-  // the user navigates back they're not left on the 99% card.
-  const routeToProUpsell = useCallback((reason: "premium" | "locked" = "premium") => {
+  // the user navigates back they're not left on the 99% card. Accepts an
+  // optional feature slug (e.g. "interrogate") so we can upsell into the
+  // correct Rewards tab.
+  const routeToProUpsell = useCallback((reason: "premium" | "locked" | "interrogate" = "premium") => {
     setSelectedVideoTier("free");
-    toast.error(
-      reason === "premium"
-        ? "99% Glitch reserved for Pro • Rerouting to Private Tracker"
-        : "Locked competitor reserved for Pro • Rerouting to Private Tracker",
-      { id: "pro-upsell-99glitch" }
-    );
-    navigate(`/rewards?upsell=clonecrush&tier=${reason === "premium" ? "99glitch" : "locked"}`);
+    let upsell = "clonecrush";
+    let tier = "locked";
+    let msg = "Locked competitor reserved for Pro • Rerouting to Private Tracker";
+    if (reason === "premium") {
+      tier = "99glitch";
+      msg = "99% Glitch reserved for Pro • Rerouting to Private Tracker";
+    } else if (reason === "interrogate") {
+      upsell = "interrogate";
+      tier = "pro";
+      msg = "Ghost Interrogation is Pro • Rerouting to Rewards";
+    }
+    toast.error(msg, { id: `pro-upsell-${reason}` });
+    navigate(`/rewards?upsell=${upsell}&tier=${tier}`);
   }, [navigate]);
 
   // Synchronous pro check that always reads the CURRENT store snapshot
@@ -1005,7 +1014,34 @@ export default function CloneCrush() {
                             !isPro && dailyLimitActive && <DailyLimitOverlay />
                           )}
                         </div>
-                        <div><p className="text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p><p className="text-[11px] md:text-sm text-primary font-display font-black mt-1 leading-none">{video.views}</p><div className="flex items-center gap-1.5 mt-1">{video.estimatedRevenue && <span className="text-[7px] font-bold text-green-400 bg-green-400/10 px-1 py-0.5 rounded flex items-center gap-0.5"><DollarSign className="w-2.5 h-2.5" />{video.estimatedRevenue}</span>}{video.viralVelocityScore!==undefined && !showTileCooldown && <span className={`text-[7px] font-bold ${velocityColor} bg-secondary/60 px-1 py-0.5 rounded flex items-center gap-0.5`}><Flame className="w-2.5 h-2.5" />{video.viralVelocityScore}</span>}</div></div>
+                        <div><p className="text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p><p className="text-[11px] md:text-sm text-primary font-display font-black mt-1 leading-none">{video.views}</p><div className="flex items-center gap-1.5 mt-1">{video.estimatedRevenue && <span className="text-[7px] font-bold text-green-400 bg-green-400/10 px-1 py-0.5 rounded flex items-center gap-0.5"><DollarSign className="w-2.5 h-2.5" />{video.estimatedRevenue}</span>}{video.viralVelocityScore!==undefined && !showTileCooldown && <span className={`text-[7px] font-bold ${velocityColor} bg-secondary/60 px-1 py-0.5 rounded flex items-center gap-0.5`}><Flame className="w-2.5 h-2.5" />{video.viralVelocityScore}</span>}{!isTeaserSlot && (
+                            // 🔍 INTERROGATE chip — free users route to /rewards; pro opens drawer
+                            isPro ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Lazy-store access avoids top-level import cycles.
+                                  import("@/stores/useInterrogateStore").then((m) => {
+                                    m.useInterrogateStore.getState().openDrawer(video.videoId, { title: video.title, url: video.url });
+                                  });
+                                }}
+                                className="text-[7px] font-bold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 px-1 py-0.5 rounded flex items-center gap-0.5 transition-colors"
+                                title="Ghost Interrogation — chat with this competitor's transcript"
+                              >
+                                <Search className="w-2.5 h-2.5" /> INTERROGATE
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); routeToProUpsell("interrogate"); }}
+                                className="text-[7px] font-bold text-muted-foreground bg-secondary/60 border border-border px-1 py-0.5 rounded flex items-center gap-0.5"
+                                title="Pro feature: chat with competitor video"
+                              >
+                                <Lock className="w-2.5 h-2.5" /> INTERROGATE
+                              </button>
+                            )
+                          )}</div></div>
                       </div>);})}</div>) : (<div className="py-8 text-center text-xs text-muted-foreground">Profile your channel to launch ghost showdown matrix.</div>)}</div>
                   {!isPro && (<div className="mt-3 p-2.5 rounded-lg bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex items-center justify-between gap-2"><div className="flex items-center gap-2 min-w-0"><Lock className="w-4 h-4 text-primary shrink-0" /><p className="text-[10px] font-bold text-foreground truncate">Conveyor Belt: 1 Chain-Loop per 24h • Unlock Pro to skip the queue</p></div><Button onClick={openReferralRewards} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">Unlock Pro ₹0</Button></div>)}
                 </Card>
@@ -1140,6 +1176,7 @@ export default function CloneCrush() {
           <Card className="glass-strong border-border"><CardHeader className="pb-2"><CardTitle className="font-display text-sm font-semibold text-foreground flex items-center gap-2"><History className="w-4 h-4 text-primary" />Historic Packages ({rewrites.length}) • Ghost Cache</CardTitle></CardHeader><CardContent className="px-3 pb-3">{rewrites.length>0 ? (<div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">{rewrites.map((r:any)=>{ const isSelected = activeRewrite?.id===r.id; return (<div key={r.id} className={`group relative flex items-center justify-between p-2.5 rounded-lg border text-left cursor-pointer transition-colors ${isSelected?"border-primary bg-primary/10":"border-border/40 hover:border-border bg-secondary/10"}`}><div onClick={()=>setActiveRewrite(r)} className="flex-1 min-w-0 pr-6"><p className="text-[11px] font-bold text-foreground truncate">{r.rewrittenTitle}</p><p className="text-[9px] text-muted-foreground truncate mt-0.5">{r.tier==="premium"?"99% Glitch":"60% Standard"} • {r.glitchIntensity||60}% • {new Date(r.createdAt).toLocaleDateString()}</p></div><button onClick={e=>{ e.stopPropagation(); deleteRewrite(r.id); toast.success("Package removed"); }} className="absolute right-2 opacity-0 group-hover:opacity-100 hover:text-destructive text-muted-foreground transition-all duration-200"><XCircle className="w-3.5 h-3.5" /></button></div>);})}</div>) : (<div className="text-center py-6 text-muted-foreground/60 text-xs">Generated Chain-Loop packages appear here • Ghost cached</div>)}</CardContent></Card>
         </div>
       </div>
+      <GhostInterrogationDrawer />
     </div>
   );
 }
