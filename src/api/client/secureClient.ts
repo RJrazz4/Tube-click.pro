@@ -123,6 +123,10 @@ const VERCEL_ROUTE_MAP: Record<string, string> = {
   "elevenlabs-tts": "/api/elevenlabs-tts",
   "transcript": "/api/transcript",
   "clone-crush": "/api/clone-crush",
+  "ghost/credits": "/api/ghost/credits",
+  "ghost/interrogate-index": "/api/ghost/interrogate-index",
+  "ghost/interrogate-chat": "/api/ghost/interrogate-chat",
+  "ghost/squad-brief": "/api/ghost/squad-brief",
 };
 
 function makeRequestId(): string {
@@ -173,6 +177,10 @@ function requestTimeoutMs(functionName: string, body: unknown): number {
   const action = body && typeof body === "object" && "action" in body ? String((body as any).action || "") : "";
   if (functionName === "generate-content") return 52_000; // server maxDuration 55s; match raised gateway deadline so client doesn't abort mid-fallback
   if (functionName === "transcript") return 8_000;
+  if (functionName === "ghost/squad-brief") return 48_000;
+  if (functionName === "ghost/interrogate-index") return 25_000;
+  if (functionName === "ghost/interrogate-chat") return 30_000;
+  if (functionName === "ghost/credits") return 8_000;
   if (functionName === "clone-crush") {
     if (action === "profile") return 18_000;
     if (action === "competitors") return 15_000;

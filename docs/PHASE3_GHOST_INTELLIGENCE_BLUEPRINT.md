@@ -415,9 +415,9 @@ The blueprint is complete. **Requesting approval to execute Micro-Phase 1 (Headr
 | Phase | Commit | Description | Status |
 |---|---|---|---|
 | 1 (Headroom) | `e8eed00` | SmartCrush + CacheAligner + RollingWindow wrapper on gatewayChatText/Json, /api/v1/metrics telemetry, 9 tests | ✅ shipped |
-| 2 (Ledger) | — | `ghost_usage` table, `consume_ghost_action/get_ghost_quota` SECURITY DEFINER RPCs, /api/ghost/credits, useGhostCreditsStore + GhostCreditBadge, 8 new tests | ✅ ready |
-| 3 (Interrogate) | — | — | ⏳ |
-| 4 (Squad) | — | — | ⏳ |
+| 2 (Ledger) | `4ee8c4b` | `ghost_usage` table, `consume_ghost_action/get_ghost_quota` SECURITY DEFINER RPCs, /api/ghost/credits, useGhostCreditsStore + GhostCreditBadge, 8 tests | ✅ shipped |
+| 3 (Interrogate) | `79e902e` | embeddings (text-embedding-3-small, 1536d), `ghost_memory_chunks` vector store + ivfflat, 4-agent index/chat RPCs, GhostInterrogationDrawer with [MM:SS] citations, 4 chunker tests | ✅ shipped |
+| 4 (Squad) | — | `ghost_squad_briefs` table + persist/get RPCs, 4-agent Scout/Crawler/Analyst/Comparator pipeline + Critic ≥85 gate with self-heal, Piped-mesh comment crawl, `/api/ghost/squad-brief` edge route, GhostSquadDossier panel with red THREAT LEVEL bar, 3 new tests | ✅ ready |
 | 5 (Visual Recon) | — | — | ⏳ |
 | 6 (Dawn Patrol) | — | — | ⏳ |
 | 7 (Perf pass) | — | — | ⏳ |

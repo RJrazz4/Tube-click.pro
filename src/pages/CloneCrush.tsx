@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
-  Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, Award, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio, Database, PlusCircle,
+  Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, Award, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio, Database, PlusCircle, Shield,
 } from "lucide-react";
 import { GhostInterrogationDrawer } from "@/components/ghost/GhostInterrogationDrawer";
+import { GhostSquadDossier } from "@/components/ghost/GhostSquadDossier";
 import { GhostBootSequence } from "@/components/ui/GhostBootSequence";
 import { WarRoomTicker } from "@/components/ui/WarRoomTicker";
 import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
@@ -170,7 +171,7 @@ export default function CloneCrush() {
   // the user navigates back they're not left on the 99% card. Accepts an
   // optional feature slug (e.g. "interrogate") so we can upsell into the
   // correct Rewards tab.
-  const routeToProUpsell = useCallback((reason: "premium" | "locked" | "interrogate" = "premium") => {
+  const routeToProUpsell = useCallback((reason: "premium" | "locked" | "interrogate" | "squad" = "premium") => {
     setSelectedVideoTier("free");
     let upsell = "clonecrush";
     let tier = "locked";
@@ -182,6 +183,10 @@ export default function CloneCrush() {
       upsell = "interrogate";
       tier = "pro";
       msg = "Ghost Interrogation is Pro • Rerouting to Rewards";
+    } else if (reason === "squad") {
+      upsell = "squad";
+      tier = "pro";
+      msg = "Ghost Intel Squad is Pro • Rerouting to Rewards";
     }
     toast.error(msg, { id: `pro-upsell-${reason}` });
     navigate(`/rewards?upsell=${upsell}&tier=${tier}`);
@@ -1041,6 +1046,38 @@ export default function CloneCrush() {
                                 <Lock className="w-2.5 h-2.5" /> INTERROGATE
                               </button>
                             )
+                          )}
+                          {/* 🔪 SQUAD chip — free users route to /rewards; pro triggers squad run */}
+                          {!isTeaserSlot && (
+                            isPro ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Scroll the dossier panel into view and trigger run.
+                                  const el = document.getElementById("ghost-squad-dossier");
+                                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  // Defer the run click so the panel mounts first.
+                                  setTimeout(() => {
+                                    const btn = el?.querySelector<HTMLButtonElement>("button[data-squad-run='1']");
+                                    btn?.click();
+                                  }, 250);
+                                }}
+                                className="text-[7px] font-bold text-fuchsia-300 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 border border-fuchsia-500/30 px-1 py-0.5 rounded flex items-center gap-0.5 transition-colors"
+                                title="Ghost Intel Squad — 4-agent competitor dossier"
+                              >
+                                <Shield className="w-2.5 h-2.5" /> SQUAD
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); routeToProUpsell("squad"); }}
+                                className="text-[7px] font-bold text-muted-foreground bg-secondary/60 border border-border px-1 py-0.5 rounded flex items-center gap-0.5"
+                                title="Pro feature: 4-agent Intel Squad dossier"
+                              >
+                                <Lock className="w-2.5 h-2.5" /> SQUAD
+                              </button>
+                            )
                           )}</div></div>
                       </div>);})}</div>) : (<div className="py-8 text-center text-xs text-muted-foreground">Profile your channel to launch ghost showdown matrix.</div>)}</div>
                   {!isPro && (<div className="mt-3 p-2.5 rounded-lg bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex items-center justify-between gap-2"><div className="flex items-center gap-2 min-w-0"><Lock className="w-4 h-4 text-primary shrink-0" /><p className="text-[10px] font-bold text-foreground truncate">Conveyor Belt: 1 Chain-Loop per 24h • Unlock Pro to skip the queue</p></div><Button onClick={openReferralRewards} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">Unlock Pro ₹0</Button></div>)}
@@ -1060,6 +1097,29 @@ export default function CloneCrush() {
               <div className="p-3 rounded-xl glass-strong border-green-500/20"><p className="text-[10px] text-green-400 font-mono uppercase tracking-wider font-bold flex items-center gap-1"><DollarSign className="w-3 h-3" /> Competitor Revenue</p><p className="text-lg font-display font-bold text-green-400 mt-1">{envyMetrics.totalCompetitorMonthlyRevenue}</p><p className="text-[9px] text-muted-foreground mt-0.5">Est combined/mo • Ghost calc</p></div>
               <div className="p-3 rounded-xl glass-strong border-red-500/20"><p className="text-[10px] text-red-400 font-mono uppercase tracking-wider font-bold flex items-center gap-1"><Flame className="w-3 h-3" /> Viral Velocity</p><p className="text-lg font-display font-bold text-red-400 mt-1">{envyMetrics.averageViralVelocity}/100</p><p className="text-[9px] text-muted-foreground mt-0.5">Avg score • Live</p></div>
               <div className="p-3 rounded-xl glass-strong border-primary/20"><p className="text-[10px] text-primary font-mono uppercase tracking-wider font-bold flex items-center gap-1"><Gauge className="w-3 h-3" /> Niche CPM</p><p className="text-lg font-display font-bold text-primary mt-1">{envyMetrics.nicheCpm}</p><p className="text-[9px] text-muted-foreground mt-0.5">{envyMetrics.niche}</p></div>
+            </div>
+          )}
+
+          {/* Ghost Intel Squad dossier panel (MP4) */}
+          {profile && competitors.length > 0 && (
+            <div id="ghost-squad-dossier" className="animate-fade-in">
+              <GhostSquadDossier
+                video={selectedVideo ? {
+                  videoId: selectedVideo.videoId,
+                  title: selectedVideo.title,
+                  url: selectedVideo.url,
+                  channelName: selectedVideo.channelName,
+                  views: selectedVideo.views,
+                  viewsCount: selectedVideo.viewsCount || clientViewCount(selectedVideo),
+                  viralVelocityScore: selectedVideo.viralVelocityScore,
+                  estimatedRevenue: selectedVideo.estimatedRevenue,
+                  publishedAt: selectedVideo.publishedAt,
+                  thumbnail: selectedVideo.thumbnail,
+                } : null}
+                savedNiche={nicheInput || savedNiche || "General YouTube Content"}
+                slotId={activeSlotIndex}
+                onUpgrade={() => routeToProUpsell("squad")}
+              />
             </div>
           )}
 
