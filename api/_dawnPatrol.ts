@@ -23,7 +23,7 @@
  */
 
 import { jsonResponse, safeJsonBody } from "./_shared.js";
-import { consumeGhostAction } from "./_ghostLedger.js";
+import { consumeGhostAction, consumeGhostActionForUser } from "./_ghostLedger.js";
 import { verifyGhostAuth } from "./_ghostAuth.js";
 import { extractVideoId } from "./_youtube.js";
 import { gatewayChatJson } from "../packages/orchestrator/ai-gateway.js";
@@ -234,6 +234,17 @@ export async function handleDawnPatrolGenerate(req: Request): Promise<Response> 
       : 0,
   };
 
+  // Persist the niche so the CRON can generate a targeted brief later.
+  // The scheduler has no client state; without this write it reads NULL and
+  // every scheduled brief degrades to a generic one. Fire-and-forget: this
+  // must never add latency to, or fail, the user's request.
+  if (nicheStr) {
+    void supaRpc("ghost_dawn_patrol_set_niche", {
+      p_user_id: auth.userId,
+      p_niche: nicheStr,
+    });
+  }
+
   const brief = await generateBrief(nicheStr, comps, prevBrief);
   const emailStatus = "skipped"; // await attemptEmailDelivery(auth.userId, ...) — stubbed in MVP.
 
@@ -377,13 +388,19 @@ export async function handleDawnPatrolCron(req: Request): Promise<Response> {
     const userId = u?.user_id;
     if (!userId) continue;
     try {
-      // Synthesize a pseudo-request: the cron route does NOT have a user
-      // JWT, so we use service_role key for RPCs and let the ledger know
-      // this is a server-side invocation via a signed internal header
-      // the ledger recognizes. For MVP we keep it simple: call the ledger
-      // via supaRpc-style service-role fetching is already done inside
-      // consumeGhostAction which uses bearer token from the request. To
-      // avoid a big refactor we do a minimal in-context generate:
+      // The cron has no caller JWT (it is authenticated by the shared cron
+      // secret), so it uses the server-side ledger entry point with a
+      // user id taken from the trusted due-users list. This previously
+      // skipped the ledger entirely, which made scheduled briefs free and
+      // uncapped — a user could burn their dawn_patrol quota interactively
+      // and still receive another brief from the scheduler. Fail-closed:
+      // if the credit is refused we skip this user rather than generate.
+      const verdict = await consumeGhostActionForUser(userId, DAWN_ACTION);
+      if (!verdict.allowed) {
+        results.push({ userId, ok: false, skipped: true, code: verdict.code });
+        continue;
+      }
+
       const brief = await generateBrief(u?.niche || "", [], null);
       const emailStatus = "skipped";
       const up = await supaRpc<{ ok: boolean; id?: string }>("ghost_dawn_patrol_upsert", {
@@ -394,7 +411,13 @@ export async function handleDawnPatrolCron(req: Request): Promise<Response> {
         p_threats: JSON.stringify(brief.threats),
         p_competitor_delta: { tracked: 0, note: "cron-generated without client conveyor state" },
         p_niche_snapshot: u?.niche || null,
-        p_credit_snapshot: { source: "cron" },
+        p_credit_snapshot: {
+          source: "cron",
+          used: verdict.used,
+          limit: verdict.limit,
+          remaining: verdict.remaining,
+          resetAt: verdict.reset_at,
+        },
         p_delivery_channel: "in_app",
         p_email_status: emailStatus,
         p_model: brief.model,

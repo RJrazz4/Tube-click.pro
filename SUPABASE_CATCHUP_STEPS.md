@@ -259,3 +259,47 @@ The generator re-applies the splitter hardening (unique `$fnNNN$` tags, no `$`
 or `;` in comments) and refuses to write a bundle that would produce orphaned
 fragments. This is what prevents the `relation "v_black" does not exist`
 failure from returning if the bundle is ever rebuilt.
+
+---
+
+## Migration 202608140008 — dawn-patrol niche + cron credits
+
+Two follow-on defects, both in the Dawn Patrol path.
+
+**Scheduled briefs were free and uncapped.** The cron called
+`ghost_dawn_patrol_upsert` directly and never touched the ledger, because
+`consumeGhostAction()` needs a caller JWT and the cron (authenticated by
+`DAWN_PATROL_CRON_SECRET`) has none. A Pro user could exhaust their
+`dawn_patrol` quota interactively and still be handed another brief by the
+scheduler. The cron now goes through `consumeGhostActionForUser()`, the
+server-side entry point, and fails **closed** — a refused credit skips that
+user instead of generating.
+
+**The niche was never stored.** `202608140007` added
+`referral_profiles.niche` because `ghost_dawn_patrol_due_users()` selects it,
+but nothing wrote it, so it stayed NULL and every scheduled brief was generic.
+The value was already known at generate time — the client posts it and it is
+saved on the brief row as `niche_snapshot` — it just never went back to the
+profile. `ghost_dawn_patrol_set_niche()` now writes it, and the migration
+backfills from each user's most recent brief so existing users get a correct
+niche on the next cron run rather than after opening the app.
+
+Verified on a 14-migration replay:
+
+| Check | Result |
+|---|---|
+| Niche stored, trimmed, capped at 120 chars | pass |
+| Blank input is a no-op (cannot wipe a stored niche) | pass |
+| `due_users()` returns the stored niche | pass |
+| Backfill picks the most recent brief | pass (`woodworking`, not `cooking`) |
+| Backfill does not clobber an existing value | pass |
+| Free user → `PAYWALL`, `allowed=false` | pass |
+| Pro 1st brief allowed, 2nd → `DAILY_LIMIT` | pass |
+| Writer is `service_role` only | pass |
+
+The cron is now double-gated: `due_users()` excludes non-Pro, and
+`consume_ghost_action` returns `PAYWALL` if one ever slips through.
+
+`tests/dawn-patrol-cron-ledger.test.ts` (12 tests) locks this in. Confirmed
+the three cron assertions **fail** against the pre-fix code, so they cannot
+pass vacuously.

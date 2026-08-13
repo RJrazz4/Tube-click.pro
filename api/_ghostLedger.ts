@@ -160,6 +160,31 @@ export async function consumeGhostAction(
       reset_at: null, remaining_seconds: 0, total_runs: 0,
     };
   }
+  return consumeGhostActionForUser(verified.userId, action);
+}
+
+/**
+ * Server-side variant of consumeGhostAction for trusted, non-request
+ * contexts — currently the Dawn Patrol cron, which is authenticated by
+ * DAWN_PATROL_CRON_SECRET and therefore has no caller JWT to verify.
+ *
+ * The cron previously called ghost_dawn_patrol_upsert directly and never
+ * touched the ledger, so scheduled briefs were free and uncapped: a Pro
+ * user could exhaust their dawn_patrol quota interactively and still be
+ * handed another brief by the scheduler an hour later. Entitlement and
+ * the rolling-24h window are enforced inside consume_ghost_action, so
+ * routing the cron through the same RPC closes that hole.
+ *
+ * SECURITY: `userId` MUST come from a trusted server-side source (the
+ * due-users list, itself gated on is_pro()). Never pass a client-supplied
+ * id here — that would bypass JWT verification entirely. Request-bearing
+ * callers must use consumeGhostAction() instead.
+ */
+export async function consumeGhostActionForUser(
+  userId: string,
+  action: GhostAction,
+): Promise<GhostConsumeResult> {
+  const verified = { userId };
   const { url, key } = supabaseCreds();
   try {
     const res = await fetch(`${url}/rest/v1/rpc/consume_ghost_action`, {
