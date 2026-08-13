@@ -281,26 +281,32 @@ const VIRAL_POOL = [
 
 function generateSyntheticCompetitors(niche: string, seedOffset = 0) {
   const hash = ghostHash(niche + seedOffset);
-  const niches = ['Secret', 'Exposed', 'Hidden Truth', 'Banned Method', 'Algorithm Hack', 'Viral Formula'];
-  const hooks = ['Nobody Tells You', 'I Tested For 30 Days', 'At 3AM Everything Changed', 'The Mistake Costing You $', 'Why 97% Fail'];
+  const niches = ['Secret', 'Exposed', 'Hidden Truth', 'Banned Method', 'Algorithm Hack', 'Viral Formula', 'Dark Secret', 'Shocking Truth', 'Profit Loophole', 'Underground Trick'];
+  const hooks = ['Nobody Tells You', 'I Tested For 30 Days', 'At 3AM Everything Changed', 'The Mistake Costing You $', 'Why 97% Fail', 'They Hid This From You', 'Leaked Footage Shows', 'The Truth Will Shock You'];
   const results: any[] = [];
-  for (let i = 0; i < 3; i++) {
-    const poolIdx = (hash + i * 7 + seedOffset) % VIRAL_POOL.length;
+  // Generate a wider page so callers can slice windows deterministically.
+  const PAGE_SIZE = 12;
+  for (let i = 0; i < PAGE_SIZE; i++) {
+    const globalIdx = seedOffset + i;
+    const poolIdx = (hash + globalIdx * 7) % VIRAL_POOL.length;
     const pool = VIRAL_POOL[poolIdx];
-    const nicheIdx = (hash + i) % niches.length;
-    const hookIdx = (hash + i * 3) % hooks.length;
-    const viewsJitter = 0.6 + ((hash + i * 13) % 80) / 100; // 0.6-1.4x
+    const nicheIdx = (hash + globalIdx) % niches.length;
+    const hookIdx = (hash + globalIdx * 3) % hooks.length;
+    const viewsJitter = 0.6 + ((hash + globalIdx * 13) % 80) / 100;
     const views = Math.max(VIRAL_VIEW_THRESHOLD, Math.round(pool.baseViews * viewsJitter));
-    const recencyHours = [2, 18, 72][i] + ((hash + i) % 12);
+    const recencyHours = (2 + ((hash + globalIdx * 5) % 168));
     const recencyText = recencyHours < 24 ? `${recencyHours} hours ago` : `${Math.round(recencyHours/24)} days ago`;
-    const velocity = Math.min(100, Math.round(40 + Math.log10(views) * 2 + (24/recencyHours)*15 + (hash%20)));
+    const velocity = Math.min(100, Math.round(40 + Math.log10(views) * 2 + (24/Math.max(recencyHours,1))*15 + (hash%20)));
     const revenue = Math.round(views / 1000 * (5 + (hash%10)));
+    // Deterministic per-video IDs derived from (niche, index) so append-only
+    // conveyor shifts are stable and dedupe-able.
+    const videoId = `ghost_${(hash ^ (globalIdx * 2654435761)).toString(36).slice(0, 10)}`;
     results.push({
-      id: pool.id,
-      videoId: pool.id,
-      title: `${niche} ${niches[nicheIdx]}: ${hooks[hookIdx]} [${niche.split(' ')[0]}]`,
-      url: `https://www.youtube.com/watch?v=${pool.id}`,
-      thumbnail: `https://i.ytimg.com/vi/${pool.id}/hqdefault.jpg`,
+      id: videoId,
+      videoId,
+      title: `${niche} ${niches[nicheIdx]}: ${hooks[hookIdx]} [${niche.split(' ')[0]} #${globalIdx+1}]`,
+      url: `https://www.youtube.com/watch?v=${videoId}`,
+      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       views: `${views.toLocaleString()} views`,
       viewsCount: views,
       viewsText: `${views.toLocaleString()} views`,
@@ -309,13 +315,12 @@ function generateSyntheticCompetitors(niche: string, seedOffset = 0) {
       publishedText: recencyText,
       channelName: pool.channel,
       duration: 'PT10M30S',
-      isLocked: i > 0,
       viralVelocityScore: velocity,
       estimatedRevenue: `$${revenue.toLocaleString()}`,
       estimatedRevenueNum: revenue,
       relevance: `Ghost reconstructed intel • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view viral gate enforced`,
       isGhostReconstructed: true,
-      ghostNode: `MUM-0${i+1}`,
+      ghostNode: `MUM-0${(globalIdx%3)+1}`,
       viralThreshold: VIRAL_VIEW_THRESHOLD,
     });
   }
@@ -429,69 +434,72 @@ async function youtubeChannelProfile(input: string) {
   };
 }
 
-async function youtubeCompetitors(niche: string) {
+async function youtubeCompetitors(niche: string, limit = 3, offset = 0) {
+  // Cursor-style pagination: fetch as many viral-qualifying results as we
+  // can from the live API (walking queries in priority order) and return
+  // the slice [offset, offset+limit). This tolerates both test mocks that
+  // return minimal pages and production APIs that return many results.
   const queries = [
     { q: `${niche} viral`, publishedAfter: new Date(Date.now() - 365 * 86400000).toISOString() },
     { q: niche, publishedAfter: new Date(Date.now() - 365 * 86400000).toISOString() },
+    { q: `${niche} trending`, publishedAfter: new Date(Date.now() - 90 * 86400000).toISOString() },
     { q: niche },
   ];
   const seen = new Set<string>();
-  const ids: string[] = [];
+  const qualified: any[] = [];
+  const pageBudget = 25;
 
   for (const query of queries) {
-    if (ids.length >= 12) break;
+    if (qualified.length >= offset + limit) break;
     try {
       const data = await youtubeApi('search', {
         part: 'snippet',
         q: query.q,
         type: 'video',
         order: 'viewCount',
-        maxResults: '15',
+        maxResults: String(pageBudget),
         ...(query.publishedAfter ? { publishedAfter: query.publishedAfter } : {}),
       });
+      const ids: string[] = [];
       for (const item of data.items || []) {
         const id = item?.id?.videoId;
-        if (id && !seen.has(id)) {
-          seen.add(id);
-          ids.push(id);
-        }
+        if (id && !seen.has(id)) { seen.add(id); ids.push(id); }
+      }
+      if (!ids.length) continue;
+      const details = await youtubeApi('videos', { part: 'snippet,statistics,contentDetails', id: ids.join(',') });
+      for (const v of (details.items || [])) {
+        const viewsCount = Number(v.statistics?.viewCount || 0);
+        if (viewsCount < VIRAL_VIEW_THRESHOLD) continue;
+        const estimatedRevenueNum = estimatedRevenueForViews(viewsCount);
+        qualified.push({
+          id: v.id,
+          videoId: v.id,
+          title: v.snippet.title,
+          url: `https://www.youtube.com/watch?v=${v.id}`,
+          thumbnail: v.snippet.thumbnails?.maxres?.url || v.snippet.thumbnails?.high?.url || v.snippet.thumbnails?.medium?.url,
+          views: `${viewsCount.toLocaleString()} views`,
+          viewsText: `${viewsCount.toLocaleString()} views`,
+          viewsCount,
+          publishedAt: v.snippet.publishedAt,
+          publishedDate: v.snippet.publishedAt,
+          publishedText: v.snippet.publishedAt,
+          channelName: v.snippet.channelTitle,
+          duration: v.contentDetails?.duration,
+          viralVelocityScore: velocityForViews(viewsCount, v.snippet.publishedAt),
+          estimatedRevenue: `$${estimatedRevenueNum.toLocaleString()}`,
+          estimatedRevenueNum,
+          relevance: `Live YouTube Data API v3 • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view viral gate`,
+          viralThreshold: VIRAL_VIEW_THRESHOLD,
+        });
       }
     } catch (err: any) {
       console.warn('[youtubeCompetitors] search query failed', query.q, err?.message);
     }
   }
 
-  if (!ids.length) return [];
-  const details = await youtubeApi('videos', { part: 'snippet,statistics,contentDetails', id: ids.slice(0, 25).join(',') });
-  const mapped = (details.items || []).map((v: any, index: number) => {
-    const viewsCount = Number(v.statistics?.viewCount || 0);
-    const estimatedRevenueNum = estimatedRevenueForViews(viewsCount);
-    return {
-      id: v.id,
-      videoId: v.id,
-      title: v.snippet.title,
-      url: `https://www.youtube.com/watch?v=${v.id}`,
-      thumbnail: v.snippet.thumbnails?.maxres?.url || v.snippet.thumbnails?.high?.url || v.snippet.thumbnails?.medium?.url,
-      views: `${viewsCount.toLocaleString()} views`,
-      viewsText: `${viewsCount.toLocaleString()} views`,
-      viewsCount,
-      publishedAt: v.snippet.publishedAt,
-      publishedDate: v.snippet.publishedAt,
-      publishedText: v.snippet.publishedAt,
-      channelName: v.snippet.channelTitle,
-      duration: v.contentDetails?.duration,
-      isLocked: index > 0,
-      viralVelocityScore: velocityForViews(viewsCount, v.snippet.publishedAt),
-      estimatedRevenue: `$${estimatedRevenueNum.toLocaleString()}`,
-      estimatedRevenueNum,
-      relevance: `Live YouTube Data API v3 • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view viral gate`,
-      viralThreshold: VIRAL_VIEW_THRESHOLD,
-    };
-  });
-  return filterViralOnly(mapped)
+  return qualified
     .sort((a: any, b: any) => (b.viewsCount || 0) - (a.viewsCount || 0))
-    .slice(0, 3)
-    .map((video: any, index: number) => ({ ...video, isLocked: index > 0 }));
+    .slice(offset, offset + limit);
 }
 
 // -------------------------------------------------------------
@@ -565,8 +573,12 @@ async function fetchPipedNode(api: string, query: string): Promise<RawScrapedVid
   }).filter((x: RawScrapedVideo) => x.videoId && x.viewsCount >= VIRAL_VIEW_THRESHOLD);
 }
 
-async function fetchPipedSearch(query: string): Promise<RawScrapedVideo[]> {
-  return firstNonEmpty(PIPED_INSTANCES.map((api) => fetchPipedNode(api, query)), 2400);
+async function fetchPipedSearch(query: string, limit = 12): Promise<RawScrapedVideo[]> {
+  const all = await firstNonEmpty(PIPED_INSTANCES.map((api) => fetchPipedNode(api, query)), 2400);
+  // Sort by views desc so pagination windows are stable.
+  return all
+    .sort((a, b) => (b.viewsCount || 0) - (a.viewsCount || 0))
+    .slice(0, limit);
 }
 
 function decodeJsonString(value: string) {
@@ -712,62 +724,98 @@ export default async function handler(req: Request) {
 
     if (action === 'competitors') {
       if (!niche) return jsonResponse({ error: 'Niche is required.' }, 400);
-      // Try live API first. Low-view videos are rejected here, not hidden later.
+      // Pagination: opaque cursor = base64(JSON.stringify({source, offset})).
+      // limit defaults to 3 (bootstrap window); append shifts request 1.
+      const rawLimit = Number(bodyResult.data.limit);
+      const limit = Number.isFinite(rawLimit) && rawLimit > 0 && rawLimit <= 12 ? Math.round(rawLimit) : 3;
+      // Default source is 'youtube' (fresh bootstrap); only advance to
+      // 'synthetic' when there's a cursor that already encoded a
+      // fallback. This mirrors the pre-pagination flow that always
+      // tried the live API first.
+      let source: 'youtube' | 'piped' | 'synthetic' = 'youtube';
+      let offset = 0;
       try {
-        const liveCompetitors = await youtubeCompetitors(niche);
-        if (liveCompetitors.length >= 2) {
-          return jsonResponse({
-            success: true,
-            competitors: liveCompetitors,
-            ghostReconstructed: false,
-            ghostNode: 'YT-API',
-            viralThreshold: VIRAL_VIEW_THRESHOLD,
-            qualityGate: `${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ views only`,
-            envyMetrics: competitorMetrics(liveCompetitors, niche, '$5-8')
-          });
+        if (typeof bodyResult.data.after === 'string' && bodyResult.data.after.length > 0) {
+          const decoded = JSON.parse(Buffer.from(bodyResult.data.after, 'base64').toString('utf8'));
+          if (decoded && typeof decoded === 'object') {
+            if (decoded.source === 'youtube' || decoded.source === 'piped' || decoded.source === 'synthetic') source = decoded.source;
+            if (Number.isFinite(decoded.offset)) offset = Math.max(0, Math.round(decoded.offset));
+          }
         }
-        console.warn(`[viral-gate] YouTube API returned ${liveCompetitors.length} qualifying videos; rejecting sub-${VIRAL_VIEW_THRESHOLD} garbage and rerouting`);
-      } catch (e: any) {
-        console.warn('[ghost] Competitors API failed, trying Piped relay', e?.message);
+      } catch {
+        // Bad cursor → start over.
+        source = 'youtube'; offset = 0;
       }
-      // Try Piped ghost relay. Unknown view counts are rejected, because the UI must never display low-performing garbage.
-      try {
-        const piped = await fetchPipedSearch(`${niche} viral`);
-        if (piped.length >= 2) {
-          const mapped = piped.slice(0,3).map((v,i)=> {
-            const revenue = estimatedRevenueForViews(v.viewsCount);
-            return {
-              id: v.videoId, videoId: v.videoId, title: v.title, url: `https://www.youtube.com/watch?v=${v.videoId}`,
-              thumbnail: v.thumbnail, views: v.viewsText, viewsText: v.viewsText, viewsCount: v.viewsCount,
-              publishedAt: new Date().toISOString(), publishedDate: v.publishedText, publishedText: v.publishedText,
-              channelName: v.channelName, isLocked: i>0, viralVelocityScore: velocityForViews(v.viewsCount),
-              estimatedRevenue: `$${revenue.toLocaleString()}`, estimatedRevenueNum: revenue,
-              relevance: `Piped Ghost Relay • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view viral gate`, ghostNode: `PIPED-0${i+1}`, viralThreshold: VIRAL_VIEW_THRESHOLD
-            };
-          });
-          return jsonResponse({
-            success: true,
-            competitors: mapped,
-            ghostReconstructed: true,
-            ghostNode: 'PIPED-RELAY',
-            viralThreshold: VIRAL_VIEW_THRESHOLD,
-            qualityGate: `${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ views only`,
-            envyMetrics: competitorMetrics(mapped, niche, '$5')
-          });
+      const excludeIds = Array.isArray(bodyResult.data.excludeIds)
+        ? new Set(bodyResult.data.excludeIds.filter((x: unknown) => typeof x === 'string'))
+        : new Set<string>();
+      const windowId = typeof bodyResult.data.windowId === 'string' && bodyResult.data.windowId.length
+        ? bodyResult.data.windowId
+        : Buffer.from(`${niche}:${Date.now().toString(36)}`).toString('base64url');
+
+      const buildEnvelope = (list: any[], src: 'youtube'|'piped'|'synthetic', usedOffset: number, moreAvailable: boolean) => {
+        // Strip any IDs the client says it has already seen (dedup across shifts).
+        const deduped = list.filter((v) => v?.videoId && !excludeIds.has(v.videoId));
+        const window = deduped.slice(0, limit);
+        const nextOffset = usedOffset + list.length;
+        const hasMore = moreAvailable || deduped.length > limit;
+        const nextCursor = hasMore
+          ? Buffer.from(JSON.stringify({ source: src, offset: nextOffset })).toString('base64')
+          : null;
+        return jsonResponse({
+          success: true,
+          competitors: window.map((v: any, i: number) => ({ ...v, isLocked: i > 0 })),
+          nextCursor,
+          windowId,
+          source: src,
+          exhausted: !hasMore && window.length === 0,
+          ghostReconstructed: src !== 'youtube',
+          ghostNode: src === 'youtube' ? 'YT-API' : src === 'piped' ? 'PIPED-RELAY' : 'MUM-01',
+          viralThreshold: VIRAL_VIEW_THRESHOLD,
+          qualityGate: `${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ views only`,
+          envyMetrics: competitorMetrics(window, niche, src === 'youtube' ? '$5-8' : '$5'),
+        });
+      };
+
+      // Try live API first.
+      if (source === 'youtube') {
+        try {
+          const liveCompetitors = await youtubeCompetitors(niche, limit, offset);
+          if (liveCompetitors.length >= 2) {
+            return buildEnvelope(liveCompetitors, 'youtube', offset, liveCompetitors.length >= limit);
+          }
+        } catch (e: any) {
+          console.warn('[ghost] Competitors API failed, trying Piped relay', e?.message);
         }
-      } catch {}
-      // Final synthetic fallback - NEVER FAIL, still respects viral threshold.
-      const synthetic = generateSyntheticCompetitors(niche);
-      return jsonResponse({
-        success: true,
-        competitors: synthetic,
-        ghostReconstructed: true,
-        ghostNode: 'MUM-01 • GHOST RECONSTRUCTED',
-        intelSource: `Ghost Protocol: Synthetic viral matrix active • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view gate enforced`,
-        viralThreshold: VIRAL_VIEW_THRESHOLD,
-        qualityGate: `${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ views only`,
-        envyMetrics: competitorMetrics(synthetic, niche, '$5-8')
-      });
+      }
+      // Piped ghost relay fallback — cursor source degrades.
+      if (source === 'youtube' || source === 'piped') {
+        try {
+          const fetchSize = Math.min(Math.max(limit * 2, 3), 12);
+          const piped = await fetchPipedSearch(`${niche} viral`, fetchSize + offset);
+          const page = piped.slice(offset);
+          if (page.length >= 1) {
+            const mapped = page.map((v, i) => {
+              const revenue = estimatedRevenueForViews(v.viewsCount);
+              return {
+                id: v.videoId, videoId: v.videoId, title: v.title,
+                url: `https://www.youtube.com/watch?v=${v.videoId}`,
+                thumbnail: v.thumbnail, views: v.viewsText, viewsText: v.viewsText, viewsCount: v.viewsCount,
+                publishedAt: new Date().toISOString(), publishedDate: v.publishedText, publishedText: v.publishedText,
+                channelName: v.channelName,
+                viralVelocityScore: velocityForViews(v.viewsCount),
+                estimatedRevenue: `$${revenue.toLocaleString()}`, estimatedRevenueNum: revenue,
+                relevance: `Piped Ghost Relay • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view viral gate`,
+                ghostNode: `PIPED-0${(i%3)+1}`, viralThreshold: VIRAL_VIEW_THRESHOLD,
+              };
+            });
+            return buildEnvelope(mapped, 'piped', offset, piped.length >= fetchSize + offset);
+          }
+        } catch {}
+      }
+      // Final synthetic fallback (deterministic, infinite pagination by advancing seedOffset).
+      const synthPage = generateSyntheticCompetitors(niche, offset);
+      return buildEnvelope(synthPage, 'synthetic', offset, true);
     }
 
     if (action === 'rewrite') {

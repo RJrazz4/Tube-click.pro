@@ -109,11 +109,24 @@ export function useCloneCrushMutation() {
     {
       success: boolean;
       error?: string;
+      code?: string;
       profile?: any;
       competitors?: any[];
       rewrite?: any;
       model?: string;
       failedOver?: boolean;
+      nextCursor?: string | null;
+      windowId?: string | null;
+      ghostReconstructed?: boolean;
+      ghostNode?: string;
+      envyMetrics?: any;
+      resetAt?: string | null;
+      remainingSeconds?: number;
+      usedToday?: number;
+      limit?: number | null;
+      remaining?: number | null;
+      tier?: "free" | "pro";
+      allowed?: boolean;
     },
     any
   >("clone-crush");

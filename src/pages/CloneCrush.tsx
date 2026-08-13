@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
-  Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, Award, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio,
+  Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, Award, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio, Database, PlusCircle,
 } from "lucide-react";
 import { GhostBootSequence } from "@/components/ui/GhostBootSequence";
 import { WarRoomTicker } from "@/components/ui/WarRoomTicker";
@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { useCloneCrushStore, CompetitorVideo, ProfiledChannel, FREE_COOLDOWN_MS } from "@/stores/useCloneCrushStore";
+import { useCloneCrushStore, CompetitorVideo, ProfiledChannel, FREE_COOLDOWN_MS, CONVEYOR_SIZE, FREE_GHOST_CACHE_SLOTS, PRO_GHOST_CACHE_SLOTS } from "@/stores/useCloneCrushStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useAuthStore, isProTier } from "@/stores/useAuthStore";
 import { useTranscriptExtraction, useCloneCrushMutation } from "@/hooks/useSecureQuery";
@@ -70,11 +70,18 @@ export default function CloneCrush() {
   })();
 
   const {
-    profile, isProfiling, lastChannelUrl, savedNiche, competitors, conveyorQueue, isSearchingCompetitors, envyMetrics, threatAlerts, wideningGap, rewrites, isRewriting, activeRewrite,
-    freeCooldownUntil, freeLockedVideoId, conveyorShiftPending, activeVideoId,
-    setProfile, setIsProfiling, setLastChannelUrl, setSavedNiche, setCompetitors, setConveyorQueue, setActiveVideoId, setIsSearchingCompetitors, setThreatAlerts, addRewrite, setIsRewriting, setActiveRewrite, deleteRewrite,
-    startFreeCooldown, clearFreeCooldown, expireFreeCooldownCycle, appendConveyorTile, markConveyorShiftConsumed, beginNewWorkflow,
+    profile, isProfiling, savedChannels, activeSlotIndex, savedNiche, competitors, conveyorQueue, isSearchingCompetitors, envyMetrics, threatAlerts, wideningGap, rewrites, isRewriting, activeRewrite,
+    freeCooldownUntil, freeLockedVideoId, conveyorShiftPending, activeVideoId, conveyorCursor, conveyorWindowId, conveyorAppending, seenVideoIds,
+    setProfile, setIsProfiling, setSavedNiche, setCompetitors, setConveyorQueue, setActiveVideoId, setConveyorAppending, setIsSearchingCompetitors, setThreatAlerts, addRewrite, setIsRewriting, setActiveRewrite, deleteRewrite,
+    startFreeCooldown, clearFreeCooldown, expireFreeCooldownCycle, appendConveyorTile, advanceAfterConsume, markConveyorShiftConsumed, markSeenVideo, beginNewWorkflow,
+    saveChannelToCache, switchActiveSlot, removeChannelFromCache,
   } = useCloneCrushStore();
+
+  // Active channel (primary URL) is the slot-0 Ghost Cache entry or the
+  // currently-profiled channel's URL. Used for persistence and the
+  // returning-user bootstrap flow.
+  const activeSavedChannel = savedChannels.find((c) => c.slotIndex === activeSlotIndex) ?? savedChannels[0] ?? null;
+  const lastChannelUrl = profile?.url || activeSavedChannel?.url || null;
 
   const saveContent = useContentStore((s) => s.saveContent);
   const incrementStat = useContentStore((s) => s.incrementStat);
@@ -122,7 +129,7 @@ export default function CloneCrush() {
   const saveWorkflowPackage = useWorkflowStore((s) => s.saveContentPackage);
   const startWorkflowHandoff = useWorkflowStore((s) => s.startHandoff);
 
-  // Persistent target: pre-fill from the per-user namespaced store so the
+  // Persistent target: pre-fill from the active Ghost Cache slot so the
   // user never has to re-enter their channel URL on future visits.
   const [channelInput, setChannelInput] = useState<string>(() => lastChannelUrl ?? "");
   const [nicheInput, setNicheInput] = useState<string>(() => savedNiche ?? "");
@@ -245,56 +252,63 @@ export default function CloneCrush() {
     }
   }, [profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Daily Conveyor Belt auto-advance:
-  //  - When a returning free user has a saved channelUrl but no profile
-  //    hydrated yet, pre-fill the input and re-profile in the background
-  //    so they don't have to paste the URL again.
-  //  - When conveyorShiftPending flips to true (either because the 24h
-  //    timer just expired in-place or because a returning user loaded
-  //    the page after expiry), fetch ONE new niche-strict video and
-  //    append it to the conveyor queue. We do NOT blow away the queue —
-  //    slots 1/2 just shifted left, and slot3 needs a fresh teaser.
+  // Daily Conveyor Belt orchestrator. Two responsibilities:
+  //  (A) On conveyorShiftPending (24h cooldown expired in-place OR
+  //      stale-reload), fetch ONE new niche-strict video via the
+  //      cursor-based /api/clone-crush competitors endpoint and append
+  //      it so the queue is exactly 3 again — slot0 evicted, slot1→0
+  //      unlocked, slot2→1 locked, slot3 fresh teaser.
+  //  (B) On returning-user cold start with a saved channel in the
+  //      Ghost Cache but no profile in memory, re-profile in the
+  //      background so the dashboard is ready instantly.
   const autoRefreshRunningRef = useRef(false);
   useEffect(() => {
-    // Never interrupt an in-flight generation.
-    if (isRewriting || isProfiling || isSearchingCompetitors) return;
-    // Pro users don't participate in the daily conveyor.
+    if (isRewriting || isProfiling || isSearchingCompetitors || conveyorAppending) return;
+
+    // Pro users don't participate in the 24h cooldown shift (they
+    // advance inline on success). If a stale flag somehow persists,
+    // clear it.
     if (isPro) {
       if (conveyorShiftPending) markConveyorShiftConsumed();
-      return;
     }
 
-    // Case A: 24h cooldown just expired → queue has been shifted in
-    // place by expireFreeCooldownCycle(). Append ONE new niche-strict
-    // trending video to fill slot3. The queue must remain exactly 3
-    // tiles after this.
-    if (conveyorShiftPending && profile && !isFreeCooldownActive) {
+    // Case A: cooldown expired — append one video to fill slot3.
+    if (conveyorShiftPending && profile && !isFreeCooldownActive && !isPro) {
       if (autoRefreshRunningRef.current) return;
       autoRefreshRunningRef.current = true;
-      // Wipe per-run UI state that belonged to yesterday's evicted run.
       setActiveRewrite(null);
       setLogSteps([]);
       setActiveTab("script");
       setCopiedText(false);
       setDailyLimitActive(false);
       toast.loading("24h conveyor advanced • sourcing next niche trend...", { id: "conveyor-shift" });
-      // Refresh server-side quota so the client matches the reset.
       void refreshQuota(true).catch(() => {});
       const strictNiche = savedNiche || nicheInput || "General YouTube Content";
-      const existingIds = new Set(useCloneCrushStore.getState().conveyorQueue.map((v) => v.videoId));
+      const state0 = useCloneCrushStore.getState();
+      const excludeIds = Array.from(new Set([...(state0.seenVideoIds || []), ...state0.conveyorQueue.map(v => v.videoId)]));
       cloneCrushMutation
-        .mutateAsync({ action: "competitors", niche: strictNiche, description: strictNiche })
+        .mutateAsync({
+          action: "competitors",
+          niche: strictNiche,
+          description: strictNiche,
+          limit: 3,
+          after: state0.conveyorCursor,
+          windowId: state0.conveyorWindowId,
+          excludeIds,
+        })
         .then((res: any) => {
-          if (!res?.success || !Array.isArray(res.competitors)) throw new Error(res?.error || "No competitors");
+          if (!res?.success || !Array.isArray(res.competitors)) throw new Error(res?.error || "append failed");
           const viral = (res.competitors as any[]).filter((v: any) => clientViewCount(v) >= VIRAL_VIEW_THRESHOLD);
-          const fresh = viral.find((v: any) => v?.videoId && !existingIds.has(v.videoId));
+          const fresh = viral.find((v: any) => v?.videoId && !excludeIds.includes(v.videoId));
           if (fresh) {
-            // Normalize to CompetitorVideo shape before appending; the
-            // store's appendConveyorTile + stampConveyor enforces
-            // isLocked = (i > 0) so the new slot3 stays a teaser.
             appendConveyorTile(fresh as CompetitorVideo);
+            markSeenVideo(fresh.videoId);
           }
-          // Activate slot0 (now the previously-locked slot1 video).
+          // Update the cursor for future appends.
+          useCloneCrushStore.setState({
+            conveyorCursor: res.nextCursor || null,
+            conveyorWindowId: res.windowId || state0.conveyorWindowId,
+          });
           const nextQueue = useCloneCrushStore.getState().conveyorQueue;
           if (nextQueue[0]?.videoId) setActiveVideoId(nextQueue[0].videoId);
         })
@@ -302,14 +316,14 @@ export default function CloneCrush() {
         .finally(() => {
           markConveyorShiftConsumed();
           autoRefreshRunningRef.current = false;
+          setConveyorAppending(false);
           toast.dismiss("conveyor-shift");
+          toast.success("New slot unlocked • Ghost mesh advanced", { id: "conveyor-advanced" });
         });
       return;
     }
 
-    // Case B: returning user with a saved lastChannelUrl but no profile
-    // in memory (fresh tab / reload). Re-run the profile flow so the
-    // page is ready without the user re-pasting the URL.
+    // Case B: returning user with a saved URL but no profile.
     if (!profile && lastChannelUrl && !isAuthLoading && tierHydrated && !conveyorShiftPending) {
       if (autoRefreshRunningRef.current) return;
       autoRefreshRunningRef.current = true;
@@ -323,9 +337,13 @@ export default function CloneCrush() {
           const profiledChannel: ProfileWithKeywords = {
             ...res.profile,
             extractedKeywords: res.extractedKeywords || res.profile.extractedKeywords || [],
+            slotIndex: activeSlotIndex,
           };
           setProfile(profiledChannel, lastChannelUrl);
           startWorkflowProfile({ id: profiledChannel.id, name: profiledChannel.name, handle: profiledChannel.handle, avatar: profiledChannel.avatar });
+          // Ensure slot0 Ghost Cache stays in sync with whatever URL
+          // returned (handle normalization can change the URL).
+          saveChannelToCache({ url: profiledChannel.url, handle: profiledChannel.handle, name: profiledChannel.name, avatar: profiledChannel.avatar, niche: null }, activeSlotIndex);
           toast.success(`Reconnected to ${profiledChannel.name} • MUM-01`, { id: "returning-profile" });
           return autoDiscoverCompetitors(profiledChannel);
         })
@@ -338,10 +356,12 @@ export default function CloneCrush() {
         });
     }
   }, [
-    conveyorShiftPending, profile, isFreeCooldownActive, isPro, lastChannelUrl, savedNiche, nicheInput,
+    conveyorShiftPending, conveyorAppending, profile, isFreeCooldownActive, isPro, lastChannelUrl,
+    savedNiche, nicheInput, seenVideoIds, conveyorCursor, conveyorWindowId, activeSlotIndex,
     isAuthLoading, tierHydrated, isRewriting, isProfiling, isSearchingCompetitors,
     channelInput, markConveyorShiftConsumed, refreshQuota, setProfile, setIsProfiling,
-    startWorkflowProfile, appendConveyorTile, setActiveVideoId,
+    startWorkflowProfile, appendConveyorTile, setActiveVideoId, markSeenVideo,
+    saveChannelToCache, setConveyorAppending,
   ]);
 
   const autoDiscoverCompetitors = async (prof: ProfileWithKeywords) => {
@@ -370,14 +390,23 @@ export default function CloneCrush() {
     toast.loading(`AI deducing niche "${deducedNiche}" & auditing viral velocity via ghost mesh...`, { id: "competitors-find" });
 
     try {
-      const res = await cloneCrushMutation.mutateAsync({ action: "competitors", niche: deducedNiche, description: discoveryDescription });
+      // Bootstrap the sliding window — request 3 tiles with no cursor.
+      // Future shifts request 1 tile at a time with the returned nextCursor.
+      const res = await cloneCrushMutation.mutateAsync({
+        action: "competitors",
+        niche: deducedNiche,
+        description: discoveryDescription,
+        limit: CONVEYOR_SIZE,
+        excludeIds: [],
+      });
       if (res.success && res.competitors) {
         const viralCompetitors = res.competitors.filter((v: any) => clientViewCount(v) >= VIRAL_VIEW_THRESHOLD);
         if (viralCompetitors.length === 0) throw new Error("No 50k+ viral competitors found");
         const envyData = (res as any).envyMetrics || null;
-        setCompetitors(viralCompetitors, envyData);
+        setCompetitors(viralCompetitors, envyData, { nextCursor: res.nextCursor ?? null, windowId: res.windowId ?? null });
         const unlocked = viralCompetitors.find((v: any) => !v.isLocked) || viralCompetitors[0];
         setActiveVideoId(unlocked?.videoId ?? null);
+        viralCompetitors.forEach((v: any) => markSeenVideo(v.videoId));
         selectWorkflowCompetitor({ videoId: unlocked.videoId, title: unlocked.title, url: unlocked.url, channelName: unlocked.channelName, thumbnail: unlocked.thumbnail }, deducedNiche);
         const isGhost = (res as any).ghostReconstructed;
         toast.success(isGhost ? `Ghost Matrix Reconstructed! ${viralCompetitors.length} viral competitors via MUM-01 mesh` : `Showdown Matrix Ready! ${viralCompetitors.length} 50k+ live competitors`, { id: "competitors-find" });
@@ -419,9 +448,16 @@ export default function CloneCrush() {
     setWorkflowNonce((n) => n + 1);
     setDailyLimitActive(false);
     setIsProfiling(true);
-    // Persist the URL the user submitted BEFORE async work so a crash or
-    // navigation during profiling still remembers the channel next visit.
-    setLastChannelUrl(input);
+    // Persist the URL the user submitted into slot-0 Ghost Cache BEFORE
+    // async work so a crash or navigation during profiling still
+    // remembers the channel next visit. Free users only have slot 0;
+    // Pro users can stack up to 5.
+    const saveResult = saveChannelToCache({ url: input, handle: input, name: input, avatar: "", niche: null }, activeSlotIndex);
+    if (!saveResult.ok && saveResult.reason === "SLOT_LIMIT") {
+      toast.error("Ghost Cache is full — unlock Pro for 5 saved channels", { id: "ghost-cache-limit" });
+      setIsProfiling(false);
+      return;
+    }
     toast.loading("Establishing ghost tunnel to YouTube veil layer...", { id: "profile-scrape" });
     try {
       const profileRequest = cloneCrushMutation.mutateAsync({ action: "profile", channelUrl: input });
@@ -430,6 +466,8 @@ export default function CloneCrush() {
         const profileResponse = res as typeof res & { extractedKeywords?: string[] };
         const profiledChannel: ProfileWithKeywords = { ...res.profile, extractedKeywords: profileResponse.extractedKeywords || res.profile.extractedKeywords || [] };
         setProfile(profiledChannel, input);
+        // Sync the fully-hydrated profile into the active Ghost Cache slot.
+        saveChannelToCache({ url: profiledChannel.url, handle: profiledChannel.handle, name: profiledChannel.name, avatar: profiledChannel.avatar, niche: null }, activeSlotIndex);
         startWorkflowProfile({ id: profiledChannel.id, name: profiledChannel.name, handle: profiledChannel.handle, avatar: profiledChannel.avatar });
         const isGhost = (res as any).ghostReconstructed;
         toast.success(isGhost ? `Ghost Profile Reconstructed: ${profiledChannel.name} via MUM-01` : `Connected to ${profiledChannel.name}'s Channel Profile`, { id: "profile-scrape" });
@@ -555,14 +593,47 @@ export default function CloneCrush() {
         if (navigator.vibrate) navigator.vibrate([20, 30, 20]);
         try { const s = JSON.parse(localStorage.getItem("ghost_streak_v2") || "{}"); const xp = (s.xp || 0) + 30; const streak = s.streak || 1; localStorage.setItem("ghost_streak_v2", JSON.stringify({ ...s, xp, streak, lastDate: new Date().toDateString() })); } catch {}
         toast.success(`🚀 ${achievedTier==="premium"?"99% GLITCH":"60% Standard"} Chain-Loop Secured via Ghost Node • ${promptCount} prompts • +30 XP`);
-        // Free-tier monetization lock: after a successful run the result
-        // stays LOCKED on screen for 24h and all other tiles enter the
-        // cooldown state. The cooldown timestamp is persisted in the
-        // per-user store so the timer & locks survive reload.
-        if (!userIsPro) {
+
+        // --- SLIDING CONVEYOR ADVANCE ----------------------------------
+        // After a successful Chain-Loop the consumed slot0 is evicted
+        // permanently, the queue shifts (slot1→0 unlocked, slot2→1
+        // locked), and we fetch ONE new niche-strict video to fill the
+        // empty slot3. Pro users get the next tile instantly (zero
+        // cooldown = "Skip Wait"); free users have slot0 pinned for 24h
+        // with the result on screen, and the slide happens when the
+        // cooldown ticker fires expireFreeCooldownCycle().
+        if (userIsPro) {
+          // Kick a single-video append against the strict niche so the
+          // queue slides from [1,2,3] → [2,3,4] and the next actionable
+          // slot unlocks instantly.
+          setConveyorAppending(true);
+          const strictNiche = savedNiche || nicheInput || "General YouTube Content";
+          const excludeIds = Array.from(new Set([...seenVideoIds, ...conveyorQueue.map(v => v.videoId)]));
+          const windowId = conveyorWindowId || undefined;
+          cloneCrushMutation
+            .mutateAsync({ action: "competitors", niche: strictNiche, description: strictNiche, limit: 3, excludeIds, windowId, after: conveyorCursor })
+            .then((res: any) => {
+              if (!res?.success || !Array.isArray(res.competitors)) throw new Error(res?.error || "append failed");
+              const viral = (res.competitors as any[]).filter((v: any) => clientViewCount(v) >= VIRAL_VIEW_THRESHOLD);
+              const fresh = viral.find((v: any) => v?.videoId && !excludeIds.includes(v.videoId));
+              advanceAfterConsume(fresh as CompetitorVideo | null, res.nextCursor || null);
+              if (fresh) markSeenVideo(fresh.videoId);
+              toast.success("⚡ BLACK-OP LANE • Next conveyor slot unlocked", { id: "conveyor-advance" });
+            })
+            .catch(() => {
+              // Even if the append fails, shift locally so the UI never
+              // blocks; next effect tick will retry.
+              advanceAfterConsume(null, conveyorCursor);
+            })
+            .finally(() => setConveyorAppending(false));
+        } else {
+          // Free-tier monetization lock: after a successful run the
+          // result stays LOCKED on screen for 24h. The cooldown
+          // timestamp is persisted per-user so the timer & locks
+          // survive reload. When the timer hits zero,
+          // expireFreeCooldownCycle() shifts the queue and the
+          // conveyorShiftPending effect below appends the next tile.
           startFreeCooldown(selectedVideo.videoId);
-          // Sync server-side daily quota so subsequent attempts short
-          // circuit before hitting the edge.
           void refreshQuota(true);
         }
       } else if ((rewriteRes as any).code === "DAILY_LIMIT") {
@@ -709,6 +780,96 @@ export default function CloneCrush() {
 
       <div className="relative z-10 grid lg:grid-cols-12 gap-6 items-start">
         <div className="lg:col-span-8 space-y-6">
+          {/* Ghost Cache: multi-slot channel memory. Free = 1 slot; Pro = 5 slots.
+              Free users see slots 2–5 as encrypted lock glyphs. */}
+          <Card className="glass-strong border-primary/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="font-display text-sm flex items-center gap-2">
+                <Database className="w-4 h-4 text-primary" />
+                Ghost Cache
+                {isPro && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded bg-cyan-400/15 text-cyan-300 border border-cyan-400/30 text-[9px] font-mono font-black tracking-widest">
+                    ⚡ BLACK-OP LANE
+                  </span>
+                )}
+              </CardTitle>
+              <CardDescription className="text-[11px]">
+                Persistent channel memory. {isPro ? "5 active slots" : "1 active slot • Unlock Pro for 5 concurrent channels"}.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-5 gap-2">
+                {Array.from({ length: isPro ? PRO_GHOST_CACHE_SLOTS : FREE_GHOST_CACHE_SLOTS }).map((_, i) => {
+                  const slot = savedChannels.find((c) => c.slotIndex === i);
+                  const isActive = activeSlotIndex === i;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        if (!slot) {
+                          if (!isPro && i >= FREE_GHOST_CACHE_SLOTS) { routeToProUpsell("locked"); return; }
+                          // Empty slot in range — focus input to save new channel.
+                          return;
+                        }
+                        if (isFreeCooldownActive) { toast.error("24h cooldown active — finish this Chain-Loop before switching", { id: "cooldown-switch" }); return; }
+                        switchActiveSlot(i);
+                        if (slot.url !== channelInput) setChannelInput(slot.url);
+                        toast.success(`Switched to slot ${i+1}: ${slot.name || slot.handle}`, { id: "slot-switch" });
+                      }}
+                      className={
+                        "group relative p-2 rounded-lg border text-left transition-all " +
+                        (isActive
+                          ? "border-primary bg-primary/15 ring-2 ring-primary/40 shadow-neon-glow"
+                          : slot
+                            ? "border-border/60 bg-secondary/30 hover:border-primary/50"
+                            : "border-dashed border-border/50 bg-secondary/10 hover:border-primary/30 text-muted-foreground")
+                      }
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {slot?.avatar ? (
+                          <img src={slot.avatar} alt="" className="w-6 h-6 rounded-full object-cover shrink-0 border border-primary/30" />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center shrink-0">
+                            {isPro || i < FREE_GHOST_CACHE_SLOTS ? <PlusCircle className="w-3 h-3 text-primary" /> : <Lock className="w-3 h-3 text-primary" />}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[8px] font-mono text-primary/80 uppercase tracking-widest">SLOT {i+1}</p>
+                          <p className="text-[10px] font-bold text-foreground truncate">
+                            {slot?.name || slot?.handle || (isPro || i < FREE_GHOST_CACHE_SLOTS ? "Empty" : "Locked")}
+                          </p>
+                        </div>
+                      </div>
+                      {slot?.niche && (
+                        <p className="mt-1 text-[8px] font-mono text-muted-foreground truncate">⟐ {slot.niche}</p>
+                      )}
+                    </button>
+                  );
+                })}
+                {!isPro && Array.from({ length: PRO_GHOST_CACHE_SLOTS - FREE_GHOST_CACHE_SLOTS }).map((_, i) => {
+                  const slotIdx = i + FREE_GHOST_CACHE_SLOTS;
+                  return (
+                    <button
+                      key={`pro-${slotIdx}`}
+                      type="button"
+                      onClick={() => routeToProUpsell("locked")}
+                      className="p-2 rounded-lg border border-dashed border-primary/20 bg-primary/5 text-primary/60 hover:bg-primary/10 transition"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Lock className="w-4 h-4" />
+                        <div>
+                          <p className="text-[8px] font-mono uppercase tracking-widest">SLOT {slotIdx+1}</p>
+                          <p className="text-[10px] font-bold">Pro</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="glass-strong bracket border-primary/20">
             <CardHeader className="pb-3">
               <CardTitle className="font-display text-base flex items-center gap-2"><Terminal className="w-5 h-5 text-primary" />1. Auto-Profile Channel (Ghost Mesh • Zero-Friction)</CardTitle>
