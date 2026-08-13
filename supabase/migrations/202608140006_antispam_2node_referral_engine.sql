@@ -104,7 +104,7 @@ create table if not exists public.referral_profiles (
 );
 
 comment on column public.referral_profiles.pro_tier_expires_at is
-  'Single source of truth for Pro. NULL = never granted = Free. Never set back to NULL to revoke; set to a past timestamp.';
+  'Single source of truth for Pro. NULL = never granted = Free. Never set back to NULL to revoke - set to a past timestamp.';
 comment on column public.referral_profiles.black_op_lane is
   'Owned by ghost_intel_ledger. Elevates ghost caps beyond Pro.';
 comment on column public.referral_profiles.lifetime_pro_days_granted is

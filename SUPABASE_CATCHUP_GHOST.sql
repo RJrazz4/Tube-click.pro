@@ -169,7 +169,7 @@ alter table public.referral_profiles
   add column if not exists niche text;
 
 comment on column public.referral_profiles.niche is
-  'Creator niche used by the dawn-patrol briefing. Nullable; readers must coalesce.';
+  'Creator niche used by the dawn-patrol briefing. Nullable - readers must coalesce.';
 
 -- 4a-bis. ghost_dawn_patrol_due_users() carries the SAME NULL-expiry defect
 --     as get_ghost_tier_for(): its filter

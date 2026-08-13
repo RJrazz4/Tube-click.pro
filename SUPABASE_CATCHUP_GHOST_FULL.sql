@@ -4,7 +4,7 @@
 -- Target project: cssnxomfkrnjaedoobjj
 --
 -- WHY THIS FILE EXISTS
--- --------------------
+-- ------------------------------
 -- Production currently contains exactly four tables:
 --     referral_attributions, referral_blocked_domains,
 --     referral_pro_grants,   referral_profiles
@@ -16,7 +16,7 @@
 -- exist (get_ghost_quota, consume_ghost_action).
 --
 -- WHY YOU CANNOT JUST REPLAY 202608140001..005 IN ORDER
--- -----------------------------------------------------
+-- ------------------------------
 -- Migration 006 is NEWER than the Ghost migrations but was applied FIRST.
 -- Replaying the older files on top of it silently reintroduces two defects
 -- that 006 exists to fix. Both were reproduced on a local PG 17 rebuild of
@@ -39,7 +39,7 @@
 --      replay, so the dawn-patrol cron has never worked. Repaired here.
 --
 -- WHAT THIS SCRIPT DOES NOT DO
--- ----------------------------
+-- ------------------------------
 -- It does NOT run 202607210001..4. Those recreate referral_events and the
 -- legacy claim_referral_reward / evaluate_qualified_referral_chain surface
 -- that 006 deliberately dropped. They must never be applied now.
@@ -111,22 +111,22 @@ create extension if not exists vector;
 --   * Black-Ops Lane (black_op_lane = true): unlimited interrogate + squad,
 --     elevated recon/dawn-patrol caps.
 --
--- The clone_crush RPCs are UNTOUCHED; they remain the authoritative gate
+-- The clone_crush RPCs are UNTOUCHED. they remain the authoritative gate
 -- for the original Chain-Loop feature. Ghost actions route exclusively
 -- through the new `consume_ghost_action` / `get_ghost_quota` pair.
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 1. Black-Ops lane entitlement column.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 alter table public.referral_profiles
   add column if not exists black_op_lane boolean not null default false;
 
 comment on column public.referral_profiles.black_op_lane is
-  'Black-Ops Lane unlock: set by admin/grants table only; elevates ghost-intel caps beyond Pro.';
+  'Black-Ops Lane unlock - set by admin/grants table only. Elevates ghost-intel caps beyond Pro.';
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 2. Ghost usage ledger.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create table if not exists public.ghost_usage (
   user_id          uuid not null references auth.users(id) on delete cascade,
   action           text not null,
@@ -141,7 +141,7 @@ create table if not exists public.ghost_usage (
 
 alter table public.ghost_usage enable row level security;
 
--- Self-read only; all writes via SECURITY DEFINER functions below.
+-- Self-read only. all writes via SECURITY DEFINER functions below.
 drop policy if exists ghost_usage_self_select on public.ghost_usage;
 create policy ghost_usage_self_select on public.ghost_usage
   for select to authenticated
@@ -153,16 +153,16 @@ grant select on public.ghost_usage to authenticated;
 create index if not exists ghost_usage_user_action_idx
   on public.ghost_usage(user_id, action);
 
--- ---------------------------------------------------------------------------
--- 3. Action catalog (pro / black-ops daily caps; rolling 24h).
--- ---------------------------------------------------------------------------
+-- ------------------------------
+-- 3. Action catalog (pro / black-ops daily caps. rolling 24h).
+-- ------------------------------
 -- interrogate = Ghost Interrogation chat turn (first message also pays index)
 -- squad       = Ghost Intel Squad dossier
 -- recon       = Ghost Visual Recon per-video ingestion
 -- dawn_patrol = Dawn Patrol daily brief delivery
 -- Guarded so the migration is safely re-runnable (CREATE TYPE has no
 -- IF NOT EXISTS form).
-do $ghost_action$
+do $fn001$
 begin
   if not exists (
     select 1 from pg_type t
@@ -172,18 +172,18 @@ begin
     create type public.ghost_action as enum ('interrogate', 'squad', 'recon', 'dawn_patrol');
   end if;
 end
-$ghost_action$;
+$fn001$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 4. RPC: get_ghost_tier() -> {tier, is_black_ops}. Centralized entitlement
 --    probe so other RPCs don't duplicate the referral_profiles join.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.get_ghost_tier()
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn002$
 declare
   uid       uuid := auth.uid();
   v_is_pro  boolean := false;
@@ -208,20 +208,20 @@ begin
     'is_black_ops', v_black
   );
 end;
-$$;
+$fn002$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 5. RPC: get_ghost_limits(tier, is_black_ops) -> {action: limit}. Pure
 --    function (no side effects) so it's safe to call from clients or
 --    other RPCs.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.get_ghost_limits(p_tier text, p_black boolean)
 returns jsonb
 language plpgsql
 stable
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn003$
 declare
   free_limits  jsonb := jsonb_build_object(
     'interrogate', 0,
@@ -246,17 +246,17 @@ begin
   if p_tier = 'pro'              then return pro_limits;   end if;
   return free_limits;
 end;
-$$;
+$fn003$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 6. RPC: get_ghost_quota() -> all-action snapshot for the active user.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.get_ghost_quota()
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn004$
 declare
   uid         uuid := auth.uid();
   v_tier      jsonb;
@@ -332,21 +332,21 @@ begin
     'actions', v_out
   );
 end;
-$$;
+$fn004$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 7. RPC: consume_ghost_action(p_user_id, p_action) -> atomic consume-and-return.
 --    Called from Edge routes with service_role credentials (granted below).
 --    The edge route authenticates the JWT and passes the resolved user_id
 --    explicitly so we don't depend on set_config('request.jwt.claims', ...).
 --    Returns the per-action verdict consistent with get_ghost_quota().
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.consume_ghost_action(p_user_id uuid, p_action text)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn005$
 declare
   uid          uuid := p_user_id;
   v_tier       jsonb;
@@ -459,7 +459,7 @@ begin
     'total_runs', v_row.total_runs
   );
 end;
-$$;
+$fn005$;
 
 -- Internal helper: resolve tier for an explicit user_id (service_role path).
 create or replace function public.get_ghost_tier_for(p_user_id uuid)
@@ -467,7 +467,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn006$
 declare
   v_is_pro boolean := false;
   v_black  boolean := false;
@@ -487,13 +487,13 @@ begin
     'is_black_ops', v_black
   );
 end;
-$$;
+$fn006$;
 
--- ---------------------------------------------------------------------------
--- 8. Grants. clients/authenticated may read quotas; only service_role may
+-- ------------------------------
+-- 8. Grants. clients/authenticated may read quotas. only service_role may
 --    consume (consume is called server-side from Edge routes after tier
 --    and cost are validated).
--- ---------------------------------------------------------------------------
+-- ------------------------------
 revoke all on function public.get_ghost_tier()         from public, anon, authenticated;
 revoke all on function public.get_ghost_tier_for(uuid) from public, anon, authenticated;
 revoke all on function public.get_ghost_limits(text, boolean) from public, anon, authenticated;
@@ -503,7 +503,7 @@ revoke all on function public.consume_ghost_action(uuid, text) from public, anon
 grant execute on function public.get_ghost_tier()         to authenticated, service_role;
 grant execute on function public.get_ghost_limits(text, boolean) to authenticated, service_role;
 grant execute on function public.get_ghost_quota()       to authenticated, service_role;
--- consume_ghost_action and get_ghost_tier_for are service_role only; edge
+-- consume_ghost_action and get_ghost_tier_for are service_role only. edge
 -- routes call them with the service key after verifying the JWT themselves.
 grant execute on function public.get_ghost_tier_for(uuid) to service_role;
 grant execute on function public.consume_ghost_action(uuid, text) to service_role;
@@ -517,15 +517,15 @@ grant execute on function public.consume_ghost_action(uuid, text) to service_rol
 -- interrogate chat can do semantic retrieval over the competitor's words.
 --
 -- Embedding dimension 1536 aligns with text-embedding-3-small /
--- text-embedding-ada-002; we don't hard-pin a provider here — the edge
+-- text-embedding-ada-002. we don't hard-pin a provider here — the edge
 -- route chooses the cheapest capable embedder and the column type
 -- accepts any vector(1536).
 --
--- Idempotency: chunks PK is (user_id, video_id, chunk_index); repeated
+-- Idempotency: chunks PK is (user_id, video_id, chunk_index). repeated
 -- indexing calls are upsert no-ops (ON CONFLICT DO NOTHING).
 
 -- pgvector must be enabled on the project. In Supabase this ships as
--- an extension; the guard "if not exists" makes the migration safe to
+-- an extension. the guard "if not exists" makes the migration safe to
 -- re-run.
 create extension if not exists vector schema public;
 
@@ -545,7 +545,7 @@ create table if not exists public.ghost_memory_chunks (
 
 alter table public.ghost_memory_chunks enable row level security;
 
--- Self-read/insert via SECURITY DEFINER RPCs; direct inserts are not granted.
+-- Self-read/insert via SECURITY DEFINER RPCs. direct inserts are not granted.
 drop policy if exists ghost_memory_chunks_self_all on public.ghost_memory_chunks;
 create policy ghost_memory_chunks_self_all on public.ghost_memory_chunks
   for all to authenticated
@@ -555,7 +555,7 @@ create policy ghost_memory_chunks_self_all on public.ghost_memory_chunks
 revoke all on public.ghost_memory_chunks from anon, authenticated;
 grant select, insert, update, delete on public.ghost_memory_chunks to service_role;
 -- Authenticated may only SELECT via RPC (we also grant select directly for
--- possible future debugging; RLS restricts to self rows).
+-- possible future debugging. RLS restricts to self rows).
 grant select on public.ghost_memory_chunks to authenticated;
 
 create index if not exists ghost_memory_chunks_user_video_idx
@@ -566,12 +566,12 @@ create index if not exists ghost_memory_chunks_embedding_idx
   using ivfflat (embedding vector_cosine_ops)
   with (lists = 100);
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- RPC: ghost_index_chunks(user_id, video_id, slot_id, chunks jsonb)
 --        Upserts an ordered list of transcript chunks with embeddings.
 --        Idempotent — existing (user_id, video_id, chunk_index) rows are
---        left untouched; new rows inserted.
--- ---------------------------------------------------------------------------
+--        left untouched. new rows inserted.
+-- ------------------------------
 create or replace function public.ghost_index_chunks(
   p_user_id  uuid,
   p_video_id text,
@@ -582,7 +582,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn007$
 declare
   v_chunk jsonb;
   v_ins   int := 0;
@@ -616,15 +616,15 @@ begin
 
   return jsonb_build_object('inserted', v_ins, 'video_id', p_video_id);
 end;
-$$;
+$fn007$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- RPC: ghost_search_chunks(user_id, video_id, embedding, k) -> top-k chunks.
 --        Returns an ordered list of {chunk_index, text, start_ts, end_ts,
 --        meta, similarity} — similarity is 1 - cosine distance.
---        The caller supplies the embedding (computed at the edge); the DB
+--        The caller supplies the embedding (computed at the edge). the DB
 --        only handles vector similarity on already-indexed chunks.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.ghost_search_chunks(
   p_user_id   uuid,
   p_video_id  text,
@@ -635,7 +635,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn008$
 declare
   v_query vector(1536);
   v_k     int := greatest(1, least(coalesce(p_k, 6), 12));
@@ -673,18 +673,18 @@ begin
 
   return v_out;
 end;
-$$;
+$fn008$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- RPC: ghost_count_chunks(user_id, video_id) -> {count, has_embeddings}.
 --        Used by the edge route to decide if indexing can be skipped (cache hit).
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.ghost_count_chunks(p_user_id uuid, p_video_id text)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn009$
 declare
   v_total         int := 0;
   v_with_embed    int := 0;
@@ -700,13 +700,13 @@ begin
     'has_embeddings', (v_with_embed > 0)
   );
 end;
-$$;
+$fn009$;
 
 revoke all on function public.ghost_index_chunks(uuid, text, int, jsonb) from public, anon, authenticated;
 revoke all on function public.ghost_search_chunks(uuid, text, jsonb, int) from public, anon, authenticated;
 revoke all on function public.ghost_count_chunks(uuid, text) from public, anon, authenticated;
 
--- Only service_role may call the mutating/vector RPCs; the edge route
+-- Only service_role may call the mutating/vector RPCs. the edge route
 -- authenticates the JWT and then calls through the service key.
 grant execute on function public.ghost_index_chunks(uuid, text, int, jsonb) to service_role;
 grant execute on function public.ghost_search_chunks(uuid, text, jsonb, int) to service_role;
@@ -720,11 +720,11 @@ grant execute on function public.ghost_count_chunks(uuid, text) to service_role,
 -- One row per (user, slot, video) holds the full JSON dossier produced
 -- by the Scout/Crawler/Analyst/Comparator agent chain. Idempotent
 -- upsert on (user_id, video_id) so repeat clicks hit the cached brief
--- without re-burning a squad credit; the edge route performs a
+-- without re-burning a squad credit. the edge route performs a
 -- slot-scoped lookup before consuming a credit.
 --
 -- Security model matches the ghost_memory_chunks table from MP3:
---   - RLS: self read/delete via authenticated; service_role full.
+--   - RLS: self read/delete via authenticated. service_role full.
 --   - Mutation is exclusively through a SECURITY DEFINER persist RPC
 --     called by the edge route after it authenticates the JWT and
 --     consumes a squad credit.
@@ -760,11 +760,11 @@ create index if not exists ghost_squad_briefs_user_slot_idx
 create index if not exists ghost_squad_briefs_user_video_idx
   on public.ghost_squad_briefs(user_id, target_video_id);
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- RPC: ghost_upsert_squad_brief(user_id, slot_id, target_video_id, payload,
 --        model, cost_tokens, threat_level)
 --        Idempotent upsert. Returns the stored row's id + created_at.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.ghost_upsert_squad_brief(
   p_user_id        uuid,
   p_slot_id        int,
@@ -778,7 +778,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn010$
 declare
   v_existing_id uuid;
   v_created_at  timestamptz;
@@ -813,12 +813,12 @@ begin
     'created_at', v_created_at
   );
 end;
-$$;
+$fn010$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- RPC: ghost_get_squad_brief(user_id, target_video_id) -> payload jsonb or null.
---        Service-role only; edge route validates JWT first.
--- ---------------------------------------------------------------------------
+--        Service-role only. edge route validates JWT first.
+-- ------------------------------
 create or replace function public.ghost_get_squad_brief(
   p_user_id        uuid,
   p_target_video_id text
@@ -827,7 +827,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn011$
 declare
   v_row public.ghost_squad_briefs;
 begin
@@ -852,7 +852,7 @@ begin
     'slot_id', v_row.slot_id
   );
 end;
-$$;
+$fn011$;
 
 revoke all on function public.ghost_upsert_squad_brief(uuid, int, text, jsonb, text, int, int) from public, anon, authenticated;
 revoke all on function public.ghost_get_squad_brief(uuid, text) from public, anon, authenticated;
@@ -914,10 +914,10 @@ create index if not exists ghost_recon_frames_embedding_idx
   using ivfflat (embedding vector_cosine_ops)
   with (lists = 100);
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- RPC: ghost_recon_upsert_frames(user_id, video_id, frames jsonb)
 --        Idempotent upsert of a frame batch (caption + embedding + tags).
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.ghost_recon_upsert_frames(
   p_user_id   uuid,
   p_video_id  text,
@@ -927,7 +927,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn012$
 declare
   v_frame jsonb;
   v_ins   int := 0;
@@ -970,11 +970,11 @@ begin
 
   return jsonb_build_object('inserted', v_ins, 'video_id', p_video_id);
 end;
-$$;
+$fn012$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- RPC: ghost_recon_search(user_id, video_id, embedding, k) -> top-K frames.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.ghost_recon_search(
   p_user_id   uuid,
   p_video_id  text,
@@ -985,7 +985,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn013$
 declare
   v_query vector(1536);
   v_k     int := greatest(1, least(coalesce(p_k, 6), 12));
@@ -1015,17 +1015,17 @@ begin
     ) t;
   return v_out;
 end;
-$$;
+$fn013$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- RPC: ghost_recon_count(user_id, video_id) -> {count, ready}
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.ghost_recon_count(p_user_id uuid, p_video_id text)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn014$
 declare
   v_total    int := 0;
   v_with_emb int := 0;
@@ -1040,7 +1040,7 @@ begin
     'ready', (v_with_emb > 0)
   );
 end;
-$$;
+$fn014$;
 
 revoke all on function public.ghost_recon_upsert_frames(uuid, text, jsonb) from public, anon, authenticated;
 revoke all on function public.ghost_recon_search(uuid, text, jsonb, int) from public, anon, authenticated;
@@ -1066,20 +1066,20 @@ grant execute on function public.ghost_recon_count(uuid, text) to service_role, 
 --
 -- pg_cron is scheduled hourly (UTC) and dispatches via pg_net to the
 -- Vercel Edge webhook `/api/ghost/dawn-patrol-cron`, which iterates
--- due users and generates a brief per-user (1 credit burned; fails
+-- due users and generates a brief per-user (1 credit burned. fails
 -- closed against the MP2 ledger like every other ghost action).
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 0. Extend referral_profiles with dawn-patrol preferences.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 alter table public.referral_profiles
   add column if not exists dawn_patrol_enabled boolean not null default true,
   add column if not exists dawn_patrol_send_hour int not null default 7
     check (dawn_patrol_send_hour between 0 and 23);
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 1. Briefs table: one row per (user, day in UTC).
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create table if not exists public.ghost_dawn_patrol_briefs (
   id              uuid primary key default gen_random_uuid(),
   user_id         uuid not null references auth.users(id) on delete cascade,
@@ -1114,9 +1114,9 @@ grant select, insert, update, delete on public.ghost_dawn_patrol_briefs to servi
 create index if not exists ghost_dawn_patrol_briefs_user_date_idx
   on public.ghost_dawn_patrol_briefs(user_id, brief_date desc);
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 2. RPC: upsert a brief (service_role only — called from the Edge engine).
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.ghost_dawn_patrol_upsert(
   p_user_id          uuid,
   p_headline         text,
@@ -1134,7 +1134,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn015$
 declare
   v_id uuid;
 begin
@@ -1174,17 +1174,17 @@ begin
 
   return jsonb_build_object('ok', true, 'id', v_id);
 end;
-$$;
+$fn015$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 3. RPC: fetch latest N briefs for the caller.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.ghost_dawn_patrol_latest(p_n int default 5)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn016$
 declare
   v_uid uuid := auth.uid();
   v_n   int  := greatest(1, least(coalesce(p_n, 5), 30));
@@ -1204,17 +1204,17 @@ begin
     ) t;
   return v_out;
 end;
-$$;
+$fn016$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 4. RPC: mark a brief read.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.ghost_dawn_patrol_mark_read(p_id uuid)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn017$
 declare
   v_uid uuid := auth.uid();
 begin
@@ -1226,17 +1226,17 @@ begin
    where id = p_id and user_id = v_uid;
   return jsonb_build_object('ok', true);
 end;
-$$;
+$fn017$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 5. RPC: config get/set.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 create or replace function public.ghost_dawn_patrol_config_get()
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn018$
 declare
   v_uid uuid := auth.uid();
   v_en  boolean;
@@ -1252,14 +1252,14 @@ begin
   end if;
   return jsonb_build_object('enabled', coalesce(v_en, true), 'send_hour', coalesce(v_hr, 7));
 end;
-$$;
+$fn018$;
 
 create or replace function public.ghost_dawn_patrol_config_set(p_enabled boolean, p_send_hour int)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn019$
 declare
   v_uid uuid := auth.uid();
 begin
@@ -1271,18 +1271,18 @@ begin
         dawn_patrol_send_hour = excluded.dawn_patrol_send_hour;
   return jsonb_build_object('ok', true, 'enabled', coalesce(p_enabled, true), 'send_hour', greatest(0, least(coalesce(p_send_hour, 7), 23)));
 end;
-$$;
+$fn019$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 6. RPC (cron support): list users due for a brief right now (UTC hour).
---    Used by the cron webhook; service_role only to avoid leaking data.
--- ---------------------------------------------------------------------------
+--    Used by the cron webhook. service_role only to avoid leaking data.
+-- ------------------------------
 create or replace function public.ghost_dawn_patrol_due_users(p_utc_hour int)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn020$
 declare
   v_out jsonb;
 begin
@@ -1305,11 +1305,11 @@ begin
      );
   return v_out;
 end;
-$$;
+$fn020$;
 
--- ---------------------------------------------------------------------------
+-- ------------------------------
 -- 7. Permissions.
--- ---------------------------------------------------------------------------
+-- ------------------------------
 revoke all on function public.ghost_dawn_patrol_upsert(uuid,text,jsonb,jsonb,jsonb,jsonb,text,jsonb,text,text,text) from public, anon, authenticated;
 revoke all on function public.ghost_dawn_patrol_latest(int) from public, anon, authenticated;
 revoke all on function public.ghost_dawn_patrol_mark_read(uuid) from public, anon, authenticated;
@@ -1324,20 +1324,20 @@ grant execute on function public.ghost_dawn_patrol_config_get() to authenticated
 grant execute on function public.ghost_dawn_patrol_config_set(boolean,int) to authenticated, service_role;
 grant execute on function public.ghost_dawn_patrol_due_users(int) to service_role;
 
--- ---------------------------------------------------------------------------
--- 8. pg_cron hourly dispatch (best-effort; if pg_cron/pg_net extensions are
+-- ------------------------------
+-- 8. pg_cron hourly dispatch (best-effort. if pg_cron/pg_net extensions are
 --    not enabled in a given Supabase project, the client also triggers a
 --    "lazy generate" on first Dashboard load for the day so we never lose
 --    a brief due to missing extensions).
--- ---------------------------------------------------------------------------
--- MP7 follow-up fix: the original block nested a $$-quoted cron command
--- inside a $$-quoted DO body. PostgreSQL terminates the outer body at the
--- first inner $$, so this raised a hard syntax error at parse time. A parse
+-- ------------------------------
+-- MP7 follow-up fix: the original block nested a <dollar-quote>-quoted cron command
+-- inside a <dollar-quote>-quoted DO body. PostgreSQL terminates the outer body at the
+-- first inner <dollar-quote>, so this raised a hard syntax error at parse time. A parse
 -- error cannot be caught by the EXCEPTION handler below (that only traps
 -- runtime errors), so the entire DO block failed and the dispatch job was
 -- NEVER scheduled — silently, because the migration otherwise succeeded.
--- Distinct dollar-quote tags ($do$ / $cron$) keep the nesting unambiguous.
-do $do$
+-- Distinct dollar-quote tags (do / cron) keep the nesting unambiguous.
+do $fn021$
 begin
   if exists (select 1 from pg_extension where extname = 'pg_cron')
      and exists (select 1 from pg_extension where extname = 'pg_net') then
@@ -1351,7 +1351,7 @@ begin
     perform cron.schedule(
       'ghost-dawn-patrol-dispatch',
       '3 * * * *',
-      $cron$
+      $fn001$
         select net.http_post(
           url := current_setting('app.dawn_patrol_webhook_url', true),
           headers := jsonb_build_object(
@@ -1363,14 +1363,14 @@ begin
           )
         )
         where coalesce(current_setting('app.dawn_patrol_webhook_url', true), '') <> '';
-      $cron$
+      $fn001$
     );
   end if;
 exception when others then
   -- pg_cron/pg_net unavailable — lazy client dispatch handles it.
   raise notice 'dawn patrol cron scheduling skipped: %', sqlerrm;
 end;
-$do$;
+$fn021$;
 
 -- ~~~~~~~~~~~~~~~~ END 202608140005_ghost_dawn_patrol.sql ~~~~~~~~~~~~~~~~
 
@@ -1387,7 +1387,7 @@ language plpgsql
 stable
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn022$
 declare
   v_is_pro boolean;
   v_black  boolean;
@@ -1411,7 +1411,7 @@ begin
     'is_black_ops', v_black
   );
 end;
-$$;
+$fn022$;
 
 create or replace function public.get_ghost_tier()
 returns jsonb
@@ -1419,11 +1419,11 @@ language plpgsql
 stable
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn023$
 begin
   return public.get_ghost_tier_for(auth.uid());
 end;
-$$;
+$fn023$;
 
 revoke all on function public.get_ghost_tier() from public, anon;
 grant execute on function public.get_ghost_tier() to authenticated, service_role;
@@ -1435,12 +1435,12 @@ grant execute on function public.get_ghost_tier_for(uuid) to service_role;
 -- ===========================================================================
 
 -- 4a. The missing niche column read by ghost_dawn_patrol_due_users().
---     Nullable by design; api/_dawnPatrol.ts already coalesces (u?.niche || "").
+--     Nullable by design. api/_dawnPatrol.ts already coalesces (u?.niche || "").
 alter table public.referral_profiles
   add column if not exists niche text;
 
 comment on column public.referral_profiles.niche is
-  'Creator niche used by the dawn-patrol briefing. Nullable; readers must coalesce.';
+  'Creator niche used by the dawn-patrol briefing. Nullable - readers must coalesce.';
 
 -- 4a-bis. ghost_dawn_patrol_due_users() carries the SAME NULL-expiry defect
 --     as get_ghost_tier_for(): its filter
@@ -1455,7 +1455,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn024$
 declare
   v_out jsonb;
 begin
@@ -1478,7 +1478,7 @@ begin
      );
   return v_out;
 end;
-$$;
+$fn024$;
 
 revoke all on function public.ghost_dawn_patrol_due_users(int) from public, anon, authenticated;
 grant execute on function public.ghost_dawn_patrol_due_users(int) to service_role;
@@ -1495,7 +1495,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn025$
 declare
   uid            uuid := auth.uid();
   v_is_pro       boolean := false;
@@ -1543,14 +1543,14 @@ begin
     'remaining_seconds', v_remaining_s
   );
 end;
-$$;
+$fn025$;
 
 create or replace function public.consume_clone_crush_run()
 returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $fn026$
 declare
   uid            uuid := auth.uid();
   v_is_pro       boolean := false;
@@ -1625,7 +1625,7 @@ begin
     'reset_at', v_window_end, 'remaining_seconds', 24*60*60
   );
 end;
-$$;
+$fn026$;
 
 revoke all on function public.consume_clone_crush_run() from public, anon, authenticated;
 revoke all on function public.get_clone_crush_quota()   from public, anon, authenticated;
@@ -1635,11 +1635,11 @@ grant execute on function public.consume_clone_crush_run() to service_role;
 commit;
 
 -- ===========================================================================
--- PART 5 — VERIFICATION (run separately; all five must pass)
+-- PART 5 — VERIFICATION (run separately. all five must pass)
 -- ===========================================================================
 -- V1. All 10 expected tables present.
 --     Expect: 10 rows.
--- select tablename from pg_tables where schemaname='public' order by 1;
+-- select tablename from pg_tables where schemaname='public' order by 1.
 
 -- V2. Entitlement contract intact — the regression guard.
 --     Expect: is_pro=f AND tier='free' for any user with NULL expiry.
@@ -1648,22 +1648,22 @@ commit;
 --        public.get_ghost_tier_for(rp.user_id) ->> 'tier'        as ghost_tier
 --   from public.referral_profiles rp
 --  where rp.pro_tier_expires_at is null
---  limit 5;
+--  limit 5.
 
 -- V3. Dawn patrol no longer throws on the missing column.
 --     Expect: a jsonb array (usually []), NOT an error.
--- select public.ghost_dawn_patrol_due_users(7);
+-- select public.ghost_dawn_patrol_due_users(7).
 
 -- V4. Ghost RPCs the API calls now exist.
 --     Expect: 3 rows.
 -- select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
 --  where n.nspname='public'
 --    and proname in ('get_ghost_quota','consume_ghost_action','register_core_action')
---  order by 1;
+--  order by 1.
 
 -- V5. No RLS policy left with an unwrapped auth.* call.
 --     Expect: 0 rows. If non-zero, run SUPABASE_PATCH_RLS_INITPLAN.sql.
 -- select tablename, policyname, cmd from pg_policies
 --  where schemaname='public'
 --    and ((qual ~* 'auth\.(uid|jwt|role)\(\)' and qual !~* 'select\s+auth\.')
---      or (with_check ~* 'auth\.(uid|jwt|role)\(\)' and with_check !~* 'select\s+auth\.'));
+--      or (with_check ~* 'auth\.(uid|jwt|role)\(\)' and with_check !~* 'select\s+auth\.')).

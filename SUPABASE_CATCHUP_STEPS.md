@@ -87,6 +87,44 @@ All four are repaired by the catch-up script.
 Supabase Dashboard → Database → Backups → confirm a recent point-in-time
 restore point exists.
 
+### Note on the earlier `relation "v_black" does not exist` failure
+
+The first bundle failed in the Supabase SQL Editor with
+`ERROR: 42P01: relation "v_black" does not exist`.
+
+The advisor attributed this to a forward reference — `consume_ghost_action`
+calling `get_ghost_tier_for` before PART 3 defines it. **That diagnosis is
+incorrect.** plpgsql resolves function calls at *runtime*, not parse time, so
+definition order between functions does not matter; and `get_ghost_tier_for`
+already exists in your database (migration 006 created it). Reordering would
+have changed nothing.
+
+The real cause is **client-side statement splitting**. The SQL Editor splits a
+script into statements before sending it. Three comment lines in the old bundle
+contained a literal `$$` while explaining the MP7 dollar-quote bug:
+
+```
+-- inside a $$-quoted DO body. PostgreSQL terminates the outer body at the
+```
+
+The splitter counts those as real dollar-quote delimiters, loses track of which
+function body it is inside, and cuts a later `create function` in half. The
+tail — `select coalesce(rp.black_op_lane, false) into v_black from ...` — is
+then sent as a standalone statement. At top level `v_black` is not a plpgsql
+variable, so Postgres reads it as a table name and reports 42P01.
+
+This is why the file applied cleanly under `psql -f` and as a single query, but
+failed in the Editor: only the Editor splits.
+
+The corrected bundle is immune to splitting regardless of the client:
+
+- every function body uses a unique tag (`$fn001$` … `$fn026$`); zero bare `$$`
+- no comment line contains `$` or `;`
+- no string literal contains `;`
+
+Measured with a statement splitter: the old bundle produced **68** orphaned
+fragments, the corrected one produces **0**.
+
 ### Step 2 — run the catch-up
 
 Paste **`SUPABASE_CATCHUP_GHOST_FULL.sql`** (the generated bundle with all five
@@ -167,6 +205,10 @@ the catch-up on PostgreSQL 17.10.
 | End-to-end 2-node: signup alone grants nothing | pass |
 | End-to-end 2-node: 2 × proof-of-work → Pro, 21 days | pass |
 | Full 12-migration chain still clean | pass |
+| Applies via `psql -f` | pass |
+| Applies as ONE simple query | pass |
+| Applies fragment-by-fragment (splitter client) | pass, 132/132 |
+| Orphaned fragments under a splitter | 0 (was 68) |
 | `tsc --noEmit` | 0 errors |
 | `vitest run` | 61 files, 537 tests passed |
 

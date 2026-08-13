@@ -21,7 +21,7 @@ alter table public.referral_profiles
   add column if not exists black_op_lane boolean not null default false;
 
 comment on column public.referral_profiles.black_op_lane is
-  'Black-Ops Lane unlock: set by admin/grants table only; elevates ghost-intel caps beyond Pro.';
+  'Black-Ops Lane unlock - set by admin/grants table only. Elevates ghost-intel caps beyond Pro.';
 
 -- ---------------------------------------------------------------------------
 -- 2. Ghost usage ledger.
