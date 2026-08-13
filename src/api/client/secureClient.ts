@@ -129,6 +129,10 @@ const VERCEL_ROUTE_MAP: Record<string, string> = {
   "ghost/squad-brief": "/api/ghost/squad-brief",
   "ghost/recon-ingest": "/api/ghost/recon-ingest",
   "ghost/recon-search": "/api/ghost/recon-search",
+  "ghost/dawn-patrol-generate": "/api/ghost/dawn-patrol-generate",
+  "ghost/dawn-patrol-latest": "/api/ghost/dawn-patrol-latest",
+  "ghost/dawn-patrol-mark-read": "/api/ghost/dawn-patrol-mark-read",
+  "ghost/dawn-patrol-config": "/api/ghost/dawn-patrol-config",
 };
 
 function makeRequestId(): string {
@@ -182,6 +186,10 @@ function requestTimeoutMs(functionName: string, body: unknown): number {
   if (functionName === "ghost/squad-brief") return 48_000;
   if (functionName === "ghost/recon-ingest") return 55_000;
   if (functionName === "ghost/recon-search") return 20_000;
+  if (functionName === "ghost/dawn-patrol-generate") return 30_000;
+  if (functionName === "ghost/dawn-patrol-latest") return 10_000;
+  if (functionName === "ghost/dawn-patrol-mark-read") return 8_000;
+  if (functionName === "ghost/dawn-patrol-config") return 8_000;
   if (functionName === "ghost/interrogate-index") return 25_000;
   if (functionName === "ghost/interrogate-chat") return 30_000;
   if (functionName === "ghost/credits") return 8_000;

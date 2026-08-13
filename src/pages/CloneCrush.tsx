@@ -6,6 +6,7 @@ import {
 import { GhostInterrogationDrawer } from "@/components/ghost/GhostInterrogationDrawer";
 import { GhostSquadDossier } from "@/components/ghost/GhostSquadDossier";
 import { GhostVisualRecon } from "@/components/ghost/GhostVisualRecon";
+import { DawnPatrolCard } from "@/components/ghost/DawnPatrolCard";
 import { GhostBootSequence } from "@/components/ui/GhostBootSequence";
 import { WarRoomTicker } from "@/components/ui/WarRoomTicker";
 import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
@@ -1098,6 +1099,13 @@ export default function CloneCrush() {
               <div className="p-3 rounded-xl glass-strong border-green-500/20"><p className="text-[10px] text-green-400 font-mono uppercase tracking-wider font-bold flex items-center gap-1"><DollarSign className="w-3 h-3" /> Competitor Revenue</p><p className="text-lg font-display font-bold text-green-400 mt-1">{envyMetrics.totalCompetitorMonthlyRevenue}</p><p className="text-[9px] text-muted-foreground mt-0.5">Est combined/mo • Ghost calc</p></div>
               <div className="p-3 rounded-xl glass-strong border-red-500/20"><p className="text-[10px] text-red-400 font-mono uppercase tracking-wider font-bold flex items-center gap-1"><Flame className="w-3 h-3" /> Viral Velocity</p><p className="text-lg font-display font-bold text-red-400 mt-1">{envyMetrics.averageViralVelocity}/100</p><p className="text-[9px] text-muted-foreground mt-0.5">Avg score • Live</p></div>
               <div className="p-3 rounded-xl glass-strong border-primary/20"><p className="text-[10px] text-primary font-mono uppercase tracking-wider font-bold flex items-center gap-1"><Gauge className="w-3 h-3" /> Niche CPM</p><p className="text-lg font-display font-bold text-primary mt-1">{envyMetrics.nicheCpm}</p><p className="text-[9px] text-muted-foreground mt-0.5">{envyMetrics.niche}</p></div>
+            </div>
+          )}
+
+          {/* Dawn Patrol sunrise brief (MP6) — always visible to authed users so unread count pings */}
+          {profile && (
+            <div id="ghost-dawn-patrol" className="animate-fade-in">
+              <DawnPatrolCard />
             </div>
           )}
 
