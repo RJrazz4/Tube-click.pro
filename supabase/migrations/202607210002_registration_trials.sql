@@ -12,7 +12,7 @@ alter table public.registration_trials enable row level security;
 drop policy if exists "Users can view their own registration trial" on public.registration_trials;
 create policy "Users can view their own registration trial"
   on public.registration_trials for select to authenticated
-  using (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id);
 
 revoke all on public.registration_trials from anon, authenticated;
 grant select on public.registration_trials to authenticated;

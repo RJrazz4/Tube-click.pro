@@ -925,7 +925,7 @@ alter table public.referral_pro_grants   enable row level security;
 drop policy if exists referral_profiles_self_select on public.referral_profiles;
 create policy referral_profiles_self_select
   on public.referral_profiles for select to authenticated
-  using (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id);
 
 revoke all on public.referral_profiles from anon, authenticated;
 grant select on public.referral_profiles to authenticated;

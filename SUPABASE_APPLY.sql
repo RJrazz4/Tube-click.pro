@@ -5,6 +5,9 @@
 --   PART 1  Anti-Spam 2-Node Viral Referral Engine (migration 202608140006)
 --   PART 2  Dawn Patrol cron dispatch fix          (migration 202608140005)
 --
+-- RLS policies here already use (select auth.uid()) so PostgreSQL hoists the
+-- auth call into an InitPlan (Supabase advisor 0003_auth_rls_initplan).
+--
 -- Safe to run as a single statement batch. Idempotent: re-running is a no-op.
 --
 -- PREREQUISITE: deploy the application code FIRST (commit 4bef2a3 or later).
@@ -943,7 +946,7 @@ alter table public.referral_pro_grants   enable row level security;
 drop policy if exists referral_profiles_self_select on public.referral_profiles;
 create policy referral_profiles_self_select
   on public.referral_profiles for select to authenticated
-  using (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id);
 
 revoke all on public.referral_profiles from anon, authenticated;
 grant select on public.referral_profiles to authenticated;

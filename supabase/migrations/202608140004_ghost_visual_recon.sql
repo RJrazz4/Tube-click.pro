@@ -34,8 +34,8 @@ alter table public.ghost_recon_frames enable row level security;
 drop policy if exists ghost_recon_frames_self_all on public.ghost_recon_frames;
 create policy ghost_recon_frames_self_all on public.ghost_recon_frames
   for all to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 revoke all on public.ghost_recon_frames from anon, authenticated;
 grant select, insert, update, delete on public.ghost_recon_frames to service_role;

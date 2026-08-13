@@ -49,8 +49,8 @@ alter table public.ghost_dawn_patrol_briefs enable row level security;
 drop policy if exists ghost_dawn_patrol_briefs_self_all on public.ghost_dawn_patrol_briefs;
 create policy ghost_dawn_patrol_briefs_self_all on public.ghost_dawn_patrol_briefs
   for all to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 revoke all on public.ghost_dawn_patrol_briefs from anon, authenticated;
 grant select on public.ghost_dawn_patrol_briefs to authenticated;

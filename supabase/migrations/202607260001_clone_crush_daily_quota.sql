@@ -16,7 +16,7 @@ alter table public.daily_usage enable row level security;
 drop policy if exists daily_usage_self_select on public.daily_usage;
 create policy daily_usage_self_select on public.daily_usage
   for select to authenticated
-  using (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id);
 
 revoke all on public.daily_usage from anon, authenticated;
 grant select on public.daily_usage to authenticated;

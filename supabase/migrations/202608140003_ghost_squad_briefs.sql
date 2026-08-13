@@ -30,8 +30,8 @@ alter table public.ghost_squad_briefs enable row level security;
 drop policy if exists ghost_squad_briefs_self_all on public.ghost_squad_briefs;
 create policy ghost_squad_briefs_self_all on public.ghost_squad_briefs
   for all to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 revoke all on public.ghost_squad_briefs from anon, authenticated;
 grant select, insert, update, delete on public.ghost_squad_briefs to service_role;

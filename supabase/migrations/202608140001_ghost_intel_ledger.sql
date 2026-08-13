@@ -44,7 +44,7 @@ alter table public.ghost_usage enable row level security;
 drop policy if exists ghost_usage_self_select on public.ghost_usage;
 create policy ghost_usage_self_select on public.ghost_usage
   for select to authenticated
-  using (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id);
 
 revoke all on public.ghost_usage from anon, authenticated;
 grant select on public.ghost_usage to authenticated;
