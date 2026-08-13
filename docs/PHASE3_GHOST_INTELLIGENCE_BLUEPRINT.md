@@ -407,3 +407,17 @@ Each micro-phase is isolated behind a feature flag on the server (env var `GHOST
 ## 11. Approval Gate
 
 The blueprint is complete. **Requesting approval to execute Micro-Phase 1 (Headroom Ghost Layer) immediately**, which is low-risk, additive-only, and benefits every feature that follows by cutting token cost 40-60% before we spend a single extra LLM dollar on new features.
+
+---
+
+## 12. Progress Log
+
+| Phase | Commit | Description | Status |
+|---|---|---|---|
+| 1 (Headroom) | `e8eed00` | SmartCrush + CacheAligner + RollingWindow wrapper on gatewayChatText/Json, /api/v1/metrics telemetry, 9 tests | ✅ shipped |
+| 2 (Ledger) | — | `ghost_usage` table, `consume_ghost_action/get_ghost_quota` SECURITY DEFINER RPCs, /api/ghost/credits, useGhostCreditsStore + GhostCreditBadge, 8 new tests | ✅ ready |
+| 3 (Interrogate) | — | — | ⏳ |
+| 4 (Squad) | — | — | ⏳ |
+| 5 (Visual Recon) | — | — | ⏳ |
+| 6 (Dawn Patrol) | — | — | ⏳ |
+| 7 (Perf pass) | — | — | ⏳ |
