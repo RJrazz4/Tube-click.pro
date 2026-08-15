@@ -1,0 +1,493 @@
+/* ===========================================================================
+   Premium subscription checkout — glassmorphism + neon brand system.
+   Namespaced `.tcp-*` to avoid collisions with the global cyber utilities.
+   Uses the existing theme tokens (--neon-purple, --neon-cyan, Inter).
+   =========================================================================== */
+
+.tcp-root {
+  position: relative;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* Ambient glow field behind the glass cards (makes backdrop-blur visible). */
+.tcp-root::before {
+  content: "";
+  position: absolute;
+  inset: -20px;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(560px 300px at 12% -4%, rgba(168, 85, 247, 0.16), transparent 60%),
+    radial-gradient(520px 300px at 88% 6%, rgba(34, 211, 238, 0.13), transparent 60%),
+    radial-gradient(500px 360px at 50% 110%, rgba(236, 72, 153, 0.08), transparent 62%);
+  filter: blur(6px);
+}
+
+/* All direct children sit above the ambient glow. */
+.tcp-root > * { position: relative; z-index: 1; }
+
+/* ------------------------------------------------------------- glass card */
+
+.tcp-card {
+  position: relative;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 12px 40px rgba(0, 0, 0, 0.42);
+  padding: 24px;
+  margin-bottom: 16px;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.tcp-card:hover {
+  border-color: rgba(255, 255, 255, 0.13);
+}
+
+/* Featured card — gradient hairline border + soft neon halo. */
+.tcp-card--featured {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(180deg, rgba(20, 20, 30, 0.85), rgba(12, 12, 20, 0.85)) padding-box,
+    linear-gradient(135deg, rgba(168, 85, 247, 0.65), rgba(34, 211, 238, 0.45)) border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(139, 92, 246, 0.06),
+    0 18px 60px rgba(139, 92, 246, 0.14),
+    0 4px 24px rgba(34, 211, 238, 0.06);
+}
+
+/* ---------------------------------------------------------------- header */
+
+.tcp-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 22px;
+}
+
+.tcp-title {
+  margin: 0;
+  font-family: "Inter", sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: hsl(var(--foreground));
+}
+
+.tcp-subtitle {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ---------------------------------------------------------- hero pricing */
+
+.tcp-price-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.tcp-price {
+  font-family: "Inter", sans-serif;
+  font-size: 56px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  /* metallic vertical gradient */
+  background: linear-gradient(180deg, #ffffff 0%, #e7e7ff 42%, #b9b9e8 78%, #8d8dd0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 12px rgba(168, 85, 247, 0.35));
+}
+
+.tcp-price-sym {
+  padding-bottom: 9px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, #c084fc, #67e8f9);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.tcp-price-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+
+.tcp-plan-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 16px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e9d5ff;
+  background: rgba(168, 85, 247, 0.10);
+  border: 1px solid rgba(168, 85, 247, 0.28);
+}
+
+/* -------------------------------------------------------------- headings */
+
+.tcp-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ----------------------------------------------------------- asset strip */
+
+.tcp-asset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.tcp-asset-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.tcp-asset-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.tcp-asset-net {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+
+.tcp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.09);
+  border: 1px solid rgba(52, 211, 153, 0.26);
+}
+
+/* --------------------------------------------------------- QR + address */
+
+.tcp-deposit {
+  display: flex;
+  gap: 22px;
+  align-items: center;
+}
+
+.tcp-qr-panel {
+  flex-shrink: 0;
+  border-radius: 16px;
+  padding: 12px;
+  background: #ffffff;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 12px 34px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+}
+
+.tcp-qr-caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #52525b;
+}
+
+.tcp-address-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+.tcp-address {
+  display: block;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 13px;
+  font-family: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  word-break: break-all;
+  color: #a5f3fc;
+  background: rgba(34, 211, 238, 0.05);
+  border: 1px solid rgba(34, 211, 238, 0.16);
+}
+
+/* -------------------------------------------------------------- buttons */
+
+.tcp-btn-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #a5f3fc;
+  background: rgba(34, 211, 238, 0.07);
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.06s ease;
+}
+
+.tcp-btn-copy:hover {
+  background: rgba(34, 211, 238, 0.13);
+  border-color: rgba(34, 211, 238, 0.45);
+}
+
+.tcp-btn-copy:active { transform: translateY(1px); }
+
+.tcp-btn-primary {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  padding: 15px 22px;
+  border: none;
+  border-radius: 14px;
+  font-family: "Inter", sans-serif;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #fff;
+  cursor: pointer;
+  overflow: hidden;
+  background: linear-gradient(135deg, #a855f7 0%, #7c3aed 45%, #0ea5e9 100%);
+  box-shadow: 0 8px 30px rgba(168, 85, 247, 0.32);
+  transition: transform 0.08s ease, box-shadow 0.25s ease, filter 0.25s ease;
+}
+
+/* sheen sweep on hover */
+.tcp-btn-primary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 20%, rgba(255, 255, 255, 0.28) 50%, transparent 80%);
+  transform: translateX(-120%);
+  transition: transform 0.7s ease;
+}
+
+.tcp-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.07);
+  box-shadow: 0 12px 42px rgba(168, 85, 247, 0.5), 0 4px 20px rgba(14, 165, 233, 0.35);
+}
+
+.tcp-btn-primary:hover:not(:disabled)::before { transform: translateX(120%); }
+
+.tcp-btn-primary:active:not(:disabled) { transform: translateY(0); }
+
+.tcp-btn-primary:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.4) brightness(0.7);
+  box-shadow: none;
+}
+
+/* pulse halo on the primary CTA */
+.tcp-btn-primary--pulse { animation: tcp-pulse 2.4s ease-in-out infinite; }
+
+@keyframes tcp-pulse {
+  0%, 100% { box-shadow: 0 8px 30px rgba(168, 85, 247, 0.32); }
+  50% { box-shadow: 0 8px 44px rgba(168, 85, 247, 0.62), 0 0 0 4px rgba(168, 85, 247, 0.08); }
+}
+
+/* ---------------------------------------------------------------- input */
+
+.tcp-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 13px;
+  color: hsl(var(--foreground));
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.tcp-input::placeholder { color: rgba(255, 255, 255, 0.30); }
+
+.tcp-input:hover { border-color: rgba(255, 255, 255, 0.18); }
+
+.tcp-input:focus {
+  border-color: rgba(34, 211, 238, 0.55);
+  background: rgba(34, 211, 238, 0.04);
+  box-shadow:
+    0 0 0 3px rgba(34, 211, 238, 0.14),
+    0 0 28px rgba(34, 211, 238, 0.14);
+}
+
+.tcp-input-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: hsl(var(--destructive));
+}
+
+/* --------------------------------------------------------------- steps */
+
+.tcp-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.tcp-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+}
+
+.tcp-step-num {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #c4b5fd;
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.28);
+}
+
+.tcp-step-text {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: hsl(var(--muted-foreground));
+}
+
+.tcp-step-text strong { color: hsl(var(--foreground)); font-weight: 600; }
+
+/* -------------------------------------------------------------- warning */
+
+.tcp-warning {
+  border: 1px solid rgba(251, 191, 36, 0.16);
+  background: rgba(251, 191, 36, 0.05);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.tcp-warning-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #fde68a;
+  text-align: left;
+}
+
+.tcp-warning-head:hover { background: rgba(251, 191, 36, 0.05); }
+
+.tcp-warning-icon { flex-shrink: 0; color: #fbbf24; }
+
+.tcp-warning-chevron {
+  margin-left: auto;
+  transition: transform 0.2s ease;
+  color: rgba(253, 230, 138, 0.6);
+}
+
+.tcp-warning[data-open="true"] .tcp-warning-chevron { transform: rotate(180deg); }
+
+.tcp-warning-body {
+  display: grid;
+  gap: 1px;
+  padding: 0 16px 13px;
+}
+
+.tcp-warning-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(253, 230, 138, 0.75);
+  border-top: 1px solid rgba(251, 191, 36, 0.08);
+}
+
+.tcp-warning-item strong { color: #fde68a; font-weight: 600; }
+
+.tcp-warning-dot {
+  flex-shrink: 0;
+  width: 4px;
+  height: 4px;
+  margin-top: 8px;
+  border-radius: 50%;
+  background: rgba(251, 191, 36, 0.6);
+}
+
+/* ----------------------------------------------------------- status row */
+
+.tcp-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 14px;
+  padding: 12px 15px;
+  border-radius: 13px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tcp-status--info    { color: #a5f3fc; background: rgba(34, 211, 238, 0.07);  border: 1px solid rgba(34, 211, 238, 0.20); }
+.tcp-status--warn    { color: #fde68a; background: rgba(251, 191, 36, 0.07);  border: 1px solid rgba(251, 191, 36, 0.20); }
+.tcp-status--success { color: #6ee7b7; background: rgba(52, 211, 153, 0.08);  border: 1px solid rgba(52, 211, 153, 0.22); }
+.tcp-status--error   { color: #fca5a5; background: rgba(248, 113, 113, 0.08); border: 1px solid rgba(248, 113, 113, 0.22); }
+
+.tcp-spin { animation: tcp-spin 0.9s linear infinite; }
+@keyframes tcp-spin { to { transform: rotate(360deg); } }
+
+/* responsive */
+@media (max-width: 640px) {
+  .tcp-deposit { flex-direction: column; align-items: stretch; }
+  .tcp-qr-panel { align-self: center; }
+  .tcp-price { font-size: 46px; }
+}

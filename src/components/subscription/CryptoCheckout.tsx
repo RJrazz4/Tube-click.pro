@@ -9,18 +9,16 @@
  *   2. user sends USDT, pastes TxID
  *   3. POST /api/payments/invoices/:id/submit -> enqueue verification
  *   4. poll  GET  /api/payments/invoices/:id   -> status until terminal
+ *
+ * Styling: premium glassmorphism (see checkout.css).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Check, Copy, Loader2, ShieldCheck, TriangleAlert, Wallet } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Check, ChevronDown, Copy, Loader2, ShieldCheck, TriangleAlert, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { UsdtLogo, USDT_LOGO_DATA_URI } from "./UsdtLogo";
+import "./checkout.css";
 
 /* ------------------------------------------------------------------ config */
 
@@ -53,16 +51,16 @@ interface Invoice {
 
 /* ----------------------------------------------------------------- helpers */
 
-const STATUS_META: Record<InvoiceStatus, { label: string; tone: string }> = {
-  pending: { label: "Awaiting payment", tone: "text-cyan-300 border-cyan-400/25 bg-cyan-400/10" },
-  detected: { label: "Payment detected — confirming…", tone: "text-cyan-300 border-cyan-400/25 bg-cyan-400/10" },
-  confirming: { label: "Confirming on-chain…", tone: "text-amber-300 border-amber-400/25 bg-amber-400/10" },
-  paid: { label: "Premium activated", tone: "text-green-400 border-green-400/25 bg-green-400/10" },
-  expired: { label: "Invoice expired", tone: "text-destructive border-destructive/25 bg-destructive/10" },
-  rejected: { label: "Payment rejected", tone: "text-destructive border-destructive/25 bg-destructive/10" },
-};
-
 const TERMINAL: InvoiceStatus[] = ["paid", "expired", "rejected"];
+
+const STATUS_META: Record<InvoiceStatus, { label: string; tone: "info" | "warn" | "success" | "error" }> = {
+  pending: { label: "Awaiting payment", tone: "info" },
+  detected: { label: "Payment detected — confirming…", tone: "info" },
+  confirming: { label: "Confirming on-chain…", tone: "warn" },
+  paid: { label: "Premium activated", tone: "success" },
+  expired: { label: "Invoice expired", tone: "error" },
+  rejected: { label: "Payment rejected", tone: "error" },
+};
 
 function isValidTxId(tx: string): boolean {
   return /^(0x)?[0-9a-fA-F]{64}$/.test(tx.trim());
@@ -118,6 +116,7 @@ export function CryptoCheckout() {
   const [txId, setTxId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [warnOpen, setWarnOpen] = useState(false);
 
   const pollRef = useRef<number | null>(null);
 
@@ -208,205 +207,190 @@ export function CryptoCheckout() {
   const txValid = isValidTxId(txId);
   const meta = STATUS_META[status];
 
+  const warnings = [
+    <>Send only <strong>USDT on TRON (TRC-20)</strong> to this address.</>,
+    <>Do <strong>not</strong> send via ERC-20, BEP-20 or another network — funds may be lost.</>,
+    <>Send the <strong>exact amount</strong>. Under/overpayments require manual review.</>,
+    <>Keep <strong>TRX or bandwidth/energy</strong> — the sender pays network fees.</>,
+  ];
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-display font-semibold text-foreground mb-2">
-          Subscription
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Pay once with USDT to activate your Premium subscription instantly.
+    <div className="tcp-root">
+      {/* ---- Header ---- */}
+      <header className="tcp-header">
+        <h2 className="tcp-title">Premium Subscription</h2>
+        <p className="tcp-subtitle">
+          Unlock unlimited generation with a single USDT payment.
+        </p>
+      </header>
+
+      {/* ---- Hero price (featured) ---- */}
+      <div className="tcp-card tcp-card--featured">
+        <span className="tcp-plan-label">
+          <ShieldCheck className="h-3.5 w-3.5" /> Premium Monthly
+        </span>
+        <div className="tcp-price-row">
+          <span className="tcp-price">{loading ? "—" : amount}</span>
+          <span className="tcp-price-sym">{TOKEN_SYMBOL}</span>
+        </div>
+        <p className="tcp-price-note">
+          One-time payment · instant activation · no market fluctuation
         </p>
       </div>
 
       {/* ---- Asset selection ---- */}
-      <Card className="cyber-card border-border">
-        <CardContent className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
-            <UsdtLogo size={44} className="drop-shadow-[0_0_12px_rgba(38,161,123,0.45)]" />
+      <div className="tcp-card">
+        <div className="tcp-asset">
+          <div className="tcp-asset-left">
+            <UsdtLogo size={44} className="drop-shadow-[0_0_14px_rgba(38,161,123,0.5)]" />
             <div>
-              <p className="font-display text-base font-semibold text-foreground">
-                {TOKEN_SYMBOL}
-              </p>
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <p className="tcp-asset-name">{TOKEN_SYMBOL}</p>
+              <p className="tcp-asset-net">
                 <UsdtLogo size={13} /> {NETWORK_LABEL}
               </p>
             </div>
           </div>
-          <Badge className="border-green-400/30 bg-green-400/10 text-green-400">
-            <Check className="mr-1 h-3 w-3" /> Recommended
-          </Badge>
-        </CardContent>
-      </Card>
+          <span className="tcp-badge">
+            <Check className="h-3.5 w-3.5" /> Recommended
+          </span>
+        </div>
+      </div>
 
-      {/* ---- Amount ---- */}
-      <Card className="cyber-card border-primary/20 neon-glow-purple">
-        <CardContent className="flex items-center justify-between p-4">
-          <div>
-            <p className="text-xs text-muted-foreground">Amount due</p>
-            <p className="font-display text-3xl font-bold text-foreground">
-              {amount} <span className="text-primary">{TOKEN_SYMBOL}</span>
-            </p>
+      {/* ---- Elegant collapsible warnings ---- */}
+      <div className="tcp-warning" data-open={warnOpen}>
+        <button
+          type="button"
+          className="tcp-warning-head"
+          onClick={() => setWarnOpen((v) => !v)}
+          aria-expanded={warnOpen}
+        >
+          <TriangleAlert className="tcp-warning-icon h-4 w-4" />
+          <span>Send only USDT on TRON (TRC-20) — funds on other networks are lost</span>
+          <ChevronDown className="tcp-warning-chevron h-4 w-4" />
+        </button>
+        {warnOpen && (
+          <div className="tcp-warning-body">
+            {warnings.map((w, i) => (
+              <div key={i} className="tcp-warning-item">
+                <span className="tcp-warning-dot" />
+                <span>{w}</span>
+              </div>
+            ))}
           </div>
-          <p className="text-xs text-muted-foreground text-right">
-            Fixed price
-            <br />no market fluctuation
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* ---- Warnings ---- */}
-      <div className="space-y-2">
-        {[
-          <>
-            Send only <strong className="text-foreground">USDT on TRON (TRC-20)</strong> to this address.
-          </>,
-          <>
-            Do <strong className="text-foreground">not</strong> send via ERC-20, BEP-20 or another network — funds may be lost.
-          </>,
-          <>
-            Send the <strong className="text-foreground">exact amount</strong>. Under/overpayments require manual review.
-          </>,
-          <>
-            Keep <strong className="text-foreground">TRX or bandwidth/energy</strong> — the sender pays network fees.
-          </>,
-        ].map((line, i) => (
-          <div
-            key={i}
-            className="flex items-start gap-2 rounded-lg border border-amber-400/20 bg-amber-400/[0.07] px-3 py-2 text-xs leading-relaxed text-amber-200"
-          >
-            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
-            <span>{line}</span>
-          </div>
-        ))}
+        )}
       </div>
 
       {/* ---- QR + address ---- */}
-      <Card className="cyber-card border-border">
-        <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
-          <div className="mx-auto flex shrink-0 flex-col items-center gap-2 rounded-2xl border border-border bg-white p-3 sm:mx-0">
-            {/* Dynamic, scannable QR — white background, USDT logo centered. */}
+      <div className="tcp-card" style={{ marginTop: 16 }}>
+        <div className="tcp-deposit">
+          <div className="tcp-qr-panel">
             <QRCodeSVG
               value={DEPOSIT_ADDRESS}
-              size={168}
+              size={176}
               level="H"
               bgColor="#ffffff"
               fgColor="#0a0a12"
               imageSettings={{
                 src: USDT_LOGO_DATA_URI,
-                width: 40,
-                height: 40,
+                width: 42,
+                height: 42,
                 excavate: true,
               }}
             />
-            <span className="flex items-center gap-1.5 text-[11px] font-medium text-neutral-500">
+            <span className="tcp-qr-caption">
               <UsdtLogo size={14} /> Scan with your TRON wallet
             </span>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <span className="tcp-address-label">
               <Wallet className="h-3.5 w-3.5" /> Deposit address · {TOKEN_SYMBOL} {NETWORK_LABEL}
-            </p>
-            <code className="mb-3 block break-all rounded-lg border border-border bg-secondary/50 p-3 font-mono text-xs text-cyan-300">
-              {DEPOSIT_ADDRESS}
-            </code>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={copyAddress}
-              className="border-cyan-400/30 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400/20"
-            >
+            </span>
+            <code className="tcp-address">{DEPOSIT_ADDRESS}</code>
+            <button type="button" className="tcp-btn-copy" onClick={copyAddress}>
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               {copied ? "Copied" : "Copy address"}
-            </Button>
+            </button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* ---- Steps ---- */}
-      <Card className="cyber-card border-border">
-        <CardHeader>
-          <CardTitle className="text-base font-display">How to pay</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ol className="space-y-3">
-            {[
-              <>Copy the address or scan the <strong className="text-foreground">QR code</strong> with your wallet.</>,
-              <>Send <strong className="text-foreground">exactly {amount} USDT</strong> on {NETWORK_LABEL}.</>,
-              <>Copy the <strong className="text-foreground">Transaction Hash (TXID)</strong> from your wallet.</>,
-              <>Paste it below and press <strong className="text-foreground">Verify Payment</strong>.</>,
-            ].map((step, i) => (
-              <li key={i} className="flex items-start gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-xs font-bold text-primary">
-                  {i + 1}
-                </span>
-                <span className="text-sm leading-relaxed text-muted-foreground">{step}</span>
-              </li>
-            ))}
-          </ol>
-        </CardContent>
-      </Card>
+      <div className="tcp-card">
+        <span className="tcp-label">How to pay</span>
+        <ol className="tcp-steps" style={{ marginTop: 14 }}>
+          {[
+            <>Copy the address or scan the <strong>QR code</strong> with your wallet.</>,
+            <>Send <strong>exactly {amount} USDT</strong> on {NETWORK_LABEL}.</>,
+            <>Copy the <strong>Transaction Hash (TXID)</strong> from your wallet.</>,
+            <>Paste it below and press <strong>Verify Payment</strong>.</>,
+          ].map((step, i) => (
+            <li key={i} className="tcp-step">
+              <span className="tcp-step-num">{i + 1}</span>
+              <span className="tcp-step-text">{step}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
 
       {/* ---- TxID verification ---- */}
-      <Card className="cyber-card border-border">
-        <CardHeader>
-          <CardTitle className="text-base font-display">Verify your payment</CardTitle>
-          <CardDescription className="text-xs">
-            Paste your transaction hash to confirm payment and activate Premium.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Input
-            value={txId}
-            onChange={(e) => setTxId(e.target.value)}
-            placeholder="Transaction Hash (TXID)"
-            spellCheck={false}
-            autoComplete="off"
-            className="bg-secondary/50 font-mono text-xs"
-          />
-          {txId.length > 0 && !txValid && (
-            <p className="text-xs text-destructive">TXID must be 64 hex characters.</p>
-          )}
+      <div className="tcp-card">
+        <span className="tcp-label">Verify your payment</span>
+        <p className="tcp-subtitle" style={{ marginTop: 6, marginBottom: 16 }}>
+          Paste your transaction hash to confirm payment and activate Premium.
+        </p>
 
-          <Button
-            onClick={verify}
-            disabled={!txValid || submitting || status === "paid" || loading}
-            className="cyber-button w-full"
-            size="lg"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Verifying…
-              </>
-            ) : status === "paid" ? (
-              <>
-                <Check className="h-4 w-4" /> Payment verified
-              </>
-            ) : (
-              "Verify Payment"
-            )}
-          </Button>
+        <input
+          className="tcp-input"
+          value={txId}
+          onChange={(e) => setTxId(e.target.value)}
+          placeholder="Transaction Hash (TXID)"
+          spellCheck={false}
+          autoComplete="off"
+        />
+        {txId.length > 0 && !txValid && (
+          <p className="tcp-input-error">TXID must be 64 hex characters.</p>
+        )}
 
-          {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{error}</span>
-            </div>
+        <button
+          type="button"
+          className="tcp-btn-primary tcp-btn-primary--pulse"
+          onClick={verify}
+          disabled={!txValid || submitting || status === "paid" || loading}
+          style={{ marginTop: 16 }}
+        >
+          {submitting ? (
+            <>
+              <Loader2 className="tcp-spin h-4 w-4" /> Verifying…
+            </>
+          ) : status === "paid" ? (
+            <>
+              <Check className="h-4 w-4" /> Payment verified
+            </>
+          ) : (
+            "Verify Payment"
           )}
+        </button>
 
-          {(status === "pending" || status === "detected" || status === "confirming") && (
-            <div className={cn("flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium", meta.tone)}>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {meta.label}
-            </div>
-          )}
-          {status === "paid" && (
-            <div className="flex items-center gap-2 rounded-lg border border-green-400/25 bg-green-400/10 px-3 py-2 text-xs font-medium text-green-400">
-              <ShieldCheck className="h-4 w-4" /> Premium activated — welcome aboard!
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        {error && (
+          <div className="tcp-status tcp-status--error">
+            <TriangleAlert className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {(status === "pending" || status === "detected" || status === "confirming") && (
+          <div className={`tcp-status tcp-status--${meta.tone}`}>
+            <Loader2 className="tcp-spin h-4 w-4" />
+            <span>{meta.label}</span>
+          </div>
+        )}
+        {status === "paid" && (
+          <div className="tcp-status tcp-status--success">
+            <ShieldCheck className="h-4 w-4" /> Premium activated — welcome aboard!
+          </div>
+        )}
+      </div>
     </div>
   );
 }
