@@ -11,6 +11,7 @@
  *   4. poll  GET  /api/payments/invoices/:id   -> status until terminal
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { Check, Copy, Loader2, ShieldCheck, TriangleAlert, Wallet } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { UsdtLogo, USDT_LOGO_DATA_URI } from "./UsdtLogo";
 
 /* ------------------------------------------------------------------ config */
 
@@ -29,7 +31,6 @@ const NETWORK_LABEL = "TRON (TRC-20)";
 const TOKEN_DECIMALS = 6;
 /** Canonical merchant deposit address (base58). */
 const DEPOSIT_ADDRESS = "TGCVQMg4WrE4N4KaquY8SFS4Ftq5711WNM";
-const QR_ASSET = "/usdt-trc20-qr.jpg";
 
 /* ------------------------------------------------------------------- types */
 
@@ -222,14 +223,14 @@ export function CryptoCheckout() {
       <Card className="cyber-card border-border">
         <CardContent className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-300 text-lg font-bold text-emerald-950">
-              ₮
-            </div>
+            <UsdtLogo size={44} className="drop-shadow-[0_0_12px_rgba(38,161,123,0.45)]" />
             <div>
               <p className="font-display text-base font-semibold text-foreground">
                 {TOKEN_SYMBOL}
               </p>
-              <p className="text-xs text-muted-foreground">{NETWORK_LABEL}</p>
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <UsdtLogo size={13} /> {NETWORK_LABEL}
+              </p>
             </div>
           </div>
           <Badge className="border-green-400/30 bg-green-400/10 text-green-400">
@@ -283,12 +284,24 @@ export function CryptoCheckout() {
       {/* ---- QR + address ---- */}
       <Card className="cyber-card border-border">
         <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
-          <div className="mx-auto h-40 w-40 shrink-0 overflow-hidden rounded-xl border border-border bg-black p-2 sm:mx-0">
-            <img
-              src={QR_ASSET}
-              alt="USDT TRC-20 deposit QR code"
-              className="h-full w-full object-contain"
+          <div className="mx-auto flex shrink-0 flex-col items-center gap-2 rounded-2xl border border-border bg-white p-3 sm:mx-0">
+            {/* Dynamic, scannable QR — white background, USDT logo centered. */}
+            <QRCodeSVG
+              value={DEPOSIT_ADDRESS}
+              size={168}
+              level="H"
+              bgColor="#ffffff"
+              fgColor="#0a0a12"
+              imageSettings={{
+                src: USDT_LOGO_DATA_URI,
+                width: 40,
+                height: 40,
+                excavate: true,
+              }}
             />
+            <span className="flex items-center gap-1.5 text-[11px] font-medium text-neutral-500">
+              <UsdtLogo size={14} /> Scan with your TRON wallet
+            </span>
           </div>
           <div className="min-w-0 flex-1">
             <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
