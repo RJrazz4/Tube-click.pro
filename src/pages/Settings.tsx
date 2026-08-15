@@ -3,7 +3,7 @@
  * Central hub for user account, preferences, licensing, and data management
  */
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   User,
   Shield,
@@ -17,19 +17,19 @@ import {
   AlertTriangle,
   ExternalLink,
   Globe,
-  RefreshCw,
   ChevronRight,
   Sparkles,
   Crown,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { CryptoCheckout } from "@/components/subscription/CryptoCheckout";
 import { toast } from "sonner";
 import {
   useAuthStore,
@@ -83,67 +83,12 @@ function clearLocalAppData() {
 
 // Section components
 function GeneralSection() {
-  const { user, setUser } = useAuthStore();
-  const [name, setName] = useState(user?.name || "");
-  const [email, setEmail] = useState(user?.email || "");
-  const [isEditing, setIsEditing] = useState(false);
-
-  const handleSave = () => {
-    setUser({
-      id: user?.id || crypto.randomUUID(),
-      name,
-      email,
-      createdAt: user?.createdAt || new Date().toISOString(),
-      lastActive: new Date().toISOString(),
-    });
-    setIsEditing(false);
-    toast.success("Profile updated successfully!");
-  };
-
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-display font-semibold text-foreground mb-2">General Settings</h2>
         <p className="text-sm text-muted-foreground">Manage your account preferences</p>
       </div>
-
-      <Card className="cyber-card border-border">
-        <CardHeader>
-          <CardTitle className="text-base font-display">Profile Information</CardTitle>
-          <CardDescription className="text-xs">Your public profile details</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Display Name</label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
-                className="bg-secondary/50 border-border"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Email Address</label>
-              <Input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                type="email"
-                className="bg-secondary/50 border-border"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setIsEditing(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} className="cyber-button">
-              Save Changes
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card className="cyber-card border-border">
         <CardHeader>
@@ -203,7 +148,6 @@ function GeneralSection() {
 
 function AccountSection() {
   const license = useLicense();
-  const features = useFeatures();
   const navigate = useNavigate();
   const isPro = isProTier(license);
   const cooldownRemaining = useFreeCooldownRemaining();
@@ -235,7 +179,7 @@ function AccountSection() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-3 mb-4">
+          <div className="grid gap-4 mb-4">
             {/* Daily Chain-Loop conveyor status — replaces legacy
                 "Generations Today 0/10" which contradicted the 1-per-24h
                 free-tier model. */}
@@ -255,18 +199,6 @@ function AccountSection() {
               </p>
               <p className="text-[10px] text-muted-foreground mt-1">
                 {isPro ? "No cooldown • 3-slot conveyor unlocked" : "1 Chain-Loop / 24h • Niche-strict conveyor"}
-              </p>
-            </div>
-            <div className="p-3 rounded-lg bg-secondary/50">
-              <p className="text-xs text-muted-foreground">Max Thumbnails</p>
-              <p className="text-2xl font-display font-bold text-foreground">
-                {features.maxThumbnails}
-              </p>
-            </div>
-            <div className="p-3 rounded-lg bg-secondary/50">
-              <p className="text-xs text-muted-foreground">Max Scenes</p>
-              <p className="text-2xl font-display font-bold text-foreground">
-                {features.maxScenes === Infinity ? "∞" : features.maxScenes}
               </p>
             </div>
           </div>
@@ -306,7 +238,6 @@ function AccountSection() {
 
 function DashboardSection() {
   const { tier, setTier } = useAppStore();
-  const features = useFeatures();
   const license = useLicense();
   const isPro = isProTier(license);
   const cooldownRemaining = useFreeCooldownRemaining();
@@ -387,14 +318,6 @@ function DashboardSection() {
               <Badge variant="secondary">
                 {isPro ? "Unlimited" : onCooldown ? `Next in ${formatCountdown(cooldownRemaining)}` : "1 Available"}
               </Badge>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-              <span className="text-sm text-foreground">Max AI Thumbnail Prompts per Batch</span>
-              <Badge variant="secondary">{features.maxThumbnails}</Badge>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-              <span className="text-sm text-foreground">Max Storyboard Scenes</span>
-              <Badge variant="secondary">{features.maxScenes === Infinity ? "Unlimited" : features.maxScenes}</Badge>
             </div>
             <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
               <span className="text-sm text-foreground">Niche Targeting</span>
@@ -711,16 +634,21 @@ function ReferralRewardsSection() {
 
 // Main Settings Page Component
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState("general");
-
   const tabs = [
     { value: "general", label: "General", icon: User },
     { value: "account", label: "Account", icon: Shield },
+    { value: "subscription", label: "Subscription", icon: CreditCard },
     { value: "dashboard", label: "Dashboard", icon: Palette },
     { value: "data", label: "Data & Privacy", icon: Database },
     { value: "rewards", label: "Referral Rewards", icon: Gift },
     { value: "about", label: "About", icon: Info },
   ];
+
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = searchParams.get("tab");
+    return requested && tabs.some((t) => t.value === requested) ? requested : "general";
+  });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -759,6 +687,10 @@ export default function Settings() {
         
         <TabsContent value="account">
           <AccountSection />
+        </TabsContent>
+
+        <TabsContent value="subscription">
+          <CryptoCheckout />
         </TabsContent>
         
         <TabsContent value="dashboard">

@@ -1,45 +1,18 @@
-import { LogIn, LogOut, ShieldCheck, Sparkles, Server, Terminal, Cpu, Radio } from "lucide-react";
+import { LogIn, ShieldCheck, Sparkles, Server, Terminal, Cpu, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { GhostAdminModal } from "@/components/GhostAdminModal";
 import { useGhostTrigger } from "@/hooks/useGhostTrigger";
-import { useAuthStore } from "@/stores/useAuthStore";
 import { useSoftGate } from "@/contexts/SoftGateContext";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
 import { LiveActiveCounter } from "@/components/ui/LiveActiveCounter";
-import { getCanonicalRoot } from "@/lib/domain/canonical";
-
-const getCurrentRoot = () => {
-  try { return window.location.origin; } catch { return getCanonicalRoot(); }
-};
-import { purgeAllUserStores, pinUserId } from "@/lib/storage/perUserStorage";
+import { UserMenu } from "@/components/layout/UserMenu";
 
 export function TopBar() {
   const [ghostOpen, setGhostOpen] = useState(false);
   const handleGhostTrigger = useGhostTrigger(() => setGhostOpen(true));
-  const user = useAuthStore((s) => s.user);
   const { isAuthenticated, requestAuthentication } = useSoftGate();
-
-  const signOut = async () => {
-    // Wipe user-scoped client storage BEFORE signOut so the supabase client
-    // cannot revive another account's tokens on re-render.
-    const userId = user?.id ?? null;
-    purgeAllUserStores(userId);
-    purgeAllUserStores(null);
-    // Unpin the user id so all per-user storage adapters immediately fall
-    // back to the `:guest` namespace — closes the race where a React
-    // effect rehydrates from the signed-in namespace after purge.
-    pinUserId(null);
-    const { error } = await supabase.auth.signOut({ scope: "local" });
-    if (error) toast.error("Ghost logout interference - retry via MUM-01");
-    else toast.success("Ghost session terminated • MUM-01 • Quantum cache purged");
-    // Force a full reload so all in-memory Zustand state and React query
-    // caches reset to their pristine guest defaults.
-    window.setTimeout(() => window.location.replace(getCurrentRoot()), 150);
-  };
 
   return (
     <header className="fixed top-0 left-20 right-0 z-40 flex h-16 items-center justify-between border-b border-primary/10 glass-strong px-6 backdrop-blur-2xl max-md:left-0 max-md:px-3">
@@ -66,10 +39,7 @@ export function TopBar() {
         </div>
 
         {isAuthenticated ? (
-          <Button variant="ghost" size="sm" onClick={() => void signOut()} className="gap-2 text-muted-foreground hover:text-foreground font-mono text-xs">
-            <span className="hidden max-w-32 truncate sm:inline">{user?.name || user?.email || "Ghost_User"}</span>
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <UserMenu />
         ) : (
           <Button variant="outline" size="sm" onClick={() => void requestAuthentication("save your work and start earning Pro via ghost uplink")} className="gap-2 border-primary/20 bg-primary/5 hover:bg-primary/10 font-mono text-xs">
             <LogIn className="h-4 w-4" />
