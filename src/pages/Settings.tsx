@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { CryptoCheckout } from "@/components/subscription/CryptoCheckout";
+import { ReferralApplyForm } from "@/components/referrals/ReferralApplyForm";
 import { toast } from "sonner";
 import {
   useAuthStore,
@@ -626,6 +627,19 @@ function ReferralRewardsSection() {
           <Button onClick={() => navigate("/rewards")} className="cyber-button h-12 gap-2 md:col-span-2">
             <Gift className="h-4 w-4" /> Unlock Pro for Free <ChevronRight className="h-4 w-4" />
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Manual referral code application (event-driven → AI Manager bot). */}
+      <Card className="cyber-card mx-auto max-w-3xl border-border">
+        <CardHeader>
+          <CardTitle className="text-base font-display">Have a referral code?</CardTitle>
+          <CardDescription className="text-xs">
+            Paste a friend's code to credit them toward their Pro trial.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ReferralApplyForm />
         </CardContent>
       </Card>
     </div>

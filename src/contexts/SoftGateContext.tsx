@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { getCanonicalRoot } from "@/lib/domain/canonical";
 import { consumeGuestPreview, loadProEntitlement, RegistrationRequiredError } from "@/lib/auth/guestAccess";
+import { loadTrialEntitlement } from "@/lib/auth/trialAccess";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
@@ -129,8 +130,20 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
 
     try {
       const entitlement = await loadProEntitlement();
-      if (entitlement.active && entitlement.expiresAt && new Date(entitlement.expiresAt).getTime() > Date.now()) {
-        setLicense({ tier: "pro", status: "active", expiresAt: entitlement.expiresAt });
+      // Phase 4: a bot-granted trial also confers Pro access.
+      const trial = await loadTrialEntitlement();
+
+      const referralActive =
+        entitlement.active && entitlement.expiresAt && new Date(entitlement.expiresAt).getTime() > Date.now();
+      const trialActive = trial.active && trial.expiresAt && new Date(trial.expiresAt).getTime() > Date.now();
+
+      if (referralActive || trialActive) {
+        // Use the later expiry when both are active.
+        const candidates = [entitlement.expiresAt, trial.expiresAt].filter(
+          (v): v is string => typeof v === "string",
+        );
+        const expiresAt = candidates.sort().at(-1) ?? null;
+        setLicense({ tier: "pro", status: "active", expiresAt: expiresAt ?? undefined });
         setAppTier("pro");
       } else {
         // Unconditionally downgrade when the server says not pro. This
