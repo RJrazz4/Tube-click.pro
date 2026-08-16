@@ -22,6 +22,33 @@ import {
   cleanupJson
 } from './_shared.js';
 
+export type CloneCrushOutputLanguage = 'English' | 'Hindi' | 'Hinglish';
+
+export function normalizeCloneCrushOutputLanguage(value: unknown): CloneCrushOutputLanguage {
+  if (typeof value !== 'string') return 'English';
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'hindi') return 'Hindi';
+  if (normalized === 'hinglish') return 'Hinglish';
+  return 'English';
+}
+
+export function outputLanguageInstruction(language: CloneCrushOutputLanguage): string {
+  if (language === 'Hindi') {
+    return 'Write every generated title, insight, hook, script, tag, guide, and image prompt in fluent, natural Hindi using Devanagari. Keep only proper nouns, brand names, and unavoidable technical terms in English. Do not switch into Hinglish.';
+  }
+  if (language === 'Hinglish') {
+    return 'Write every generated title, insight, hook, script, tag, guide, and image prompt in natural, conversational Hinglish using easy Roman-script Hindi-English code-switching. Sound like a real Indian creator speaking to their audience; avoid literal translation, stiff textbook Hindi, and random word-by-word mixing.';
+  }
+  return 'Write every generated title, insight, hook, script, tag, guide, and image prompt in natural English. Keep source proper nouns and brand names unchanged.';
+}
+
+function localizedCopy(
+  language: CloneCrushOutputLanguage,
+  copy: { English: string; Hindi: string; Hinglish: string },
+): string {
+  return copy[language];
+}
+
 // -------------------------------------------------------------
 // TIER ENFORCEMENT
 // -------------------------------------------------------------
@@ -288,10 +315,22 @@ const VIRAL_POOL = [
   { id: '6f3RzjIKk2g', channel: 'Flux', baseViews: 5200000 },
 ];
 
-function generateSyntheticCompetitors(niche: string, seedOffset = 0) {
+function generateSyntheticCompetitors(
+  niche: string,
+  seedOffset = 0,
+  language: CloneCrushOutputLanguage = 'English',
+) {
   const hash = ghostHash(niche + seedOffset);
-  const niches = ['Secret', 'Exposed', 'Hidden Truth', 'Banned Method', 'Algorithm Hack', 'Viral Formula', 'Dark Secret', 'Shocking Truth', 'Profit Loophole', 'Underground Trick'];
-  const hooks = ['Nobody Tells You', 'I Tested For 30 Days', 'At 3AM Everything Changed', 'The Mistake Costing You $', 'Why 97% Fail', 'They Hid This From You', 'Leaked Footage Shows', 'The Truth Will Shock You'];
+  const niches = language === 'Hindi'
+    ? ['राज़', 'पर्दाफाश', 'छुपा सच', 'प्रतिबंधित तरीका', 'एल्गोरिदम हैक', 'वायरल फ़ॉर्मूला', 'गहरा राज़', 'चौंकाने वाला सच', 'कमाई का रास्ता', 'अंदरूनी तरकीब']
+    : language === 'Hinglish'
+      ? ['Ka Secret', 'Ka Sach Exposed', 'Ki Hidden Truth', 'Ka Banned Method', 'Ka Algorithm Hack', 'Ka Viral Formula', 'Ka Dark Secret', 'Ki Shocking Truth', 'Ka Profit Loophole', 'Ki Andar Ki Trick']
+      : ['Secret', 'Exposed', 'Hidden Truth', 'Banned Method', 'Algorithm Hack', 'Viral Formula', 'Dark Secret', 'Shocking Truth', 'Profit Loophole', 'Underground Trick'];
+  const hooks = language === 'Hindi'
+    ? ['यह बात कोई नहीं बताता', 'मैंने 30 दिन तक आज़माया', 'रात 3 बजे सब बदल गया', 'यह गलती आपको महँगी पड़ रही है', '97% लोग क्यों असफल होते हैं', 'उन्होंने यह आपसे छुपाया', 'लीक हुए वीडियो में खुलासा', 'सच आपको चौंका देगा']
+    : language === 'Hinglish'
+      ? ['Ye Baat Koi Nahi Batata', 'Maine 30 Din Test Kiya', 'Raat 3 Baje Sab Badal Gaya', 'Ye Mistake Aapko Mehengi Pad Rahi Hai', '97% Log Kyun Fail Hote Hain', 'Unhone Ye Aapse Chhupaya', 'Leaked Video Mein Sach', 'Truth Aapko Shock Kar Dega']
+      : ['Nobody Tells You', 'I Tested For 30 Days', 'At 3AM Everything Changed', 'The Mistake Costing You $', 'Why 97% Fail', 'They Hid This From You', 'Leaked Footage Shows', 'The Truth Will Shock You'];
   const results: any[] = [];
   // Generate a wider page so callers can slice windows deterministically.
   const PAGE_SIZE = 12;
@@ -313,7 +352,9 @@ function generateSyntheticCompetitors(niche: string, seedOffset = 0) {
     results.push({
       id: videoId,
       videoId,
-      title: `${niche} ${niches[nicheIdx]}: ${hooks[hookIdx]} [${niche.split(' ')[0]} #${globalIdx+1}]`,
+      title: language === 'Hindi'
+        ? `${niche} का ${niches[nicheIdx]}: ${hooks[hookIdx]} [${niche.split(' ')[0]} #${globalIdx+1}]`
+        : `${niche} ${niches[nicheIdx]}: ${hooks[hookIdx]} [${niche.split(' ')[0]} #${globalIdx+1}]`,
       url: `https://www.youtube.com/watch?v=${videoId}`,
       thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       views: `${views.toLocaleString()} views`,
@@ -327,7 +368,11 @@ function generateSyntheticCompetitors(niche: string, seedOffset = 0) {
       viralVelocityScore: velocity,
       estimatedRevenue: `$${revenue.toLocaleString()}`,
       estimatedRevenueNum: revenue,
-      relevance: `Ghost reconstructed intel • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view viral gate enforced`,
+      relevance: localizedCopy(language, {
+        English: `Ghost reconstructed insight • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view viral gate enforced`,
+        Hindi: `घोस्ट द्वारा पुनर्निर्मित जानकारी • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ व्यूज़ की वायरल सीमा लागू`,
+        Hinglish: `Ghost reconstructed insight • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ views ka viral gate apply kiya gaya`,
+      }),
       isGhostReconstructed: true,
       ghostNode: `MUM-0${(globalIdx%3)+1}`,
       viralThreshold: VIRAL_VIEW_THRESHOLD,
@@ -336,7 +381,10 @@ function generateSyntheticCompetitors(niche: string, seedOffset = 0) {
   return filterViralOnly(results);
 }
 
-function generateSyntheticProfile(input: string) {
+function generateSyntheticProfile(
+  input: string,
+  language: CloneCrushOutputLanguage = 'English',
+) {
   const clean = input.trim().replace(/https?:\/\/(www\.)?youtube\.com\//i, '').replace('@','').slice(0, 30) || 'GhostCreator';
   const hash = ghostHash(clean);
   const names = [clean.charAt(0).toUpperCase()+clean.slice(1) + ' Labs', clean + ' Terminal', clean.charAt(0).toUpperCase()+clean.slice(1)+' • Ghost Unit'];
@@ -344,11 +392,24 @@ function generateSyntheticProfile(input: string) {
   const handle = '@' + clean.replace(/[^a-zA-Z0-9._-]/g,'').toLowerCase().slice(0, 20);
   const subs = 15000 + (hash % 500000);
   const avatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(handle)}&backgroundColor=transparent`;
-  const descs = [
-    `Encrypted creator profile: ${name}. Niche velocity detected. Ghost Protocol active. Building audience via algorithmic exploits and viral retention loops.`,
-    `${name} - operating in stealth mode, decoding viral DNA for audience growth. Channel analytics show upward velocity trend.`,
-    `Classified channel intel: ${name}. Detected niche signals, high retention potential. Linked to ghost node MUM-01 for real-time tracking.`,
-  ];
+  const descriptions: Record<CloneCrushOutputLanguage, string[]> = {
+    English: [
+      `Encrypted creator profile: ${name}. Niche velocity detected. Ghost Protocol active. Building audience through algorithmic opportunities and viral retention loops.`,
+      `${name} is operating in stealth mode and decoding viral DNA for audience growth. Channel analytics show an upward velocity trend.`,
+      `Classified channel insight: ${name}. Strong niche signals and high retention potential detected. Linked to ghost node MUM-01 for real-time tracking.`,
+    ],
+    Hindi: [
+      `एन्क्रिप्टेड क्रिएटर प्रोफ़ाइल: ${name}। निच की तेज़ रफ़्तार मिली है। घोस्ट प्रोटोकॉल सक्रिय है और वायरल रिटेंशन से ऑडियंस बढ़ रही है।`,
+      `${name} स्टेल्थ मोड में ऑडियंस ग्रोथ के लिए वायरल पैटर्न समझ रहा है। चैनल एनालिटिक्स में तेज़ी का रुझान दिख रहा है।`,
+      `गोपनीय चैनल जानकारी: ${name}। मज़बूत निच संकेत और बेहतर रिटेंशन की संभावना मिली है। रियल-टाइम ट्रैकिंग के लिए घोस्ट नोड MUM-01 से जुड़ा है।`,
+    ],
+    Hinglish: [
+      `Encrypted creator profile: ${name}. Niche ki velocity strong hai, Ghost Protocol active hai, aur viral retention loops se audience grow ho rahi hai.`,
+      `${name} stealth mode mein audience growth ke liye viral DNA decode kar raha hai. Channel analytics mein upward trend dikh raha hai.`,
+      `Classified channel insight: ${name}. Strong niche signals aur high retention potential mila hai. Real-time tracking ke liye ghost node MUM-01 se linked hai.`,
+    ],
+  };
+  const descs = descriptions[language];
   return {
     id: 'ghost_' + hash.toString(36),
     url: `https://www.youtube.com/${handle}`,
@@ -594,7 +655,7 @@ function decodeJsonString(value: string) {
   try { return JSON.parse(`"${value.replace(/"/g, '\\"')}"`); } catch { return value.replace(/\\"/g, '"'); }
 }
 
-async function scrapeYoutubeSearch(query: string): Promise<RawScrapedVideo[]> {
+export async function scrapeYoutubeSearch(query: string): Promise<RawScrapedVideo[]> {
   try {
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
     const res = await fetch(url, {
@@ -603,7 +664,7 @@ async function scrapeYoutubeSearch(query: string): Promise<RawScrapedVideo[]> {
     });
     if (!res.ok) return [];
     const html = await res.text();
-    const videoIdMatches = [...html.matchAll(/\"videoId\"\s*:\s*\"([^\"]{11})\"/g)];
+    const videoIdMatches = [...html.matchAll(/"videoId"\s*:\s*"([^"]{11})"/g)];
     const videos: RawScrapedVideo[] = [];
     const seen = new Set<string>();
     for (let i = 0; i < Math.min(videoIdMatches.length, 18); i++) {
@@ -612,11 +673,11 @@ async function scrapeYoutubeSearch(query: string): Promise<RawScrapedVideo[]> {
       seen.add(vid);
       const start = Math.max(0, (videoIdMatches[i].index || 0) - 500);
       const chunk = html.slice(start, Math.min(html.length, (videoIdMatches[i].index || 0) + 4500));
-      const title = chunk.match(/\"title\"\s*:\s*\{\s*\"runs\"\s*:\s*\[\s*\{\s*\"text\"\s*:\s*\"([^\"]+)/)?.[1]
-        || chunk.match(/\"title\"\s*:\s*\{\s*\"simpleText\"\s*:\s*\"([^\"]+)/)?.[1]
+      const title = chunk.match(/"title"\s*:\s*\{\s*"runs"\s*:\s*\[\s*\{\s*"text"\s*:\s*"([^"]+)/)?.[1]
+        || chunk.match(/"title"\s*:\s*\{\s*"simpleText"\s*:\s*"([^"]+)/)?.[1]
         || `Viral: ${query}`;
-      const viewsText = chunk.match(/\"viewCountText\"\s*:\s*\{[^}]*\"simpleText\"\s*:\s*\"([^\"]+)/)?.[1]
-        || chunk.match(/\"viewCountText\"\s*:\s*\{[^}]*\"text\"\s*:\s*\"([^\"]+)/)?.[1]
+      const viewsText = chunk.match(/"viewCountText"\s*:\s*\{[^}]*"simpleText"\s*:\s*"([^"]+)/)?.[1]
+        || chunk.match(/"viewCountText"\s*:\s*\{[^}]*"text"\s*:\s*"([^"]+)/)?.[1]
         || '';
       const viewsCount = parseViewCount(viewsText) ?? 0;
       if (viewsCount < VIRAL_VIEW_THRESHOLD) continue;
@@ -635,7 +696,41 @@ async function scrapeYoutubeSearch(query: string): Promise<RawScrapedVideo[]> {
 }
 
 // Thumbnail fallback
-function generateFallbackThumbnailPrompts(title: string, isPremium: boolean): string[] {
+function generateFallbackThumbnailPrompts(
+  title: string,
+  isPremium: boolean,
+  language: CloneCrushOutputLanguage = 'English',
+): string[] {
+  if (language === 'Hindi') {
+    return isPremium
+      ? [
+          `चौंकी हुई आँखों और सिर पर हाथ रखे व्यक्ति का बेहद नज़दीकी दृश्य, लाल-नीली नाटकीय रोशनी, गहरा बैकग्राउंड, पीले हाइलाइट के साथ सफ़ेद मोटा टेक्स्ट “${title.substring(0,30)}”, पेशेवर YouTube थंबनेल, 8K`,
+          `स्प्लिट-स्क्रीन तुलना: बाईं ओर असफलता का गहरा फीका दृश्य, दाईं ओर सफलता का चमकीला दृश्य, अंतर की ओर इशारा करता व्यक्ति, टेक्स्ट “${title.substring(0,25)}”, सिनेमैटिक रोशनी और हाई कंट्रास्ट`,
+          `नीचे से आती रहस्यमयी हरी रोशनी में चमकता दस्तावेज़ पकड़े व्यक्ति का चेहरा, गहरा बैकग्राउंड, लाल मोटा टेक्स्ट “पर्दाफाश”, बाएँ-तिहाई रचना, 4K`,
+          `अविश्वास में खुले मुँह वाला नाटकीय रिएक्शन शॉट, चेहरे पर हाथ, नीयॉन हरे-बैंगनी रंग, बड़ा टेक्स्ट “पूरा सच” और बाहर की ओर तीर, सिनेमैटिक शैली`,
+        ]
+      : [
+          `“${title}” के लिए पेशेवर YouTube थंबनेल, आत्मविश्वास से मुस्कुराता व्यक्ति, साफ़ चमकीली रोशनी, नीला-सफ़ेद रंग और पढ़ने योग्य टेक्स्ट`,
+          `शैक्षिक शैली का थंबनेल: पॉइंटर या व्हाइटबोर्ड से समझाता व्यक्ति, व्यवस्थित रचना, हल्की गर्म रोशनी और हरे-सफ़ेद रंग`,
+          `साफ़-सुथरा मिनिमल थंबनेल: बीच में व्यक्ति, सामान्य बैकग्राउंड, मोटा टेक्स्ट और सरल रंग`,
+          `दिलचस्प थंबनेल: हैरान व्यक्ति, रंगीन बैकग्राउंड, विषय का साफ़ टेक्स्ट और दोस्ताना शैली`,
+        ];
+  }
+  if (language === 'Hinglish') {
+    return isPremium
+      ? [
+          `Shocked eyes aur head par hands wale person ka extreme close-up, dramatic red-blue lighting, dark background, yellow highlight ke saath bold white text “${title.substring(0,30)}”, professional YouTube thumbnail, 8K`,
+          `Split-screen comparison: left side par dark failure, right side par bright success, difference point karta person, text “${title.substring(0,25)}”, cinematic lighting aur high contrast`,
+          `Glowing document pakde person ka mysterious green-lit face, dark moody background, bold red text “SACH EXPOSED”, left-third composition, detailed 4K`,
+          `Disbelief wala dramatic reaction shot, mouth open aur face par hands, neon green-purple accents, bada text “POORA SACH” aur off-screen arrow, cinematic grade`,
+        ]
+      : [
+          `“${title}” ke liye professional YouTube thumbnail, confidently smile karta person, bright clean lighting, blue-white colors aur readable text overlay`,
+          `Educational style thumbnail: pointer ya whiteboard ke saath explain karta person, organized layout, warm lighting aur green-white accents`,
+          `Clean minimalist thumbnail: center frame mein person, neutral background, bold text aur simple color palette`,
+          `Engaging thumbnail: surprised expression wala person, colorful background, topic ka clear text aur friendly style`,
+        ];
+  }
   if (isPremium) {
     return [
       `Extreme close-up of a person with wide eyes and hands on head in shock, dramatic red and blue lighting, dark background, bold white text "${title.substring(0,30)}" with yellow highlight, professional YouTube thumbnail, 8K, hyper-detailed`,
@@ -696,12 +791,13 @@ export default async function handler(req: Request) {
     }
 
     const { channelUrl, niche, targetVideoId, originalTranscript, originalTitle } = bodyResult.data;
+    const outputLanguage = normalizeCloneCrushOutputLanguage(bodyResult.data.language);
 
     if (action === 'profile') {
       if (!channelUrl) return jsonResponse({ error: 'Channel URL or @handle is required' }, 400);
       try {
         const profile = await youtubeChannelProfile(channelUrl);
-        return jsonResponse({ success: true, profile, extractedKeywords: profile.extractedKeywords, ghostNode: 'YT-API', reconstructed: false });
+        return jsonResponse({ success: true, profile, extractedKeywords: profile.extractedKeywords, ghostNode: 'YT-API', reconstructed: false, outputLanguage });
       } catch (err: any) {
         const raw = (err?.message || '').toString();
         // Env mis-config / explicit "not configured" must surface as 502.
@@ -718,7 +814,8 @@ export default async function handler(req: Request) {
         }
         return jsonResponse({
           success: true,
-          profile: generateSyntheticProfile(channelUrl),
+          profile: generateSyntheticProfile(channelUrl, outputLanguage),
+          outputLanguage,
           ghostReconstructed: true,
           ghostNode: 'MUM-01',
           ...(raw && raw !== 'GHOST_RECONSTRUCT' ? { fallbackReason: sanitizeThrownError(err, 'clone-crush:profile') } : {}),
@@ -781,7 +878,12 @@ export default async function handler(req: Request) {
           ghostReconstructed: src !== 'youtube',
           ghostNode: src === 'youtube' ? 'YT-API' : src === 'piped' ? 'PIPED-RELAY' : 'MUM-01',
           viralThreshold: VIRAL_VIEW_THRESHOLD,
-          qualityGate: `${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ views only`,
+          qualityGate: localizedCopy(outputLanguage, {
+            English: `${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ views only`,
+            Hindi: `सिर्फ़ ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ व्यूज़`,
+            Hinglish: `Sirf ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ views`,
+          }),
+          outputLanguage,
           envyMetrics: competitorMetrics(window, niche, src === 'youtube' ? '$5-8' : '$5'),
         });
       };
@@ -814,16 +916,22 @@ export default async function handler(req: Request) {
                 channelName: v.channelName,
                 viralVelocityScore: velocityForViews(v.viewsCount),
                 estimatedRevenue: `$${revenue.toLocaleString()}`, estimatedRevenueNum: revenue,
-                relevance: `Piped Ghost Relay • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view viral gate`,
+                relevance: localizedCopy(outputLanguage, {
+                  English: `Piped Ghost Relay • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view viral gate`,
+                  Hindi: `Piped घोस्ट रिले • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ व्यूज़ की वायरल सीमा`,
+                  Hinglish: `Piped Ghost Relay • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ views ka viral gate`,
+                }),
                 ghostNode: `PIPED-0${(i%3)+1}`, viralThreshold: VIRAL_VIEW_THRESHOLD,
               };
             });
             return buildEnvelope(mapped, 'piped', offset, piped.length >= fetchSize + offset);
           }
-        } catch {}
+        } catch {
+          // Continue to the deterministic synthetic fallback below.
+        }
       }
       // Final synthetic fallback (deterministic, infinite pagination by advancing seedOffset).
-      const synthPage = generateSyntheticCompetitors(niche, offset);
+      const synthPage = generateSyntheticCompetitors(niche, offset, outputLanguage);
       return buildEnvelope(synthPage, 'synthetic', offset, true);
     }
 
@@ -857,6 +965,9 @@ export default async function handler(req: Request) {
         ? `\n=== GLITCH PROTOCOL: 99% EXECUTION (PREMIUM) ===\nMAXIMUM AGGRESSION. Weaponized for max CTR.\nTITLE MUST contain Curiosity Glitch: time-jump, hidden secret, shocking mistake, impossible result.\nUse power words: Secret, Hidden, Banned, Exposed, Revealed, Warning, Urgent, Finally, Truth\nHOOK structure: [SHOCKING STATEMENT] → [CREDIBILITY] → [OPEN LOOP] with PATTERN INTERRUPT\nSCRIPT: Every 45-60s RETENTION SPIKE, Open Loop → Partial Close → New Loop, LOOP BOMB at end\nTHUMBNAIL: psychologically aggressive, specific facial expression, color contrast, emotional trigger\n`
         : `\n=== GLITCH PROTOCOL: 60% EXECUTION (FREE) ===\nSTANDARD OPTIMIZATION, professional engaging safe\nTITLE: strong SEO, emotional triggers, numbers, power words, clear value\nHOOK: [VALUE] → [CONTEXT] → [WHAT THEY'LL LEARN]\nSCRIPT: well-structured, clear sections, professional pacing\nTHUMBNAIL: clean professional, good lighting, readable text, standard best practices\n`;
       const rewriteSystemInstruction = `You are an Elite Viral YouTube growth expert, copywriter, and high-retention psychologist. Generate viral assets in a single JSON object.
+=== OUTPUT LANGUAGE: ${outputLanguage} (MANDATORY) ===
+${outputLanguageInstruction(outputLanguage)}
+This language rule applies to every generated JSON value. Keep the JSON property names exactly as specified below and do not add translations or alternate-language versions.
 ${glitchProtocolBlock}
 === STEALTH DISGUISE PROTOCOL (BOTH TIERS) ===
 Heavily disguise output: CHANGE EVERY ANALOGY, SWAP ALL EXAMPLES, rephrase uniquely.
@@ -877,6 +988,7 @@ Heavily disguise output: CHANGE EVERY ANALOGY, SWAP ALL EXAMPLES, rephrase uniqu
 Original Title: "${originalTitle}"
 Niche: "${niche || 'General'}"
 Tier: "${tier}" (${isPremium ? '99% GLITCH' : '60% Standard'})
+Required output language: "${outputLanguage}"
 Transcript excerpt (use for tone/subject; do NOT copy verbatim):
 ${truncatedTranscript}
 
@@ -889,6 +1001,53 @@ Execute Chain-Loop. Return STRICT JSON matching the schema, nothing else.`;
         const safeTitle = (originalTitle || 'Viral Content').replace(/^["']|["']$/g, '').trim();
         const titleBase = safeTitle.length > 50 ? safeTitle.slice(0, 47) + '...' : safeTitle;
         const nicheWord = (niche || 'growth').trim() || 'content';
+
+        if (outputLanguage === 'Hindi') {
+          const rewrittenTitle = isPremium
+            ? `${nicheWord} का वह राज़ जो कोई नहीं बताता (${titleBase})`
+            : `${titleBase} — ${nicheWord} की पूरी आसान गाइड`;
+          const glitchHook = isPremium
+            ? `रुकिए। ${nicheWord} के बारे में जो आप मानते आए हैं, वह अधूरा है। अंत तक देखिए—तीसरा तरीका आपका पूरा नज़रिया बदल देगा।`
+            : `क्या आप “${titleBase}” की असली वजह जानते हैं? अगले 60 सेकंड में सही तरीका और वह गलती समझिए जो ज़्यादातर क्रिएटर करते हैं।`;
+          return {
+            originalTitle,
+            rewrittenTitle,
+            seoTags: [nicheWord, 'यूट्यूब ग्रोथ', 'वायरल स्क्रिप्ट', 'कंटेंट रणनीति', 'रिटेंशन टिप्स', 'क्रिएटर गाइड', 'एल्गोरिदम', 'वायरल हुक'],
+            glitchHook,
+            fullScript: `${glitchHook}\n\nचलिए शोर से हटकर सीधे काम की बात करते हैं। जब मैंने ${nicheWord} पर सफल वीडियो के पैटर्न देखे, तो तीन बातें साफ़ हुईं।\n\nपहली: शुरुआती तीन सेकंड सबसे अहम हैं। एक चौंकाने वाले तथ्य, उलटे नज़रिए या साफ़ नतीजे से शुरुआत करें।\n\nदूसरी: पहले 15 सेकंड में जिज्ञासा जगाएँ। दर्शक को मिलने वाला फ़ायदा बताएँ, फिर जानकारी को छोटे और उपयोगी हिस्सों में दें।\n\nतीसरी: अंत में शुरुआत के सवाल का जवाब दें और अगला स्वाभाविक कदम बताएँ। सात दिन तक एक छोटा परीक्षण चलाएँ, नतीजे मापें और जो काम करे उसे दोहराएँ।\n\nअगर यह जानकारी उपयोगी लगी, तो अपनी सबसे बड़ी सीख कमेंट में लिखें और ऐसी साफ़, काम की रणनीतियों के लिए जुड़े रहें।`,
+            thumbnailPrompt: `“${rewrittenTitle.slice(0, 40)}” के लिए हाई-कंट्रास्ट YouTube थंबनेल, हैरान चेहरा, मोटा सफ़ेद-पीला टेक्स्ट, गहरा बैकग्राउंड और लाल एक्सेंट`,
+            editingGuide: `1. लंबे विराम हटाएँ।\n2. मुख्य खुलासों पर हल्का ज़ूम करें।\n3. बोल्ड हिंदी कैप्शन में मुख्य शब्द पीले रखें।\n4. हर 3–4 सेकंड में उपयुक्त B-roll लगाएँ।\n5. रिटेंशन मोमेंट पर हल्का साउंड इफ़ेक्ट दें।`,
+            changedAnalogiesCount: 5,
+            changedExamplesCount: 4,
+            glitchTechniques: isPremium
+              ? ['ओपन लूप', 'पैटर्न बदलना', 'जिज्ञासा का अंतर', 'आख़िरी खुलासा']
+              : ['स्पष्ट फ़ायदा', 'आसान हिस्से', 'जिज्ञासा वाला हुक'],
+          };
+        }
+
+        if (outputLanguage === 'Hinglish') {
+          const rewrittenTitle = isPremium
+            ? `${nicheWord} Ka Secret Jo Koi Nahi Batata (${titleBase})`
+            : `${titleBase} — ${nicheWord} Ki Complete Easy Guide`;
+          const glitchHook = isPremium
+            ? `Ruko. ${nicheWord} ke baare mein jo aap maante aaye ho, woh incomplete hai. End tak dekho—third trick aapka poora approach change kar degi.`
+            : `“${titleBase}” ka real secret jaana hai? Next 60 seconds mein exact method aur woh mistake dekho jo most creators repeat karte hain.`;
+          return {
+            originalTitle,
+            rewrittenTitle,
+            seoTags: [nicheWord, 'YouTube growth', 'viral script', 'content strategy', 'retention tips', 'creator guide', 'algorithm hack', 'viral hook'],
+            glitchHook,
+            fullScript: `${glitchHook}\n\nChalo noise side mein rakhkar seedha useful baat karte hain. Jab maine ${nicheWord} ke successful videos ke patterns dekhe, teen cheezein clear hui.\n\nPehli: opening ke first three seconds sabse important hain. Ek surprising fact, contrarian take ya clear result se start karo.\n\nDusri: first 15 seconds mein curiosity build karo. Viewer ko payoff tease karo, phir value ko short aur useful waves mein deliver karo.\n\nTeesri: end mein opening question close karo aur next natural step do. Seven days ke liye ek small test run karo, result measure karo, aur jo work kare usko repeat karo.\n\nAgar ye breakdown useful laga, comments mein apni biggest learning share karo aur aisi no-fluff creator strategies ke liye connected raho.`,
+            thumbnailPrompt: `“${rewrittenTitle.slice(0, 40)}” ke liye high-contrast YouTube thumbnail, shocked face, bold white-yellow text, dark background aur red accent`,
+            editingGuide: `1. Long pauses cut karo.\n2. Key reveals par light zoom punch-in use karo.\n3. Bold captions mein hook words yellow rakho.\n4. Har 3–4 seconds relevant B-roll add karo.\n5. Retention moments par subtle sound effect lagao.`,
+            changedAnalogiesCount: 5,
+            changedExamplesCount: 4,
+            glitchTechniques: isPremium
+              ? ['open loop', 'pattern interrupt', 'curiosity gap', 'final reveal']
+              : ['clear payoff', 'simple sections', 'curiosity hook'],
+          };
+        }
+
         const rewrittenTitle = isPremium
           ? `I Tried "${titleBase}" for 30 Days (SHOCKING Truth No One Tells You)`
           : `${titleBase} — The Complete ${nicheWord} Guide (2025)`;
@@ -975,8 +1134,10 @@ Execute Chain-Loop. Return STRICT JSON matching the schema, nothing else.`;
         model: upstreamModel || (servedViaFallback ? 'ghost-local-fallback' : ''),
         failedOver: failedOver || servedViaFallback,
         servedViaFallback,
+        outputLanguage,
         rewrite: {
           originalTitle: typeof rewrite.originalTitle === 'string' && rewrite.originalTitle ? rewrite.originalTitle : originalTitle,
+          outputLanguage,
           rewrittenTitle: typeof rewrite.rewrittenTitle === 'string' && rewrite.rewrittenTitle ? rewrite.rewrittenTitle : fb.rewrittenTitle,
           seoTags: Array.isArray(rewrite.seoTags) && rewrite.seoTags.length ? rewrite.seoTags.slice(0, 10) : fb.seoTags,
           glitchHook: typeof rewrite.glitchHook === 'string' && rewrite.glitchHook ? rewrite.glitchHook : fb.glitchHook,
@@ -987,7 +1148,7 @@ Execute Chain-Loop. Return STRICT JSON matching the schema, nothing else.`;
           changedExamplesCount: typeof rewrite.changedExamplesCount === 'number' ? rewrite.changedExamplesCount : 4,
           glitchTechniques: Array.isArray(rewrite.glitchTechniques) && rewrite.glitchTechniques.length
             ? rewrite.glitchTechniques
-            : (isPremium ? ['open-loop', 'hidden-secret', 'retention-spike'] : ['basic-curiosity']),
+            : fb.glitchTechniques,
           glitchIntensity: isPremium ? 99 : 60,
           tier,
           isStealthDisguised: true,
@@ -1003,20 +1164,23 @@ Execute Chain-Loop. Return STRICT JSON matching the schema, nothing else.`;
       if (searchResults.length === 0) searchResults = await scrapeYoutubeSearch(`${glitchTitle} viral`);
       searchResults = filterViralOnly(searchResults);
       if (searchResults.length === 0) {
-        return jsonResponse({ success: true, reverseEngineered: false, fallback: true, thumbnailPrompts: generateFallbackThumbnailPrompts(glitchTitle, isPremiumReverse), sourceVideo: null, tier, viralThreshold: VIRAL_VIEW_THRESHOLD });
+        return jsonResponse({ success: true, reverseEngineered: false, fallback: true, thumbnailPrompts: generateFallbackThumbnailPrompts(glitchTitle, isPremiumReverse, outputLanguage), sourceVideo: null, tier, outputLanguage, viralThreshold: VIRAL_VIEW_THRESHOLD });
       }
       const topVideo = searchResults[0];
       const thumbnailUrl = topVideo.thumbnail || `https://i.ytimg.com/vi/${topVideo.videoId}/maxresdefault.jpg`;
-      const reverseEngineerPrompt = isPremiumReverse
-        ? `You are an elite YouTube thumbnail reverse-engineer. Extract visual DNA into 4 copy-paste-ready prompts for AI generators. Use CTR patterns: Curiosity Gap, Shock/Fear, Authority/Proof, Number/List. Include specific details. Output JSON with 4 prompts.`
-        : `You are a YouTube thumbnail advisor. Create 4 general thumbnail prompts. Safe, professional, educational. Output JSON with 4 prompts.`;
+      const reverseEngineerPrompt = `${isPremiumReverse
+        ? 'You are an elite YouTube thumbnail reverse-engineer. Extract visual DNA into 4 copy-paste-ready prompts for AI generators. Use CTR patterns: Curiosity Gap, Shock/Fear, Authority/Proof, Number/List. Include specific details.'
+        : 'You are a YouTube thumbnail advisor. Create 4 general thumbnail prompts. Keep them safe, professional, and educational.'}
+OUTPUT LANGUAGE: ${outputLanguage} (MANDATORY).
+${outputLanguageInstruction(outputLanguage)}
+Apply the language rule to all prompt and analysis values. Keep JSON keys in English. Output JSON with exactly 4 prompts.`;
       let thumbnailPrompts: string[] = [];
       let sourceVideoInfo = null;
       try {
         const reverseOutcome = await fetchOpenRouterWithRetry({
           body: {
             systemInstruction: { parts: [{ text: reverseEngineerPrompt }] },
-            contents: [{ role: 'user', parts: [{ text: `Viral video: Title: "${topVideo.title}" Views: ${topVideo.viewsText} Channel: ${topVideo.channelName} Thumbnail: ${thumbnailUrl} Search query: "${glitchTitle}" Niche: "${reverseNiche||'General'}" Create 4 prompts. Return JSON: {"prompts": [...], "analysis": "..."}` }] }],
+            contents: [{ role: 'user', parts: [{ text: `Viral video: Title: "${topVideo.title}" Views: ${topVideo.viewsText} Channel: ${topVideo.channelName} Thumbnail: ${thumbnailUrl} Search query: "${glitchTitle}" Niche: "${reverseNiche||'General'}" Required output language: "${outputLanguage}". Create 4 prompts. Return JSON: {"prompts": [...], "analysis": "..."}` }] }],
             generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 4096 },
           },
           deadlineMs: 15_000,
@@ -1026,11 +1190,17 @@ Execute Chain-Loop. Return STRICT JSON matching the schema, nothing else.`;
         if (reverseContent) {
           const reverseParsed = JSON.parse(cleanupJson(reverseContent));
           thumbnailPrompts = Array.isArray(reverseParsed.prompts) ? reverseParsed.prompts : [];
-          sourceVideoInfo = { videoId: topVideo.videoId, title: topVideo.title, views: topVideo.viewsText, channel: topVideo.channelName, thumbnailUrl, analysis: reverseParsed.analysis || 'Viral thumbnail reverse-engineered' };
+          sourceVideoInfo = { videoId: topVideo.videoId, title: topVideo.title, views: topVideo.viewsText, channel: topVideo.channelName, thumbnailUrl, analysis: reverseParsed.analysis || localizedCopy(outputLanguage, {
+            English: 'Viral thumbnail reverse-engineered',
+            Hindi: 'वायरल थंबनेल का विश्लेषण पूरा हुआ',
+            Hinglish: 'Viral thumbnail ka reverse analysis complete hua',
+          }) };
         }
-      } catch {}
-      if (thumbnailPrompts.length === 0) thumbnailPrompts = generateFallbackThumbnailPrompts(glitchTitle, isPremiumReverse);
-      return jsonResponse({ success: true, reverseEngineered: !!sourceVideoInfo, fallback: !sourceVideoInfo, thumbnailPrompts, sourceVideo: sourceVideoInfo, tier, glitchIntensity: isPremiumReverse ? 99 : 60, viralThreshold: VIRAL_VIEW_THRESHOLD });
+      } catch {
+        // Keep the localized deterministic prompts when reverse analysis fails.
+      }
+      if (thumbnailPrompts.length === 0) thumbnailPrompts = generateFallbackThumbnailPrompts(glitchTitle, isPremiumReverse, outputLanguage);
+      return jsonResponse({ success: true, reverseEngineered: !!sourceVideoInfo, fallback: !sourceVideoInfo, thumbnailPrompts, sourceVideo: sourceVideoInfo, tier, outputLanguage, glitchIntensity: isPremiumReverse ? 99 : 60, viralThreshold: VIRAL_VIEW_THRESHOLD });
     }
 
     if (action === 'threat-alerts') {
@@ -1055,20 +1225,43 @@ Execute Chain-Loop. Return STRICT JSON matching the schema, nothing else.`;
         const name = comp.channelName || 'A competitor';
         const title = comp.title || 'a new video';
         if (hoursAgo <= 6 && velocity >= 50) {
-          alerts.push({ type: 'critical', icon: '🚨', message: `THREAT: ${name} posted "${title.substring(0,50)}..." ${hoursAgo<1?'minutes ago':`${Math.round(hoursAgo)} hours ago`}. Velocity: ${velocity}/100. Deploy Clone & Crush NOW.`, competitorName: name, videoTitle: title, hoursAgo, urgencyScore: Math.min(100, Math.round((1/Math.max(0.5,hoursAgo))*velocity)) });
+          alerts.push({ type: 'critical', icon: '🚨', message: localizedCopy(outputLanguage, {
+            English: `THREAT: ${name} posted "${title.substring(0,50)}..." ${hoursAgo<1?'minutes ago':`${Math.round(hoursAgo)} hours ago`}. Velocity: ${velocity}/100. Deploy Clone & Crush NOW.`,
+            Hindi: `ख़तरा: ${name} ने “${title.substring(0,50)}...” ${hoursAgo<1?'कुछ मिनट पहले':`${Math.round(hoursAgo)} घंटे पहले`} पोस्ट किया। रफ़्तार: ${velocity}/100। अभी Clone & Crush चलाएँ।`,
+            Hinglish: `THREAT: ${name} ne “${title.substring(0,50)}...” ${hoursAgo<1?'kuch minutes pehle':`${Math.round(hoursAgo)} hours pehle`} post kiya. Velocity: ${velocity}/100. Clone & Crush abhi deploy karo.`,
+          }), competitorName: name, videoTitle: title, hoursAgo, urgencyScore: Math.min(100, Math.round((1/Math.max(0.5,hoursAgo))*velocity)) });
           wideningGapMultiplier += 0.3;
         } else if (hoursAgo <= 24 && velocity >= 30) {
-          alerts.push({ type: 'warning', icon: '⚠️', message: `ALERT: ${name} posted "${title.substring(0,50)}..." ${Math.round(hoursAgo)} hours ago. Gaining traction.`, competitorName: name, videoTitle: title, hoursAgo, urgencyScore: Math.min(80, Math.round((1/Math.max(1,hoursAgo))*velocity*0.8)) });
+          alerts.push({ type: 'warning', icon: '⚠️', message: localizedCopy(outputLanguage, {
+            English: `ALERT: ${name} posted "${title.substring(0,50)}..." ${Math.round(hoursAgo)} hours ago. Gaining traction.`,
+            Hindi: `अलर्ट: ${name} ने “${title.substring(0,50)}...” ${Math.round(hoursAgo)} घंटे पहले पोस्ट किया। वीडियो तेज़ी पकड़ रहा है।`,
+            Hinglish: `ALERT: ${name} ne “${title.substring(0,50)}...” ${Math.round(hoursAgo)} hours pehle post kiya. Video fast traction le raha hai.`,
+          }), competitorName: name, videoTitle: title, hoursAgo, urgencyScore: Math.min(80, Math.round((1/Math.max(1,hoursAgo))*velocity*0.8)) });
           wideningGapMultiplier += 0.15;
         } else if (revenue > 500) {
-          alerts.push({ type: 'info', icon: '📊', message: `INTEL: ${name}'s recent viral video generated ~$${revenue.toLocaleString()} est. revenue.`, competitorName: name, videoTitle: title, hoursAgo, urgencyScore: Math.min(50, Math.round(revenue/100)) });
+          alerts.push({ type: 'info', icon: '📊', message: localizedCopy(outputLanguage, {
+            English: `INSIGHT: ${name}'s recent viral video generated about $${revenue.toLocaleString()} in estimated revenue.`,
+            Hindi: `जानकारी: ${name} के हाल के वायरल वीडियो ने अनुमानित $${revenue.toLocaleString()} की कमाई की।`,
+            Hinglish: `INSIGHT: ${name} ke recent viral video ne approximately $${revenue.toLocaleString()} revenue generate kiya.`,
+          }), competitorName: name, videoTitle: title, hoursAgo, urgencyScore: Math.min(50, Math.round(revenue/100)) });
           wideningGapMultiplier += 0.05;
         }
       }
       alerts.sort((a,b)=>b.urgencyScore-a.urgencyScore);
       const totalRevenue = viralCompetitors.reduce((sum:number,c:any)=>sum+(c.estimatedRevenueNum||estimatedRevenueForViews(c.viewsCount || 0)),0);
       const gapPerDay = Math.round(totalRevenue * wideningGapMultiplier / 30);
-      return jsonResponse({ success: true, alerts: alerts.slice(0,5), alertCount: alerts.length, hasCritical: alerts.some(a=>a.type==='critical'), viralThreshold: VIRAL_VIEW_THRESHOLD, wideningGap: { dailyLoss: gapPerDay, monthlyLoss: gapPerDay*30, multiplier: Math.round(wideningGapMultiplier*100)/100, message: gapPerDay>0 ? `Viral competitors pulling ahead by ~$${gapPerDay.toLocaleString()}/day. Gap widens hourly.` : 'No immediate revenue gap - within range.' } });
+      const wideningGapMessage = gapPerDay > 0
+        ? localizedCopy(outputLanguage, {
+            English: `Viral competitors are pulling ahead by about $${gapPerDay.toLocaleString()}/day. The gap widens hourly.`,
+            Hindi: `वायरल प्रतियोगी हर दिन लगभग $${gapPerDay.toLocaleString()} आगे बढ़ रहे हैं। यह अंतर हर घंटे बढ़ रहा है।`,
+            Hinglish: `Viral competitors daily approximately $${gapPerDay.toLocaleString()} aage nikal rahe hain. Gap har hour badh raha hai.`,
+          })
+        : localizedCopy(outputLanguage, {
+            English: 'No immediate revenue gap—the channel is within range.',
+            Hindi: 'अभी कमाई का कोई बड़ा अंतर नहीं है—चैनल सही सीमा में है।',
+            Hinglish: 'Abhi immediate revenue gap nahi hai—channel range ke andar hai.',
+          });
+      return jsonResponse({ success: true, outputLanguage, alerts: alerts.slice(0,5), alertCount: alerts.length, hasCritical: alerts.some(a=>a.type==='critical'), viralThreshold: VIRAL_VIEW_THRESHOLD, wideningGap: { dailyLoss: gapPerDay, monthlyLoss: gapPerDay*30, multiplier: Math.round(wideningGapMultiplier*100)/100, message: wideningGapMessage } });
     }
 
     return jsonResponse({ error: 'Invalid action. Supported: profile, competitors, rewrite, thumbnail-reverse, threat-alerts' }, 400);

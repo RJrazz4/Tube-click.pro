@@ -27,6 +27,19 @@ describe("Supabase session persistence hardening", () => {
     expect(clientSource).toMatch(/autoRefreshToken:\s*true/);
     expect(clientSource).toMatch(/detectSessionInUrl:\s*true/);
     expect(clientSource).toMatch(/flowType:\s*"pkce"/);
+    expect(clientSource).toMatch(/storageKey:\s*SB_SESSION_STORAGE_KEY/);
+  });
+
+  it("keeps Supabase session and PKCE records physically distinct without repinning on verifier writes", async () => {
+    const clientSource = await readFile(join(root, "src/integrations/supabase/client.ts"), "utf8");
+
+    expect(clientSource).toMatch(/getItem:\s*\(key\)/);
+    expect(clientSource).toMatch(/setItem:\s*\(key, value\)/);
+    expect(clientSource).toMatch(/removeItem:\s*\(key\)/);
+    expect(clientSource).toContain("auxiliaryKeyFor(key)");
+    expect(clientSource).toContain("key !== SB_SESSION_STORAGE_KEY");
+    expect(clientSource).toContain("const parsedUserId = sessionUserId(value)");
+    expect(clientSource).not.toMatch(/setItem:\s*\(_key/);
   });
 
   it("serves BrowserRouter deep links so the registered production callback can mount", async () => {
@@ -50,6 +63,21 @@ describe("Supabase session persistence hardening", () => {
     expect(contextSource).toMatch(/event\.origin\s*!==\s*callbackOrigin/);
     expect(contextSource).toMatch(/event\.source\s*!==\s*authPopupRef\.current/);
     expect(contextSource).toMatch(/supabase\.auth\.getSession\(\)/);
+    expect(contextSource).toContain("rememberAuthReturnTo");
+  });
+
+  it("bootstraps non-canonical OAuth on canonical before creating the PKCE transaction", async () => {
+    const contextSource = await readFile(join(root, "src/contexts/SoftGateContext.tsx"), "utf8");
+    const callbackSource = await readFile(join(root, "src/pages/AuthCallback.tsx"), "utf8");
+
+    const canonicalGuard = contextSource.indexOf("if (!isCanonical)");
+    const oauthStart = contextSource.indexOf("supabase.auth.signInWithOAuth", canonicalGuard);
+    expect(canonicalGuard).toBeGreaterThan(-1);
+    expect(oauthStart).toBeGreaterThan(canonicalGuard);
+    expect(contextSource.slice(canonicalGuard, oauthStart)).toContain('bootstrapUrl.searchParams.set("start", "google")');
+    expect(callbackSource).toContain('search.get("start") === "google"');
+    expect(callbackSource).toContain("safeAuthReturnTo");
+    expect(callbackSource).toContain("oauthBootstrapRef.current ??=");
   });
 
   it("lets Supabase consume callback credentials exactly once", async () => {
@@ -60,6 +88,7 @@ describe("Supabase session persistence hardening", () => {
     expect(callbackSource).not.toMatch(/exchangeCodeForSession\s*\(/);
     expect(callbackSource).not.toMatch(/\.setSession\s*\(/);
     expect(callbackSource).not.toMatch(/document\.referrer/);
+    expect(callbackSource).toContain("consumeAuthReturnTo");
   });
 
   it("has no blanket localStorage wipe that could remove the Supabase refresh token", async () => {

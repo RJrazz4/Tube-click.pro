@@ -3,6 +3,16 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { createPerUserStorage } from "@/lib/storage/perUserStorage";
 import { useAuthStore } from "./useAuthStore";
 
+export type CloneCrushOutputLanguage = "English" | "Hindi" | "Hinglish";
+
+export const DEFAULT_CLONE_CRUSH_OUTPUT_LANGUAGE: CloneCrushOutputLanguage = "English";
+
+export function normalizeCloneCrushOutputLanguage(value: unknown): CloneCrushOutputLanguage {
+  return value === "Hindi" || value === "Hinglish" || value === "English"
+    ? value
+    : DEFAULT_CLONE_CRUSH_OUTPUT_LANGUAGE;
+}
+
 export interface ProfiledChannel {
   id: string;
   url: string;
@@ -59,6 +69,7 @@ export interface ScriptRewriteResult {
   targetVideoId: string;
   targetVideoTitle: string;
   originalTitle: string;
+  outputLanguage: CloneCrushOutputLanguage;
   rewrittenTitle: string;
   glitchHook: string;
   fullScript: string;
@@ -116,6 +127,19 @@ export const PRO_GHOST_CACHE_SLOTS = 5;
 export const FREE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const SEEN_IDS_RING_MAX = 200;
 
+/**
+ * Compare user-entered channel targets without allowing harmless whitespace or
+ * one trailing slash to look like a replacement. We deliberately do not
+ * rewrite a YouTube path or channel ID: those identifiers may be case-sensitive.
+ */
+export function normalizeChannelUrl(value: string): string {
+  return value.trim().replace(/\/+$/, "");
+}
+
+function isSameChannelUrl(left: string, right: string): boolean {
+  return normalizeChannelUrl(left) === normalizeChannelUrl(right);
+}
+
 function parseViews(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
   if (typeof value !== "string") return null;
@@ -143,6 +167,12 @@ interface CloneCrushState {
   savedChannels: SavedChannel[];
   activeSlotIndex: number;
   savedNiche: string | null;
+  /** Persisted language contract for all generated Clone & Crush output. */
+  outputLanguage: CloneCrushOutputLanguage;
+  /** Persisted, unsubmitted input text. */
+  channelDraft: string;
+  /** The first URL submitted while on Free. UI changes cannot replace it. */
+  freeLockedChannelUrl: string | null;
 
   // Sliding 3-slot conveyor
   conveyorQueue: CompetitorVideo[];
@@ -172,7 +202,10 @@ interface CloneCrushState {
   setProfile: (profile: ProfiledChannel | null, sourceUrl?: string | null) => void;
   setIsProfiling: (isProfiling: boolean) => void;
   setSavedNiche: (niche: string | null) => void;
+  setOutputLanguage: (language: CloneCrushOutputLanguage) => void;
   setLastChannelUrl: (url: string | null) => void;
+  setChannelDraft: (draft: string, tier?: "free" | "pro") => { ok: boolean; reason?: "URL_LOCKED" };
+  submitChannelUrl: (url: string, tier?: "free" | "pro") => { ok: boolean; reason?: "EMPTY_URL" | "URL_LOCKED"; url?: string };
 
   setCompetitors: (competitors: CompetitorVideo[], envyMetrics?: EnvyMetrics | null, meta?: { nextCursor?: string | null; windowId?: string | null }) => void;
   setConveyorQueue: (queue: CompetitorVideo[]) => void;
@@ -187,6 +220,8 @@ interface CloneCrushState {
   deleteRewrite: (id: string) => void;
 
   startFreeCooldown: (videoId: string, durationMs?: number) => void;
+  /** Start the active Slot 1 timer without marking it consumed. */
+  startFreeConveyorTimer: (durationMs?: number) => void;
   clearFreeCooldown: () => void;
   isInFreeCooldown: () => boolean;
   expireFreeCooldownCycle: () => void;
@@ -196,7 +231,11 @@ interface CloneCrushState {
   advanceAfterConsume: (nextVideo?: CompetitorVideo | null, nextCursor?: string | null) => void;
   markSeenVideo: (videoId: string) => void;
 
-  saveChannelToCache: (channel: Pick<SavedChannel, "url" | "handle" | "name" | "avatar" | "niche">, slotIndex?: number) => { ok: boolean; reason?: string; slotIndex?: number };
+  saveChannelToCache: (
+    channel: Pick<SavedChannel, "url" | "handle" | "name" | "avatar" | "niche">,
+    slotIndex?: number,
+    tier?: "free" | "pro",
+  ) => { ok: boolean; reason?: string; slotIndex?: number };
   removeChannelFromCache: (slotIndex: number) => void;
   switchActiveSlot: (slotIndex: number) => void;
 
@@ -228,6 +267,9 @@ export const useCloneCrushStore = create<CloneCrushState>()(
       savedChannels: [],
       activeSlotIndex: 0,
       savedNiche: null,
+      outputLanguage: DEFAULT_CLONE_CRUSH_OUTPUT_LANGUAGE,
+      channelDraft: "",
+      freeLockedChannelUrl: null,
       conveyorQueue: [],
       activeVideoId: null,
       conveyorCursor: null,
@@ -269,9 +311,46 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         ...(sourceUrl ? { lastChannelUrl_deprecated: undefined } : {}),
       })),
       setIsProfiling: (isProfiling) => set({ isProfiling }),
+      setOutputLanguage: (outputLanguage) => set({
+        outputLanguage: normalizeCloneCrushOutputLanguage(outputLanguage),
+      }),
       setLastChannelUrl: (_url) => {
         // Deprecated in v6 — Ghost Cache owns URL persistence. No-op left for
         // backward compatibility with older call sites.
+      },
+      setChannelDraft: (draft, tier = "free") => {
+        const state = get();
+        if (
+          tier !== "pro" &&
+          state.freeLockedChannelUrl &&
+          !isSameChannelUrl(draft, state.freeLockedChannelUrl)
+        ) {
+          return { ok: false, reason: "URL_LOCKED" };
+        }
+        set({ channelDraft: draft });
+        return { ok: true };
+      },
+      submitChannelUrl: (url, tier = "free") => {
+        const submittedUrl = url.trim();
+        if (!submittedUrl) return { ok: false, reason: "EMPTY_URL" };
+
+        const state = get();
+        if (
+          tier !== "pro" &&
+          state.freeLockedChannelUrl &&
+          !isSameChannelUrl(submittedUrl, state.freeLockedChannelUrl)
+        ) {
+          return { ok: false, reason: "URL_LOCKED" };
+        }
+
+        // Lock + draft are committed in one Zustand write. A second rapid Free
+        // submission therefore observes the first URL and cannot replace it.
+        set({
+          channelDraft: submittedUrl,
+          freeLockedChannelUrl:
+            tier === "pro" ? state.freeLockedChannelUrl : (state.freeLockedChannelUrl ?? submittedUrl),
+        });
+        return { ok: true, url: submittedUrl };
       },
       setSavedNiche: (niche) => set((state) => ({
         savedNiche: niche && niche.trim().length > 0 ? niche.trim() : null,
@@ -335,11 +414,25 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         };
       }),
 
-      startFreeCooldown: (videoId, durationMs = FREE_COOLDOWN_MS) => set({
-        freeCooldownUntil: Date.now() + durationMs,
+      startFreeCooldown: (videoId, durationMs = FREE_COOLDOWN_MS) => set((state) => ({
+        // Consuming Slot 1 pins its result but never restarts an already
+        // running conveyor window. Every active result receives exactly the
+        // window granted when it was first exposed/promoted.
+        freeCooldownUntil:
+          state.freeCooldownUntil && state.freeCooldownUntil > Date.now()
+            ? state.freeCooldownUntil
+            : Date.now() + durationMs,
         freeLockedVideoId: videoId,
         conveyorShiftPending: false,
-      }),
+      })),
+
+      startFreeConveyorTimer: (durationMs = FREE_COOLDOWN_MS) => set((state) => ({
+        freeCooldownUntil: state.conveyorQueue[0] ? Date.now() + durationMs : null,
+        // The promoted/current slot is available until consumed. The server's
+        // rolling quota is still authoritative when Execute is pressed.
+        freeLockedVideoId: null,
+        conveyorShiftPending: false,
+      })),
 
       clearFreeCooldown: () => set({
         freeCooldownUntil: null,
@@ -365,7 +458,10 @@ export const useCloneCrushStore = create<CloneCrushState>()(
           rewrites: state.rewrites.filter((r) => r.targetVideoId !== evictedVideoId),
           threatAlerts: [],
           wideningGap: null,
-          freeCooldownUntil: null,
+          // Every promoted Slot 1 receives a fresh 24-hour window. It is not
+          // marked consumed until a successful Free Chain-Loop, so it remains
+          // actionable while the server independently enforces rolling quota.
+          freeCooldownUntil: shifted[0] ? Date.now() + FREE_COOLDOWN_MS : null,
           freeLockedVideoId: null,
           conveyorShiftPending: true,
         };
@@ -376,11 +472,22 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         if (filtered.length === 0) return state;
         // Append, then re-stamp to enforce size+lock invariants.
         const next = stampConveyor([...state.conveyorQueue, filtered[0]]);
+        const needsFreshSlotOneTimer = Boolean(
+          next[0] &&
+          state.conveyorShiftPending &&
+          (!state.freeCooldownUntil || state.freeCooldownUntil <= Date.now()),
+        );
         return {
           conveyorQueue: next,
           competitors: next,
           competitorsFetchedAt: new Date().toISOString(),
           conveyorAppending: false,
+          // If expiry emptied a short queue, this refill is the newly exposed
+          // Slot 1 and must receive the same fresh 24-hour window as a promoted
+          // teaser. A normal append behind an existing Slot 1 keeps its timer.
+          freeCooldownUntil: needsFreshSlotOneTimer
+            ? Date.now() + FREE_COOLDOWN_MS
+            : state.freeCooldownUntil,
           seenVideoIds: pushSeen(state.seenVideoIds, filtered[0].videoId),
         };
       }),
@@ -412,11 +519,16 @@ export const useCloneCrushStore = create<CloneCrushState>()(
 
       markSeenVideo: (videoId) => set((state) => ({ seenVideoIds: pushSeen(state.seenVideoIds, videoId) })),
 
-      saveChannelToCache: (channel, slotIndex) => {
+      saveChannelToCache: (channel, slotIndex, tier = "free") => {
         const state = get();
-        const license = useAuthStore.getState().license;
-        const isPro = license?.tier === "pro" && (!license.expiresAt || new Date(license.expiresAt).getTime() > Date.now());
+        const isPro = tier === "pro";
         const maxSlots = isPro ? PRO_GHOST_CACHE_SLOTS : FREE_GHOST_CACHE_SLOTS;
+
+        // Defense in depth for call sites that bypass submitChannelUrl. Fully
+        // hydrated canonical profile URLs are written by setProfile instead.
+        if (!isPro && state.freeLockedChannelUrl && !isSameChannelUrl(channel.url, state.freeLockedChannelUrl)) {
+          return { ok: false, reason: "URL_LOCKED" };
+        }
 
         const existing = state.savedChannels.find((c) => c.url === channel.url);
         const targetSlot = existing ? existing.slotIndex : (typeof slotIndex === "number" ? slotIndex : state.savedChannels.length);
@@ -498,6 +610,9 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         savedChannels: [],
         activeSlotIndex: 0,
         savedNiche: null,
+        outputLanguage: DEFAULT_CLONE_CRUSH_OUTPUT_LANGUAGE,
+        channelDraft: "",
+        freeLockedChannelUrl: null,
         conveyorQueue: [],
         competitors: [],
         activeVideoId: null,
@@ -520,13 +635,20 @@ export const useCloneCrushStore = create<CloneCrushState>()(
     }),
     {
       name: "tubegenius-clone-crush-store",
-      version: 6,
+      version: 8,
       storage: createJSONStorage(() => createPerUserStorage(
         "tubegenius-clone-crush-store",
         () => useAuthStore.getState().user?.id ?? null,
       )),
       migrate: (persistedState: any, version) => {
         const base = persistedState && typeof persistedState === "object" ? persistedState : {};
+        const outputLanguage = normalizeCloneCrushOutputLanguage(base.outputLanguage);
+        const rewrites = Array.isArray(base.rewrites)
+          ? base.rewrites.map((rewrite: ScriptRewriteResult) => ({
+              ...rewrite,
+              outputLanguage: normalizeCloneCrushOutputLanguage(rewrite?.outputLanguage ?? outputLanguage),
+            }))
+          : [];
         const existingCompetitors = Array.isArray(base.competitors) ? viralOnly(base.competitors) : [];
         const queue = Array.isArray(base.conveyorQueue) && base.conveyorQueue.length
           ? stampConveyor(base.conveyorQueue)
@@ -539,11 +661,32 @@ export const useCloneCrushStore = create<CloneCrushState>()(
           : legacyUrl
             ? [{ slotIndex: 0, url: legacyUrl, handle: legacyUrl, name: "Saved Channel", avatar: "", niche: typeof base.savedNiche === "string" ? base.savedNiche : null, savedAt: new Date().toISOString() }]
             : [];
+        // A draft is not proof of submission. Only an existing lock or legacy
+        // state written after a successful profile/cache save may become the
+        // immutable Free URL during migration.
+        const migratedSubmittedUrl =
+          (typeof base.freeLockedChannelUrl === "string" && base.freeLockedChannelUrl) ||
+          legacyUrl ||
+          migratedChannels[0]?.url ||
+          (typeof base.profile?.url === "string" ? base.profile.url : "");
         return {
           ...base,
+          outputLanguage,
+          rewrites,
+          channelDraft:
+            typeof base.channelDraft === "string"
+              ? base.channelDraft
+              : migratedSubmittedUrl,
+          // Existing slot-0 channels came from a prior successful submission;
+          // adopt them as the immutable Free lock during the v6 -> v8 upgrade.
+          // Never adopt channelDraft: it may be persisted but unsubmitted.
+          freeLockedChannelUrl: migratedSubmittedUrl || null,
           competitors: queue,
           conveyorQueue: queue,
-          freeCooldownUntil: typeof base.freeCooldownUntil === "number" ? base.freeCooldownUntil : null,
+          freeCooldownUntil:
+            typeof base.freeCooldownUntil === "number"
+              ? base.freeCooldownUntil
+              : (queue[0] ? Date.now() + FREE_COOLDOWN_MS : null),
           freeLockedVideoId: typeof base.freeLockedVideoId === "string" ? base.freeLockedVideoId : null,
           savedNiche: typeof base.savedNiche === "string" ? base.savedNiche : null,
           activeVideoId: typeof base.activeVideoId === "string" ? base.activeVideoId : (queue[0]?.videoId ?? null),
@@ -561,6 +704,9 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         savedChannels: state.savedChannels,
         activeSlotIndex: state.activeSlotIndex,
         savedNiche: state.savedNiche,
+        outputLanguage: state.outputLanguage,
+        channelDraft: state.channelDraft,
+        freeLockedChannelUrl: state.freeLockedChannelUrl,
         conveyorQueue: state.conveyorQueue,
         competitors: state.conveyorQueue,
         competitorsFetchedAt: state.competitorsFetchedAt,
@@ -570,6 +716,9 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         activeVideoId: state.activeVideoId,
         conveyorCursor: state.conveyorCursor,
         conveyorWindowId: state.conveyorWindowId,
+        // Persist the brief shift-before-append phase so a tab close cannot
+        // strand a shortened queue without requesting its replacement tile.
+        conveyorShiftPending: state.conveyorShiftPending,
         seenVideoIds: state.seenVideoIds,
       }),
       onRehydrateStorage: () => (state) => {
@@ -580,6 +729,15 @@ export const useCloneCrushStore = create<CloneCrushState>()(
         if (!state.activeVideoId) state.activeVideoId = queue[0]?.videoId ?? null;
         if (!Array.isArray(state.seenVideoIds)) state.seenVideoIds = [];
         if (!Array.isArray(state.savedChannels)) state.savedChannels = [];
+        state.outputLanguage = normalizeCloneCrushOutputLanguage(state.outputLanguage);
+        if (Array.isArray(state.rewrites)) {
+          state.rewrites = state.rewrites.map((rewrite) => ({
+            ...rewrite,
+            outputLanguage: normalizeCloneCrushOutputLanguage(rewrite.outputLanguage ?? state.outputLanguage),
+          }));
+        }
+        if (typeof state.channelDraft !== "string") state.channelDraft = state.freeLockedChannelUrl ?? "";
+        if (typeof state.freeLockedChannelUrl !== "string") state.freeLockedChannelUrl = null;
       },
     }
   )

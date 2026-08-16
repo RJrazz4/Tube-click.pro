@@ -12,16 +12,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { getCanonicalRoot } from "@/lib/domain/canonical";
 import { consumeGuestPreview, loadProEntitlement, RegistrationRequiredError } from "@/lib/auth/guestAccess";
 import { loadTrialEntitlement } from "@/lib/auth/trialAccess";
+import { rememberAuthReturnTo, safeAuthReturnTo } from "@/lib/auth/pendingAuth";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useWorkflowStore } from "@/stores/useWorkflowStore";
-import { purgeAllUserStores, pinUserId } from "@/lib/storage/perUserStorage";
+import { getPinnedUserId, purgeAllUserStores, pinUserId } from "@/lib/storage/perUserStorage";
 
 interface SoftGateContextValue {
   /** True until Supabase has restored (or definitively rejected) local session storage. */
   isAuthLoading: boolean;
+  /** True while the current session is being reconciled with server entitlement. */
+  isEntitlementLoading: boolean;
+  /** False when entitlement reconciliation failed; gated tools must fail safe to Free. */
+  isEntitlementVerified: boolean;
   isAuthenticated: boolean;
   runGuarded: <T>(actionLabel: string, action: () => Promise<T> | T) => Promise<T | undefined>;
   requestAuthentication: (actionLabel?: string) => Promise<boolean>;
@@ -39,6 +44,8 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   // Never treat the initial false value as a signed-out decision. Supabase
   // restores persisted tokens asynchronously from localStorage.
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isEntitlementLoading, setIsEntitlementLoading] = useState(true);
+  const [isEntitlementVerified, setIsEntitlementVerified] = useState(false);
   // Hydrate the presentation layer from the durable app snapshot immediately.
   // Supabase remains the source of truth, but this prevents a returning user
   // from seeing a signed-out header while its local refresh token is restored.
@@ -54,7 +61,11 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   // be bound to the popup that this provider created, rather than trusting an
   // arbitrary window that knows the message shape.
   const authPopupRef = useRef<Window | null>(null);
-  const lastUserIdRef = useRef<string | null>(null);
+  // The storage pin is written before React mounts. Initializing from it avoids
+  // treating an ordinary same-user reload as an account switch and purging the
+  // very persisted drafts/results we are about to restore.
+  const lastUserIdRef = useRef<string | null>(getPinnedUserId());
+  const sessionSyncGenerationRef = useRef(0);
 
   /**
    * Wipe zustand-persisted client state whenever the authenticated user
@@ -91,12 +102,16 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const syncSession = useCallback(async (session: Session | null) => {
+    const generation = ++sessionSyncGenerationRef.current;
     const incomingUserId = session?.user?.id ?? null;
+    setIsEntitlementLoading(true);
+    setIsEntitlementVerified(false);
 
     // If the authenticated user identity has changed since the last sync
     // (new login, account switch, or sign-out), wipe client-side state
     // BEFORE hydrating the new user's blobs so there is zero flash of the
-    // prior user's channel / scripts / workflow.
+    // prior user's channel / scripts / workflow. A normal same-user reload
+    // is identified by the durable pin and must retain its persisted state.
     if (incomingUserId !== lastUserIdRef.current) {
       resetClientStateForUser(incomingUserId);
     }
@@ -106,6 +121,10 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setLicense({ tier: "free", status: "active", expiresAt: undefined });
       setAppTier("free");
+      if (generation === sessionSyncGenerationRef.current) {
+        setIsEntitlementVerified(true);
+        setIsEntitlementLoading(false);
+      }
       return;
     }
 
@@ -124,14 +143,16 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       createdAt: user.created_at,
       lastActive: new Date().toISOString(),
     });
-    // Authentication is complete now; entitlement is an independent follow-up
-    // request and must not hold the sign-in dialog or guarded action open.
-    finishPending(true);
+    // Authentication is complete, but a same-page guarded continuation must
+    // remain paused until this new identity's entitlement is reconciled. If we
+    // resolved here, the callback captured by the anonymous render could run
+    // with the previous identity's tier readiness.
 
     try {
       const entitlement = await loadProEntitlement();
       // Phase 4: a bot-granted trial also confers Pro access.
       const trial = await loadTrialEntitlement();
+      if (generation !== sessionSyncGenerationRef.current) return;
 
       const referralActive =
         entitlement.active && entitlement.expiresAt && new Date(entitlement.expiresAt).getTime() > Date.now();
@@ -147,17 +168,25 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
         setAppTier("pro");
       } else {
         // Unconditionally downgrade when the server says not pro. This
-        // prevents a stale localStorage { tier: "pro" } (with no expiresAt
-        // or an expired one) from ever being treated as an active license
-        // on future sessions — closing the persistent-state bypass.
+        // prevents a stale localStorage { tier: "pro" } from reaching a
+        // premium request during a later Free session.
         setLicense({ tier: "free", status: "active", expiresAt: undefined });
         setAppTier("free");
       }
+      setIsEntitlementVerified(true);
     } catch {
-      // Authentication remains valid even if entitlement sync is temporarily unavailable.
-      // Do NOT downgrade here on network failure — but also do NOT promote.
+      // Keep the durable snapshot for offline presentation, but gated tools
+      // fail safe to Free while isEntitlementVerified is false.
+    } finally {
+      if (generation === sessionSyncGenerationRef.current) {
+        setIsEntitlementLoading(false);
+        // Resolve only for the latest authenticated identity. Entitlement
+        // failure still resumes safely: isEntitlementVerified remains false,
+        // so feature entry points fail closed to Free.
+        finishPending(true);
+      }
     }
-  }, [finishPending, setAppTier, setLicense, setUser]);
+  }, [finishPending, resetClientStateForUser, setAppTier, setLicense, setUser]);
 
   useEffect(() => {
     let active = true;
@@ -268,6 +297,22 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
     setAuthError("");
     try {
       const canonicalRoot = getCanonicalRoot();
+      const isCanonical = window.location.origin === canonicalRoot;
+
+      if (!isCanonical) {
+        // PKCE verifiers are origin-bound. Start the OAuth transaction on the
+        // canonical origin rather than creating an unusable verifier on a
+        // preview host and sending its code to a canonical callback. Only a
+        // validated internal path crosses origins; no token or verifier does.
+        const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        const returnTo = safeAuthReturnTo(currentPath, "/") ?? "/";
+        const bootstrapUrl = new URL("/auth/callback", canonicalRoot);
+        bootstrapUrl.searchParams.set("start", "google");
+        bootstrapUrl.searchParams.set("returnTo", returnTo);
+        window.location.assign(bootstrapUrl.toString());
+        return;
+      }
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -285,24 +330,13 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
       if (!data.url) throw new Error("Google authentication could not be started");
 
-      // If we're already on the canonical domain, pop-up flow works because
-      // the popup and opener share localStorage (PKCE code_verifier lives
-      // there). If we're on a preview/non-canonical origin the popup runs
-      // on canonical — which has a DIFFERENT localStorage — so PKCE exchange
-      // fails in the popup and the opener never sees a session. Fall back
-      // to a full-page redirect in that case. The callback posts back to
-      // the opener only for popup flows; for redirects finishNavigation()
-      // uses window.location.replace() back to the app.
-      const isCanonical = window.location.origin === canonicalRoot;
-      if (!isCanonical) {
-        window.location.assign(data.url);
-        return;
-      }
-
       const popup = window.open(data.url, "tubeclick-google-auth", "popup=yes,width=520,height=720");
       if (!popup) {
         // Popup blocked — fall back to top-level redirect so the user
-        // always gets a working sign-in path.
+        // always gets a working sign-in path. The callback consumes this
+        // tab-scoped location instead of dropping the user on a blank/root
+        // screen after authentication.
+        rememberAuthReturnTo();
         window.location.assign(data.url);
         return;
       }
@@ -339,8 +373,22 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<SoftGateContextValue>(
-    () => ({ isAuthLoading, isAuthenticated, runGuarded, requestAuthentication }),
-    [isAuthLoading, isAuthenticated, requestAuthentication, runGuarded],
+    () => ({
+      isAuthLoading,
+      isEntitlementLoading,
+      isEntitlementVerified,
+      isAuthenticated,
+      runGuarded,
+      requestAuthentication,
+    }),
+    [
+      isAuthLoading,
+      isEntitlementLoading,
+      isEntitlementVerified,
+      isAuthenticated,
+      requestAuthentication,
+      runGuarded,
+    ],
   );
 
   return (
