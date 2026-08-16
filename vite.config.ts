@@ -15,6 +15,8 @@ export default defineConfig(({ mode }) => ({
     // Bind to IPv6 + IPv4 so the dev server is reachable from containers
     // and on the local network on all host OSes.
     host: "::",
+    // Arena live previews proxy Vite through a per-session e2b.app host.
+    allowedHosts: [".e2b.app"],
     port: 8080,
   },
   plugins: [react()],

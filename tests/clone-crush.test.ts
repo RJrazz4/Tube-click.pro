@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import cloneCrushHandler from "../api/clone-crush";
+import cloneCrushHandler, {
+  normalizeCloneCrushOutputLanguage,
+  outputLanguageInstruction,
+  scrapeYoutubeSearch,
+} from "../api/clone-crush";
 
 const originalApiKey = process.env.YOUTUBE_API_KEY;
 const originalViralThreshold = process.env.VIRAL_VIEW_THRESHOLD;
@@ -13,6 +17,69 @@ function buildRequest(body: unknown) {
     body: JSON.stringify(body),
   });
 }
+
+describe("Clone & Crush output-language contract", () => {
+  it("normalizes the three supported languages and defaults untrusted input to English", () => {
+    expect(normalizeCloneCrushOutputLanguage("English")).toBe("English");
+    expect(normalizeCloneCrushOutputLanguage(" hindi ")).toBe("Hindi");
+    expect(normalizeCloneCrushOutputLanguage("HINGLISH")).toBe("Hinglish");
+    expect(normalizeCloneCrushOutputLanguage("Spanish")).toBe("English");
+    expect(normalizeCloneCrushOutputLanguage(null)).toBe("English");
+  });
+
+  it("requires fluent Devanagari Hindi and natural conversational Hinglish in AI prompts", () => {
+    expect(outputLanguageInstruction("Hindi")).toMatch(/Devanagari/);
+    expect(outputLanguageInstruction("Hindi")).toMatch(/Do not switch into Hinglish/);
+    expect(outputLanguageInstruction("Hinglish")).toMatch(/natural, conversational Hinglish/);
+    expect(outputLanguageInstruction("Hinglish")).toMatch(/Roman-script Hindi-English code-switching/);
+  });
+
+  it("localizes generated threat insights and echoes the normalized language", async () => {
+    const res = await cloneCrushHandler(buildRequest({
+      action: "threat-alerts",
+      language: "Hindi",
+      competitors: [{
+        videoId: "viral-language-test",
+        title: "AI Creator Breakthrough",
+        channelName: "Creator Lab",
+        viewsCount: 100_000,
+        publishedDate: "1 hour ago",
+        viralVelocityScore: 82,
+      }],
+    }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.outputLanguage).toBe("Hindi");
+    expect(body.alerts[0].message).toMatch(/[\u0900-\u097F]/);
+    expect(body.wideningGap.message).toMatch(/[\u0900-\u097F]/);
+  });
+});
+
+describe("YouTube search fallback scraper", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("matches ordinary JSON quotes in YouTube HTML without requiring literal backslashes", async () => {
+    const html = `
+      <script>
+        {"videoId":"abc123DEF45","title":{"runs":[{"text":"Ordinary JSON Viral Title"}]},"viewCountText":{"simpleText":"125K views"}}
+      </script>
+    `;
+    const fetchMock = vi.fn().mockResolvedValue(new Response(html, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const videos = await scrapeYoutubeSearch("creator tips");
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(videos).toHaveLength(1);
+    expect(videos[0]).toMatchObject({
+      videoId: "abc123DEF45",
+      title: "Ordinary JSON Viral Title",
+      viewsCount: 125_000,
+    });
+  });
+});
 
 describe("YouTube API Key Rotation & Timeout / Error Propagation", () => {
   beforeEach(() => {

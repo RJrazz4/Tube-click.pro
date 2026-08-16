@@ -9,59 +9,88 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-// Per-user namespaced auth/session storage.
-//
-// Why: Supabase persists its session (access+refresh JWTs) under a fixed
-// sb-<project>-auth-token key by default. On a shared device that means
-// User A's refresh token can be read into User B's session on a stale
-// hydration. This adapter stores the Supabase token blob under a
-// user-id-namespaced key derived from the SAME durable pin
-// (`tc:last-auth-user-id`) that the zustand perUserStorage uses — so
-// tokens AND app-state always move together between guest/user slots,
-// and there is zero window where the JS layer thinks a different user
-// is signed in than Supabase does.
+// Supabase uses more than one storage key. In PKCE mode the session record and
+// `${storageKey}-code-verifier` must remain separate or the callback cannot
+// exchange its authorization code. The session itself is additionally scoped
+// to the durable user pin so app state and auth state hydrate from the same
+// identity bucket on shared devices.
 const SB_AUTH_KEY_BASE = `sb-auth-token:${btoa(SUPABASE_URL || "").slice(0, 16)}`;
-function namespacedKeyFor(uid: string | null): string {
+const SB_SESSION_STORAGE_KEY = SB_AUTH_KEY_BASE;
+
+function namespacedSessionKeyFor(uid: string | null): string {
   if (uid) return `${SB_AUTH_KEY_BASE}:u:${uid}`;
   return `${SB_AUTH_KEY_BASE}:guest`;
 }
-function currentNamespacedKey(): string {
-  return namespacedKeyFor(getPinnedUserId());
+
+function auxiliaryKeyFor(supabaseKey: string): string {
+  return `${SB_AUTH_KEY_BASE}:key:${encodeURIComponent(supabaseKey)}`;
 }
+
+function sessionUserId(value: string): string | null {
+  try {
+    const parsed = JSON.parse(value);
+    const userId = parsed?.user?.id;
+    return typeof userId === 'string' && userId.trim() ? userId : null;
+  } catch {
+    return null;
+  }
+}
+
 const namespacedAuthStorage: {
   getItem: (key: string) => string | null;
   setItem: (key: string, value: string) => void;
   removeItem: (key: string) => void;
 } = {
-  getItem: () => {
-    try { return localStorage.getItem(currentNamespacedKey()); } catch { return null; }
-  },
-  setItem: (_key, value) => {
+  getItem: (key) => {
     try {
-      // When Supabase persists a new session, extract the user id and pin
-      // future reads/writes to that user's namespace BEFORE computing the
-      // key so we never write the new session into the old user's bucket.
-      let userId: string | null = null;
-      try {
-        const parsed = JSON.parse(value);
-        userId = parsed?.user?.id ?? null;
-      } catch {}
-      pinUserId(userId);
-      localStorage.setItem(namespacedKeyFor(userId), value);
-    } catch {}
+      const physicalKey = key === SB_SESSION_STORAGE_KEY
+        ? namespacedSessionKeyFor(getPinnedUserId())
+        : auxiliaryKeyFor(key);
+      return localStorage.getItem(physicalKey);
+    } catch {
+      return null;
+    }
   },
-  removeItem: () => {
+  setItem: (key, value) => {
     try {
-      const key = currentNamespacedKey();
-      localStorage.removeItem(key);
+      if (key !== SB_SESSION_STORAGE_KEY) {
+        // PKCE verifiers and any future Supabase records are keyed by the exact
+        // logical key Supabase supplied. They must never repin user identity.
+        localStorage.setItem(auxiliaryKeyFor(key), value);
+        return;
+      }
+
+      // Only a successfully parsed session with a real user id can change the
+      // durable pin. Invalid/session-adjacent records stay in the current bucket
+      // and cannot silently move the app back to the guest namespace.
+      const parsedUserId = sessionUserId(value);
+      if (parsedUserId) pinUserId(parsedUserId);
+      localStorage.setItem(
+        namespacedSessionKeyFor(parsedUserId ?? getPinnedUserId()),
+        value,
+      );
+    } catch {
+      // Storage can be unavailable in hardened/private browser contexts.
+    }
+  },
+  removeItem: (key) => {
+    try {
+      if (key !== SB_SESSION_STORAGE_KEY) {
+        localStorage.removeItem(auxiliaryKeyFor(key));
+        return;
+      }
+      localStorage.removeItem(namespacedSessionKeyFor(getPinnedUserId()));
       pinUserId(null);
-    } catch {}
+    } catch {
+      // A failed cleanup must not crash sign-out or callback completion.
+    }
   },
 };
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: namespacedAuthStorage,
+    storageKey: SB_SESSION_STORAGE_KEY,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,

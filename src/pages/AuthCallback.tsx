@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { getCanonicalRoot } from "@/lib/domain/canonical";
+import { consumeAuthReturnTo, rememberAuthReturnTo, safeAuthReturnTo } from "@/lib/auth/pendingAuth";
 
 /**
  * Supabase owns callback parsing through detectSessionInUrl. This page waits for
@@ -15,6 +16,9 @@ import { getCanonicalRoot } from "@/lib/domain/canonical";
 export default function AuthCallback() {
   const [status, setStatus] = useState<"working" | "complete" | "error">("working");
   const [errorMessage, setErrorMessage] = useState("");
+  // React StrictMode replays effects in development. Share one bootstrap
+  // promise so that replay cannot create two PKCE verifiers/OAuth URLs.
+  const oauthBootstrapRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -39,15 +43,52 @@ export default function AuthCallback() {
         return;
       }
 
-      // Some mobile browsers open OAuth without retaining window.opener. In
-      // that case this callback is the active tab, so return to the application
-      // after the provider above has already synchronized the Zustand profile.
-      timer = window.setTimeout(() => window.location.replace(getCanonicalRoot()), 500);
+      // Some mobile browsers open OAuth without retaining window.opener, and a
+      // blocked popup falls back to a full-page redirect. Return that tab to the
+      // exact internal workflow it came from rather than the application root.
+      const returnTo = consumeAuthReturnTo();
+      timer = window.setTimeout(() => {
+        window.location.replace(new URL(returnTo, getCanonicalRoot()).toString());
+      }, 500);
     };
 
     const finish = async () => {
       try {
         const search = new URLSearchParams(window.location.search);
+
+        // A non-canonical deployment lands here first so the PKCE transaction
+        // itself is created on the same canonical origin that will exchange the
+        // callback code. The only transported state is a validated app-internal
+        // return path, persisted here for the subsequent provider round trip.
+        if (search.get("start") === "google") {
+          oauthBootstrapRef.current ??= (async () => {
+            const canonicalRoot = getCanonicalRoot();
+            const returnTo = safeAuthReturnTo(search.get("returnTo"), "/") ?? "/";
+            if (window.location.origin !== new URL(canonicalRoot).origin) {
+              const bootstrapUrl = new URL("/auth/callback", canonicalRoot);
+              bootstrapUrl.searchParams.set("start", "google");
+              bootstrapUrl.searchParams.set("returnTo", returnTo);
+              window.location.replace(bootstrapUrl.toString());
+              return;
+            }
+
+            rememberAuthReturnTo(returnTo);
+            const { data, error } = await supabase.auth.signInWithOAuth({
+              provider: "google",
+              options: {
+                redirectTo: `${canonicalRoot}/auth/callback`,
+                skipBrowserRedirect: true,
+                queryParams: { access_type: "offline", prompt: "consent" },
+              },
+            });
+            if (error) throw error;
+            if (!data.url) throw new Error("Google authentication could not be started");
+            window.location.replace(data.url);
+          })();
+          await oauthBootstrapRef.current;
+          return;
+        }
+
         const hash = new URLSearchParams(window.location.hash.slice(1));
         const oauthError =
           search.get("error_description") ||

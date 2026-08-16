@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
-  Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, Award, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio, Database, PlusCircle, Shield,
+  Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, Award, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio, Database, PlusCircle, Shield, Languages,
 } from "lucide-react";
 import { GhostInterrogationDrawer } from "@/components/ghost/GhostInterrogationDrawer";
 import { GhostSquadDossier } from "@/components/ghost/GhostSquadDossier";
@@ -22,8 +22,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { useCloneCrushStore, CompetitorVideo, ProfiledChannel, FREE_COOLDOWN_MS, CONVEYOR_SIZE, FREE_GHOST_CACHE_SLOTS, PRO_GHOST_CACHE_SLOTS } from "@/stores/useCloneCrushStore";
+import {
+  useCloneCrushStore,
+  CompetitorVideo,
+  ProfiledChannel,
+  normalizeCloneCrushOutputLanguage,
+  CONVEYOR_SIZE,
+  FREE_GHOST_CACHE_SLOTS,
+  PRO_GHOST_CACHE_SLOTS,
+} from "@/stores/useCloneCrushStore";
 import { useContentStore } from "@/stores/useContentStore";
 import { useAuthStore, isProTier } from "@/stores/useAuthStore";
 import { useTranscriptExtraction, useCloneCrushMutation } from "@/hooks/useSecureQuery";
@@ -45,6 +54,129 @@ function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 }
 
 const VIRAL_VIEW_THRESHOLD = 50_000;
+const PENDING_AUTH_WORKFLOW_KEY = "tc:clone-crush:pending-auth:v1";
+const PENDING_AUTH_WORKFLOW_MAX_AGE_MS = 30 * 60 * 1000;
+
+type CloneCrushStoreSnapshot = ReturnType<(typeof useCloneCrushStore)["getState"]>;
+type PendingAuthWorkflowState = Pick<
+  CloneCrushStoreSnapshot,
+  | "profile"
+  | "savedChannels"
+  | "activeSlotIndex"
+  | "savedNiche"
+  | "outputLanguage"
+  | "channelDraft"
+  | "freeLockedChannelUrl"
+  | "conveyorQueue"
+  | "competitors"
+  | "activeVideoId"
+  | "conveyorCursor"
+  | "conveyorWindowId"
+  | "conveyorShiftPending"
+  | "seenVideoIds"
+  | "competitorsFetchedAt"
+  | "envyMetrics"
+  | "threatAlerts"
+  | "wideningGap"
+  | "freeCooldownUntil"
+  | "freeLockedVideoId"
+>;
+
+type PendingAuthWorkflow = {
+  version: 1;
+  expiresAt: number;
+  selectedVideoId: string;
+  state: PendingAuthWorkflowState;
+};
+
+function createPendingAuthWorkflow(
+  state: CloneCrushStoreSnapshot,
+  selectedVideoId: string,
+): PendingAuthWorkflow {
+  return {
+    version: 1,
+    expiresAt: Date.now() + PENDING_AUTH_WORKFLOW_MAX_AGE_MS,
+    selectedVideoId,
+    state: {
+      profile: state.profile,
+      savedChannels: state.savedChannels,
+      activeSlotIndex: state.activeSlotIndex,
+      savedNiche: state.savedNiche,
+      outputLanguage: state.outputLanguage,
+      channelDraft: state.channelDraft,
+      freeLockedChannelUrl: state.freeLockedChannelUrl,
+      conveyorQueue: state.conveyorQueue,
+      competitors: state.competitors,
+      activeVideoId: state.activeVideoId,
+      conveyorCursor: state.conveyorCursor,
+      conveyorWindowId: state.conveyorWindowId,
+      conveyorShiftPending: state.conveyorShiftPending,
+      seenVideoIds: state.seenVideoIds,
+      competitorsFetchedAt: state.competitorsFetchedAt,
+      envyMetrics: state.envyMetrics,
+      threatAlerts: state.threatAlerts,
+      wideningGap: state.wideningGap,
+      freeCooldownUntil: state.freeCooldownUntil,
+      freeLockedVideoId: state.freeLockedVideoId,
+    },
+  };
+}
+
+function persistPendingAuthWorkflow(pending: PendingAuthWorkflow): void {
+  try {
+    window.sessionStorage.setItem(PENDING_AUTH_WORKFLOW_KEY, JSON.stringify(pending));
+  } catch {
+    // The in-memory snapshot still covers popup and email/password sign-in.
+  }
+}
+
+function consumePendingAuthWorkflow(): PendingAuthWorkflow | null {
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_AUTH_WORKFLOW_KEY);
+    window.sessionStorage.removeItem(PENDING_AUTH_WORKFLOW_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingAuthWorkflow>;
+    if (
+      parsed.version !== 1 ||
+      typeof parsed.expiresAt !== "number" ||
+      parsed.expiresAt <= Date.now() ||
+      typeof parsed.selectedVideoId !== "string" ||
+      !parsed.state ||
+      !Array.isArray(parsed.state.conveyorQueue) ||
+      !parsed.state.conveyorQueue.some((video) => video?.videoId === parsed.selectedVideoId)
+    ) {
+      return null;
+    }
+    parsed.state.outputLanguage = normalizeCloneCrushOutputLanguage(parsed.state.outputLanguage);
+    return parsed as PendingAuthWorkflow;
+  } catch {
+    return null;
+  }
+}
+
+/** Restore only the workflow explicitly awaiting authentication, never the
+ * guest's unrelated persisted stores. Returns false when its Slot 1 expired
+ * while OAuth was in progress; the normal conveyor promotion then takes over. */
+function restorePendingAuthWorkflow(pending: PendingAuthWorkflow): boolean {
+  useCloneCrushStore.setState({
+    ...pending.state,
+    activeVideoId: pending.selectedVideoId,
+  });
+  if (pending.state.freeCooldownUntil && pending.state.freeCooldownUntil <= Date.now()) {
+    useCloneCrushStore.getState().expireFreeCooldownCycle();
+    return false;
+  }
+  return true;
+}
+
+function formatConveyorCountdown(remainingMs: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function clientViewCount(video: any): number {
   if (typeof video?.viewsCount === "number") return video.viewsCount;
   const text = String(video?.views || video?.viewsText || "").toLowerCase().replace(/,/g, "");
@@ -58,7 +190,14 @@ function clientViewCount(video: any): number {
 
 export default function CloneCrush() {
   const navigate = useNavigate();
-  const { runGuarded, isAuthLoading } = useSoftGate();
+  const {
+    runGuarded,
+    requestAuthentication,
+    isAuthLoading,
+    isEntitlementLoading,
+    isEntitlementVerified,
+    isAuthenticated,
+  } = useSoftGate();
 
   // Synchronous cold-start hygiene: if the user reopens the page AFTER
   // their 24h cooldown has expired (offline/sleep across expiry), wipe
@@ -68,7 +207,7 @@ export default function CloneCrush() {
   // auto-refresh effect below then populates a fresh matrix.
   (() => {
     const s = useCloneCrushStore.getState();
-    if (s.freeCooldownUntil && s.freeCooldownUntil <= Date.now() && s.freeLockedVideoId) {
+    if (s.freeCooldownUntil && s.freeCooldownUntil <= Date.now()) {
       s.expireFreeCooldownCycle();
     }
   })();
@@ -76,8 +215,10 @@ export default function CloneCrush() {
   const {
     profile, isProfiling, savedChannels, activeSlotIndex, savedNiche, competitors, conveyorQueue, isSearchingCompetitors, envyMetrics, threatAlerts, wideningGap, rewrites, isRewriting, activeRewrite,
     freeCooldownUntil, freeLockedVideoId, conveyorShiftPending, activeVideoId, conveyorCursor, conveyorWindowId, conveyorAppending, seenVideoIds,
+    channelDraft, freeLockedChannelUrl, outputLanguage,
+    setChannelDraft, submitChannelUrl, setOutputLanguage,
     setProfile, setIsProfiling, setSavedNiche, setCompetitors, setConveyorQueue, setActiveVideoId, setConveyorAppending, setIsSearchingCompetitors, setThreatAlerts, addRewrite, setIsRewriting, setActiveRewrite, deleteRewrite,
-    startFreeCooldown, clearFreeCooldown, expireFreeCooldownCycle, appendConveyorTile, advanceAfterConsume, markConveyorShiftConsumed, markSeenVideo, beginNewWorkflow,
+    startFreeCooldown, startFreeConveyorTimer, clearFreeCooldown, expireFreeCooldownCycle, appendConveyorTile, advanceAfterConsume, markConveyorShiftConsumed, markSeenVideo, beginNewWorkflow,
     saveChannelToCache, switchActiveSlot, removeChannelFromCache,
   } = useCloneCrushStore();
 
@@ -85,16 +226,22 @@ export default function CloneCrush() {
   // currently-profiled channel's URL. Used for persistence and the
   // returning-user bootstrap flow.
   const activeSavedChannel = savedChannels.find((c) => c.slotIndex === activeSlotIndex) ?? savedChannels[0] ?? null;
-  const lastChannelUrl = profile?.url || activeSavedChannel?.url || null;
+  // Only submitted/saved URLs may trigger returning-user hydration. The
+  // persisted draft is intentionally displayed but never auto-submitted.
+  const lastChannelUrl = freeLockedChannelUrl || profile?.url || activeSavedChannel?.url || null;
 
   const saveContent = useContentStore((s) => s.saveContent);
   const incrementStat = useContentStore((s) => s.incrementStat);
   const license = useAuthStore((s) => s.license);
-  // Derived pro flag uses the strict isProTier selector which rejects stale
-  // localStorage pro snapshots (expired/missing expiresAt). This is the
-  // single source of truth for all UI gating in this component. Declared
-  // early so hooks below can reference it safely.
-  const isPro = isProTier(license);
+  // Never grant Premium behavior from a persisted snapshot until the active
+  // session's entitlement has been authoritatively reconciled. While that
+  // check is in flight (or failed), this screen fails safe to Free.
+  const isTierReady = !isAuthLoading && !isEntitlementLoading;
+  const isPro = isTierReady && isEntitlementVerified && isProTier(license);
+  const isFreeChannelLocked = !isPro && !!freeLockedChannelUrl;
+  const displayedChannelInput = isFreeChannelLocked
+    ? (freeLockedChannelUrl ?? channelDraft)
+    : channelDraft;
 
   // Live-ticking cooldown remaining (ms). Set from a 1s interval so the
   // UI overlays update in real time without triggering a full store
@@ -126,16 +273,19 @@ export default function CloneCrush() {
     return () => window.clearInterval(id);
   }, [freeCooldownUntil, expireFreeCooldownCycle]);
 
-  const isFreeCooldownActive = !isPro && !!freeCooldownUntil && freeCooldownUntil > Date.now() && !!freeLockedVideoId;
-  void cooldownRemainingMs; // retained for future use; UI reads directly from freeCooldownUntil via per-second re-render trigger.
+  // A Free conveyor timer starts as soon as Slot 1 is exposed. Execution is
+  // blocked only after that specific video has been consumed; the countdown
+  // itself remains visible for the full 24-hour Slot 1 window.
+  const isFreeConveyorActive = !isPro && !!freeCooldownUntil && freeCooldownUntil > Date.now();
+  const isFreeCooldownActive = isFreeConveyorActive && !!freeLockedVideoId;
   const startWorkflowProfile = useWorkflowStore((s) => s.startProfile);
   const selectWorkflowCompetitor = useWorkflowStore((s) => s.selectCompetitor);
   const saveWorkflowPackage = useWorkflowStore((s) => s.saveContentPackage);
   const startWorkflowHandoff = useWorkflowStore((s) => s.startHandoff);
 
-  // Persistent target: pre-fill from the active Ghost Cache slot so the
-  // user never has to re-enter their channel URL on future visits.
-  const [channelInput, setChannelInput] = useState<string>(() => lastChannelUrl ?? "");
+  // Both the unsubmitted draft and the submitted Free lock live in the
+  // persisted Clone & Crush store so tab switches/focus changes cannot reset
+  // or silently replace the target URL.
   const [nicheInput, setNicheInput] = useState<string>(() => savedNiche ?? "");
   const [customDescription, setCustomDescription] = useState("");
 
@@ -143,6 +293,11 @@ export default function CloneCrush() {
   // is the source of truth so the 24h conveyor shift can change the
   // actionable slot without UI state getting out of sync.
   const selectedVideo: CompetitorVideo | null = (() => {
+    // A persisted Pro selection may point at a later tile after downgrade or
+    // entitlement hydration. Free must always resolve to the one actionable
+    // Slot 1 so stale activeVideoId state can never turn its first click into a
+    // locked/Pro-only action.
+    if (!isPro) return competitors[0] ?? null;
     if (activeVideoId) return competitors.find((v) => v.videoId === activeVideoId) ?? competitors[0] ?? null;
     return competitors[0] ?? null;
   })();
@@ -156,11 +311,6 @@ export default function CloneCrush() {
   const [showIntelDrop, setShowIntelDrop] = useState(true);
   const [workflowNonce, setWorkflowNonce] = useState(0);
   const [dailyLimitActive, setDailyLimitActive] = useState(false);
-  // Block the Execute button until SoftGateProvider has hydrated the
-  // Supabase session + entitlement. Prevents a fast-click on a warm but
-  // stale localStorage "pro" snapshot from ever firing a premium request
-  // before we know the real tier.
-  const [tierHydrated, setTierHydrated] = useState(false);
 
   const transcriptMutation = useTranscriptExtraction();
   const cloneCrushMutation = useCloneCrushMutation();
@@ -168,12 +318,14 @@ export default function CloneCrush() {
 
   // Double-click / StrictMode guard across renders.
   const isExecutingRef = useRef(false);
+  const pendingAuthResumeVideoIdRef = useRef<string | null>(null);
+  const [pendingAuthResumeNonce, setPendingAuthResumeNonce] = useState(0);
 
   // Single paywall route helper — also resets selectedTier to "free" so if
   // the user navigates back they're not left on the 99% card. Accepts an
   // optional feature slug (e.g. "interrogate") so we can upsell into the
   // correct Rewards tab.
-  const routeToProUpsell = useCallback((reason: "premium" | "locked" | "interrogate" | "squad" = "premium") => {
+  const routeToProUpsell = useCallback((reason: "premium" | "locked" | "channel" | "interrogate" | "squad" = "premium") => {
     setSelectedVideoTier("free");
     let upsell = "clonecrush";
     let tier = "locked";
@@ -181,6 +333,10 @@ export default function CloneCrush() {
     if (reason === "premium") {
       tier = "99glitch";
       msg = "99% Glitch reserved for Pro • Rerouting to Private Tracker";
+    } else if (reason === "channel") {
+      upsell = "clonecrush-channel";
+      tier = "pro";
+      msg = "Your Free channel URL is locked • Upgrade to Pro to analyze another channel";
     } else if (reason === "interrogate") {
       upsell = "interrogate";
       tier = "pro";
@@ -194,12 +350,13 @@ export default function CloneCrush() {
     navigate(`/rewards?upsell=${upsell}&tier=${tier}`);
   }, [navigate]);
 
-  // Synchronous pro check that always reads the CURRENT store snapshot
-  // (never a closure) and validates via isProTier — this is what guards
-  // the Execute click and the tier-radio click.
+  // Premium access is allowed only after the current session's entitlement
+  // verification completed. Reading the latest license here still protects
+  // click handlers from stale render closures.
   const canUsePremium = useCallback((): boolean => {
+    if (!isTierReady || !isEntitlementVerified) return false;
     return isProTier(useAuthStore.getState().license);
-  }, []);
+  }, [isEntitlementVerified, isTierReady]);
 
   // Paywall gate — single source of truth. Called at click-time AND at the
   // top of performCloneAndCrush. Returns true if user was bounced.
@@ -240,21 +397,12 @@ export default function CloneCrush() {
     }
   }, [isFreeCooldownActive, competitors, freeLockedVideoId, rewrites, activeVideoId, activeRewrite?.id, setActiveVideoId, setActiveRewrite]);
 
-  // Mark tier as hydrated once the SoftGateProvider finishes its first
-  // session/entitlement load. Until then, Execute stays disabled.
-  useEffect(() => {
-    if (!isAuthLoading) setTierHydrated(true);
-  }, [isAuthLoading]);
-
   useEffect(() => {
     setDailyLimitActive(!isPro && dailyQuota.allowed === false && (dailyQuota.remainingSeconds ?? 0) > 0);
   }, [isPro, dailyQuota.allowed, dailyQuota.remainingSeconds]);
 
   useEffect(() => {
     if (profile) {
-      // Keep the URL input synced with the saved channel so editing feels
-      // right, but never overwrite what the user is actively typing.
-      if (!channelInput) setChannelInput(profile.url || profile.handle);
       if (!nicheInput) {
         const desc = profile.description.toLowerCase();
         if (desc.includes("crypto") || desc.includes("bitcoin")) setNicheInput("Crypto & Finance");
@@ -278,6 +426,16 @@ export default function CloneCrush() {
   //      Ghost Cache but no profile in memory, re-profile in the
   //      background so the dashboard is ready instantly.
   const autoRefreshRunningRef = useRef(false);
+  const conveyorRetryBlockedRef = useRef(false);
+  const conveyorRetryTimerRef = useRef<number | null>(null);
+  const [conveyorRetryNonce, setConveyorRetryNonce] = useState(0);
+
+  useEffect(() => () => {
+    if (conveyorRetryTimerRef.current !== null) {
+      window.clearTimeout(conveyorRetryTimerRef.current);
+    }
+  }, []);
+
   useEffect(() => {
     if (isRewriting || isProfiling || isSearchingCompetitors || conveyorAppending) return;
 
@@ -289,8 +447,8 @@ export default function CloneCrush() {
     }
 
     // Case A: cooldown expired — append one video to fill slot3.
-    if (conveyorShiftPending && profile && !isFreeCooldownActive && !isPro) {
-      if (autoRefreshRunningRef.current) return;
+    if (conveyorShiftPending && !isFreeCooldownActive && !isPro) {
+      if (autoRefreshRunningRef.current || conveyorRetryBlockedRef.current) return;
       autoRefreshRunningRef.current = true;
       setActiveRewrite(null);
       setLogSteps([]);
@@ -307,6 +465,7 @@ export default function CloneCrush() {
           action: "competitors",
           niche: strictNiche,
           description: strictNiche,
+          language: outputLanguage,
           limit: 3,
           after: state0.conveyorCursor,
           windowId: state0.conveyorWindowId,
@@ -316,38 +475,51 @@ export default function CloneCrush() {
           if (!res?.success || !Array.isArray(res.competitors)) throw new Error(res?.error || "append failed");
           const viral = (res.competitors as any[]).filter((v: any) => clientViewCount(v) >= VIRAL_VIEW_THRESHOLD);
           const fresh = viral.find((v: any) => v?.videoId && !excludeIds.includes(v.videoId));
-          if (fresh) {
-            appendConveyorTile(fresh as CompetitorVideo);
-            markSeenVideo(fresh.videoId);
-          }
-          // Update the cursor for future appends.
+          // Advance the search cursor even when this page contains no fresh
+          // video, otherwise every retry would request the same exhausted page.
           useCloneCrushStore.setState({
             conveyorCursor: res.nextCursor || null,
             conveyorWindowId: res.windowId || state0.conveyorWindowId,
           });
+          if (!fresh) throw new Error("Ghost mesh returned no fresh viral slot");
+
+          appendConveyorTile(fresh as CompetitorVideo);
+          markSeenVideo(fresh.videoId);
           const nextQueue = useCloneCrushStore.getState().conveyorQueue;
           if (nextQueue[0]?.videoId) setActiveVideoId(nextQueue[0].videoId);
-        })
-        .catch(() => {})
-        .finally(() => {
+          // Consume the persisted pending flag only after a real replacement
+          // tile has been appended. Failed/empty requests must remain retryable.
           markConveyorShiftConsumed();
+          toast.success("New slot unlocked • Ghost mesh advanced", { id: "conveyor-shift" });
+        })
+        .catch((error: unknown) => {
+          console.warn("[clone-crush] Conveyor refill failed:", error instanceof Error ? error.message : String(error));
+          toast.error("Conveyor refill delayed • Ghost mesh will retry", { id: "conveyor-shift" });
+          conveyorRetryBlockedRef.current = true;
+          if (conveyorRetryTimerRef.current !== null) {
+            window.clearTimeout(conveyorRetryTimerRef.current);
+          }
+          conveyorRetryTimerRef.current = window.setTimeout(() => {
+            conveyorRetryTimerRef.current = null;
+            conveyorRetryBlockedRef.current = false;
+            setConveyorRetryNonce((nonce) => nonce + 1);
+          }, 15_000);
+        })
+        .finally(() => {
           autoRefreshRunningRef.current = false;
           setConveyorAppending(false);
-          toast.dismiss("conveyor-shift");
-          toast.success("New slot unlocked • Ghost mesh advanced", { id: "conveyor-advanced" });
         });
       return;
     }
 
     // Case B: returning user with a saved URL but no profile.
-    if (!profile && lastChannelUrl && !isAuthLoading && tierHydrated && !conveyorShiftPending) {
+    if (!profile && lastChannelUrl && isTierReady && !conveyorShiftPending) {
       if (autoRefreshRunningRef.current) return;
       autoRefreshRunningRef.current = true;
-      if (!channelInput) setChannelInput(lastChannelUrl);
       toast.loading("Reconnecting to your saved channel via MUM-01...", { id: "returning-profile" });
       setIsProfiling(true);
       cloneCrushMutation
-        .mutateAsync({ action: "profile", channelUrl: lastChannelUrl })
+        .mutateAsync({ action: "profile", channelUrl: lastChannelUrl, language: outputLanguage })
         .then((res: any) => {
           if (!res?.success || !res.profile) throw new Error(res?.error || "Profile unavailable");
           const profiledChannel: ProfileWithKeywords = {
@@ -357,10 +529,11 @@ export default function CloneCrush() {
           };
           setProfile(profiledChannel, lastChannelUrl);
           startWorkflowProfile({ id: profiledChannel.id, name: profiledChannel.name, handle: profiledChannel.handle, avatar: profiledChannel.avatar });
-          // Ensure slot0 Ghost Cache stays in sync with whatever URL
-          // returned (handle normalization can change the URL).
-          saveChannelToCache({ url: profiledChannel.url, handle: profiledChannel.handle, name: profiledChannel.name, avatar: profiledChannel.avatar, niche: null }, activeSlotIndex);
           toast.success(`Reconnected to ${profiledChannel.name} • MUM-01`, { id: "returning-profile" });
+          // A migrated/reloaded workspace may retain its conveyor while profile
+          // metadata is absent. Rehydrate the profile without replacing that
+          // active 24-hour queue or restarting Slot 1's timer.
+          if (useCloneCrushStore.getState().conveyorQueue.length > 0) return;
           return autoDiscoverCompetitors(profiledChannel);
         })
         .catch(() => {
@@ -371,13 +544,17 @@ export default function CloneCrush() {
           setIsProfiling(false);
         });
     }
+    // autoDiscoverCompetitors and the mutation wrapper are intentionally
+    // omitted: both are recreated during render, while the explicit state
+    // guards above make this effect the single conveyor/bootstrap trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    conveyorShiftPending, conveyorAppending, profile, isFreeCooldownActive, isPro, lastChannelUrl,
-    savedNiche, nicheInput, seenVideoIds, conveyorCursor, conveyorWindowId, activeSlotIndex,
-    isAuthLoading, tierHydrated, isRewriting, isProfiling, isSearchingCompetitors,
-    channelInput, markConveyorShiftConsumed, refreshQuota, setProfile, setIsProfiling,
+    conveyorShiftPending, conveyorAppending, conveyorRetryNonce, profile, isFreeCooldownActive, isPro, lastChannelUrl,
+    savedNiche, nicheInput, outputLanguage, seenVideoIds, conveyorCursor, conveyorWindowId, activeSlotIndex,
+    isTierReady, isRewriting, isProfiling, isSearchingCompetitors,
+    markConveyorShiftConsumed, refreshQuota, setProfile, setIsProfiling,
     startWorkflowProfile, appendConveyorTile, setActiveVideoId, markSeenVideo,
-    saveChannelToCache, setConveyorAppending,
+    setConveyorAppending,
   ]);
 
   const autoDiscoverCompetitors = async (prof: ProfileWithKeywords) => {
@@ -412,6 +589,7 @@ export default function CloneCrush() {
         action: "competitors",
         niche: deducedNiche,
         description: discoveryDescription,
+        language: outputLanguage,
         limit: CONVEYOR_SIZE,
         excludeIds: [],
       });
@@ -420,13 +598,16 @@ export default function CloneCrush() {
         if (viralCompetitors.length === 0) throw new Error("No 50k+ viral competitors found");
         const envyData = (res as any).envyMetrics || null;
         setCompetitors(viralCompetitors, envyData, { nextCursor: res.nextCursor ?? null, windowId: res.windowId ?? null });
-        const unlocked = viralCompetitors.find((v: any) => !v.isLocked) || viralCompetitors[0];
+        const unlocked = canUsePremium()
+          ? (viralCompetitors.find((v: any) => !v.isLocked) || viralCompetitors[0])
+          : viralCompetitors[0];
         setActiveVideoId(unlocked?.videoId ?? null);
+        if (!canUsePremium() && unlocked?.videoId) startFreeConveyorTimer();
         viralCompetitors.forEach((v: any) => markSeenVideo(v.videoId));
         selectWorkflowCompetitor({ videoId: unlocked.videoId, title: unlocked.title, url: unlocked.url, channelName: unlocked.channelName, thumbnail: unlocked.thumbnail }, deducedNiche);
         const isGhost = (res as any).ghostReconstructed;
         toast.success(isGhost ? `Ghost Matrix Reconstructed! ${viralCompetitors.length} viral competitors via MUM-01 mesh` : `Showdown Matrix Ready! ${viralCompetitors.length} 50k+ live competitors`, { id: "competitors-find" });
-        cloneCrushMutation.mutateAsync({ action: "threat-alerts", competitors: viralCompetitors, userSubscribers: prof.subscriberCount || 0 }).then((alertRes: any) => {
+        cloneCrushMutation.mutateAsync({ action: "threat-alerts", competitors: viralCompetitors, userSubscribers: prof.subscriberCount || 0, language: outputLanguage }).then((alertRes: any) => {
           if (alertRes.success) setThreatAlerts(alertRes.alerts || [], alertRes.wideningGap || null);
         }).catch(() => {});
       } else throw new Error(res.error || "No competitors");
@@ -437,17 +618,38 @@ export default function CloneCrush() {
   };
 
   const performProfileChannel = async () => {
-    const input = channelInput.trim();
-    if (!input) { toast.error("Please enter a YouTube Channel URL or Handle"); return; }
-    // 24h cooldown guard (free-tier monetization lock). The locked result
-    // MUST stay on screen — refuse to start a new scan before the cooldown
-    // expires or the user upgrades to Pro. Server-side daily_quota will
-    // also reject, but we refuse here synchronously so the UI doesn't
-    // even flicker.
-    if (isFreeCooldownActive) {
-      toast.error("24h cooldown active — unlock Pro to scan again", { id: "free-cooldown" });
+    if (!isTierReady) {
+      toast.loading("Verifying account clearance...", { id: "tier-readiness" });
       return;
     }
+
+    const input = displayedChannelInput.trim();
+    if (!input) { toast.error("Please enter a YouTube Channel URL or Handle"); return; }
+
+    // runGuarded may resume this render-local callback after a guest signs in.
+    // Entitlement reconciliation has completed by then, so read the live
+    // license rather than the anonymous render's captured isPro value. Carry
+    // the explicitly selected language into the new user's scoped store too.
+    const userIsPro = canUsePremium();
+    setOutputLanguage(outputLanguage);
+
+    // Atomically persist the exact submitted URL before any reset or network
+    // work. The first Free submission becomes immutable; changing it can only
+    // proceed after the existing Pro paywall.
+    const submission = submitChannelUrl(input, userIsPro ? "pro" : "free");
+    if (!submission.ok) {
+      if (submission.reason === "URL_LOCKED") routeToProUpsell("channel");
+      else toast.error("Please enter a YouTube Channel URL or Handle");
+      return;
+    }
+
+    // Free users get one active Slot 1 window. Re-profiling would replace the
+    // queue and restart that window, so keep the current result stable.
+    if (!userIsPro && isFreeConveyorActive) {
+      routeToProUpsell("locked");
+      return;
+    }
+
     // Atomic store reset BEFORE async work so stale competitors/rewrites don't
     // bleed into the new scan. Local UI state is reset alongside it, and the
     // keyed panel below forces React to unmount/remount the competitor matrix.
@@ -468,22 +670,25 @@ export default function CloneCrush() {
     // async work so a crash or navigation during profiling still
     // remembers the channel next visit. Free users only have slot 0;
     // Pro users can stack up to 5.
-    const saveResult = saveChannelToCache({ url: input, handle: input, name: input, avatar: "", niche: null }, activeSlotIndex);
-    if (!saveResult.ok && saveResult.reason === "SLOT_LIMIT") {
-      toast.error("Ghost Cache is full — unlock Pro for 5 saved channels", { id: "ghost-cache-limit" });
+    const saveResult = saveChannelToCache(
+      { url: input, handle: input, name: input, avatar: "", niche: null },
+      activeSlotIndex,
+      userIsPro ? "pro" : "free",
+    );
+    if (!saveResult.ok) {
       setIsProfiling(false);
+      if (saveResult.reason === "URL_LOCKED") routeToProUpsell("channel");
+      else toast.error("Ghost Cache is full — unlock Pro for 5 saved channels", { id: "ghost-cache-limit" });
       return;
     }
     toast.loading("Establishing ghost tunnel to YouTube veil layer...", { id: "profile-scrape" });
     try {
-      const profileRequest = cloneCrushMutation.mutateAsync({ action: "profile", channelUrl: input });
+      const profileRequest = cloneCrushMutation.mutateAsync({ action: "profile", channelUrl: input, language: outputLanguage });
       const res = await withClientTimeout(profileRequest, 15_000);
       if (res.success && res.profile) {
         const profileResponse = res as typeof res & { extractedKeywords?: string[] };
         const profiledChannel: ProfileWithKeywords = { ...res.profile, extractedKeywords: profileResponse.extractedKeywords || res.profile.extractedKeywords || [] };
         setProfile(profiledChannel, input);
-        // Sync the fully-hydrated profile into the active Ghost Cache slot.
-        saveChannelToCache({ url: profiledChannel.url, handle: profiledChannel.handle, name: profiledChannel.name, avatar: profiledChannel.avatar, niche: null }, activeSlotIndex);
         startWorkflowProfile({ id: profiledChannel.id, name: profiledChannel.name, handle: profiledChannel.handle, avatar: profiledChannel.avatar });
         const isGhost = (res as any).ghostReconstructed;
         toast.success(isGhost ? `Ghost Profile Reconstructed: ${profiledChannel.name} via MUM-01` : `Connected to ${profiledChannel.name}'s Channel Profile`, { id: "profile-scrape" });
@@ -495,7 +700,7 @@ export default function CloneCrush() {
   };
 
   const handleProfileChannel = () => {
-    if (!channelInput.trim()) return performProfileChannel();
+    if (!displayedChannelInput.trim()) return performProfileChannel();
     return runGuarded("profile another channel", performProfileChannel);
   };
 
@@ -583,19 +788,30 @@ export default function CloneCrush() {
       steps[2].status = "success"; steps[2].meta = transcriptData.source?.includes("ghost") ? `${transcriptData.ghostNode || "MUM-01"} • SYNTH` : "LIVE CAPTIONS"; steps[3].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,300));
       steps[3].status = "success"; steps[4].status = "processing"; setLogSteps([...steps]);
 
-      const rewriteRes = await withClientTimeout(cloneCrushMutation.mutateAsync({ action: "rewrite", targetVideoId: selectedVideo.videoId, originalTranscript: transcriptData.transcript, originalTitle: selectedVideo.title, niche: nicheInput, tier: requestedTier }), 55_000);
+      const rewriteRes = await withClientTimeout(cloneCrushMutation.mutateAsync({
+        action: "rewrite",
+        targetVideoId: selectedVideo.videoId,
+        originalTranscript: transcriptData.transcript,
+        originalTitle: selectedVideo.title,
+        niche: nicheInput,
+        tier: requestedTier,
+        language: outputLanguage,
+      }), 55_000);
       steps[4].status = "success"; steps[5].status = "processing"; setLogSteps([...steps]);
 
       if (rewriteRes.success && rewriteRes.rewrite) {
         const rw = rewriteRes.rewrite;
         let reverseEngineeredPrompts: string[] = []; let reverseEngineeredSource: any = null;
         try {
-          const reverseRes = await withClientTimeout(cloneCrushMutation.mutateAsync({ action: "thumbnail-reverse", glitchTitle: rw.rewrittenTitle, niche: nicheInput, tier: requestedTier }), 18_000);
+          const reverseRes = await withClientTimeout(cloneCrushMutation.mutateAsync({ action: "thumbnail-reverse", glitchTitle: rw.rewrittenTitle, niche: nicheInput, tier: requestedTier, language: outputLanguage }), 18_000);
           const reverseData = reverseRes as any;
           if (reverseData.success && reverseData.thumbnailPrompts) { reverseEngineeredPrompts = reverseData.thumbnailPrompts; reverseEngineeredSource = reverseData.sourceVideo || null; }
-        } catch {}
+        } catch {
+          // Thumbnail reverse-engineering is optional; keep the core rewrite.
+        }
         steps[5].status = "success"; steps[6].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,250));
         const savedRewrite = addRewrite({
+          outputLanguage,
           targetVideoId: selectedVideo.videoId, targetVideoTitle: selectedVideo.title, originalTitle: rw.originalTitle, rewrittenTitle: rw.rewrittenTitle, glitchHook: rw.glitchHook, fullScript: rw.fullScript, retentionKeywordsUsed: rw.retentionKeywordsUsed, seoTags: rw.seoTags, thumbnailPrompt: rw.thumbnailPrompt, editingGuide: rw.editingGuide, tier: rw.tier || requestedTier, isStealthDisguised: true, changedAnalogiesCount: rw.changedAnalogiesCount, changedExamplesCount: rw.changedExamplesCount, glitchTechniques: rw.glitchTechniques, glitchIntensity: rw.glitchIntensity || (requestedTier === "premium" ? 99 : 60), reverseEngineeredPrompts, reverseEngineeredSource,
         });
         const promptCount = reverseEngineeredPrompts.length || 1;
@@ -607,7 +823,9 @@ export default function CloneCrush() {
         setBurstTrigger(v => v + 1);
         setXpTrigger(v => v + 1);
         if (navigator.vibrate) navigator.vibrate([20, 30, 20]);
-        try { const s = JSON.parse(localStorage.getItem("ghost_streak_v2") || "{}"); const xp = (s.xp || 0) + 30; const streak = s.streak || 1; localStorage.setItem("ghost_streak_v2", JSON.stringify({ ...s, xp, streak, lastDate: new Date().toDateString() })); } catch {}
+        try { const s = JSON.parse(localStorage.getItem("ghost_streak_v2") || "{}"); const xp = (s.xp || 0) + 30; const streak = s.streak || 1; localStorage.setItem("ghost_streak_v2", JSON.stringify({ ...s, xp, streak, lastDate: new Date().toDateString() })); } catch {
+          // Streak telemetry must never block a successful generation.
+        }
         toast.success(`🚀 ${achievedTier==="premium"?"99% GLITCH":"60% Standard"} Chain-Loop Secured via Ghost Node • ${promptCount} prompts • +30 XP`);
 
         // --- SLIDING CONVEYOR ADVANCE ----------------------------------
@@ -627,7 +845,7 @@ export default function CloneCrush() {
           const excludeIds = Array.from(new Set([...seenVideoIds, ...conveyorQueue.map(v => v.videoId)]));
           const windowId = conveyorWindowId || undefined;
           cloneCrushMutation
-            .mutateAsync({ action: "competitors", niche: strictNiche, description: strictNiche, limit: 3, excludeIds, windowId, after: conveyorCursor })
+            .mutateAsync({ action: "competitors", niche: strictNiche, description: strictNiche, language: outputLanguage, limit: 3, excludeIds, windowId, after: conveyorCursor })
             .then((res: any) => {
               if (!res?.success || !Array.isArray(res.competitors)) throw new Error(res?.error || "append failed");
               const viral = (res.competitors as any[]).filter((v: any) => clientViewCount(v) >= VIRAL_VIEW_THRESHOLD);
@@ -672,11 +890,16 @@ export default function CloneCrush() {
       } else {
         const code = (rewriteRes as any).code;
         const status = (rewriteRes as any).status;
-        // AUTH_REQUIRED (401) / PRO_REQUIRED (403) are the server's
-        // definitive answers for a premium-tier request from a free user.
-        // Wipe the console and route to the paywall instead of painting
-        // fake "SECURED" checkmarks.
-        if (code === "AUTH_REQUIRED" || code === "PRO_REQUIRED" || status === 401 || status === 403) {
+        if (code === "AUTH_REQUIRED" || status === 401) {
+          setActiveRewrite(null);
+          setLogSteps([]);
+          setIsRewriting(false);
+          isExecutingRef.current = false;
+          toast.error("Sign in to complete your Free Chain-Loop", { id: "clone-crush-auth" });
+          void requestAuthentication("complete your Free Chain-Loop");
+          return;
+        }
+        if (code === "PRO_REQUIRED" || (status === 403 && requestedTier === "premium")) {
           setActiveRewrite(null);
           setLogSteps([]);
           setIsRewriting(false);
@@ -689,13 +912,27 @@ export default function CloneCrush() {
     } catch (err: unknown) {
       const errCode = (err as any)?.code;
       const errStatus = (err as any)?.status;
-      // AUTH_REQUIRED / PRO_REQUIRED / 401 / 403 → paywall, not "recovered" success.
-      if (errCode === "AUTH_REQUIRED" || errCode === "PRO_REQUIRED" || errStatus === 401 || errStatus === 403) {
+      if (errCode === "AUTH_REQUIRED" || errStatus === 401) {
+        setActiveRewrite(null);
+        setLogSteps([]);
+        setIsRewriting(false);
+        isExecutingRef.current = false;
+        toast.error("Sign in to complete your Free Chain-Loop", { id: "clone-crush-auth" });
+        void requestAuthentication("complete your Free Chain-Loop");
+        return;
+      }
+      if (errCode === "PRO_REQUIRED" || (errStatus === 403 && requestedTier === "premium")) {
         setActiveRewrite(null);
         setLogSteps([]);
         setIsRewriting(false);
         isExecutingRef.current = false;
         routeToProUpsell("premium");
+        return;
+      }
+      if (errStatus === 403) {
+        setActiveRewrite(null);
+        setLogSteps([]);
+        toast.error("This request could not be authorized. Please refresh and try again.", { id: "clone-crush-forbidden" });
         return;
       }
       if (errCode === "DAILY_LIMIT" || errCode === 402) {
@@ -729,21 +966,80 @@ export default function CloneCrush() {
     const txt = `TITLE: ${activeRewrite.rewrittenTitle}\nHOOK: ${activeRewrite.glitchHook}\nSCRIPT:\n${activeRewrite.fullScript}\n\nTHUMBNAIL PROMPT: ${activeRewrite.thumbnailPrompt}\nSEO TAGS: ${(activeRewrite.seoTags || []).join(", ")}\nEDITING GUIDE: ${activeRewrite.editingGuide}`;
     try { await navigator.clipboard.writeText(txt); toast.success("Full Chain-Loop package copied to clipboard"); } catch { toast.error("Copy failed"); }
   };
-  // THE SINGLE ENTRY POINT for the big blue Execute button. Runs the paywall
-  // gate synchronously against the CURRENT store snapshot (no stale closure),
-  // blocks double-clicks, blocks until auth/entitlement is hydrated, and
-  // only then hands off to runGuarded().
-  const handleCloneAndCrush = () => {
+  // THE SINGLE ENTRY POINT for the big blue Execute button. Clone & Crush
+  // rewrites require a real Supabase session, so unlike lightweight preview
+  // actions we authenticate before calling the API. A purpose-scoped snapshot
+  // carries the guest's submitted URL + selected Slot 1 across the strict
+  // guest→user privacy reset, then the original action continues.
+  const handleCloneAndCrush = async () => {
     if (!selectedVideo) { toast.error("Select a competitor video from matrix"); return; }
     if (isExecutingRef.current) return;
-    if (!tierHydrated) { toast.loading("Verifying clearance via MUM-01...", { id: "tier-hydrating" }); return; }
-    // Free-tier 24h cooldown: once a free user has a locked result on
-    // screen, the Execute button is disabled — but defense-in-depth here
-    // routes them to /rewards if they somehow trigger the click.
+    if (!isTierReady) { toast.loading("Verifying clearance via MUM-01...", { id: "tier-hydrating" }); return; }
     if (isFreeCooldownActive) { routeToProUpsell("premium"); return; }
     if (enforcePremiumPaywall()) return;
-    return runGuarded("unlock next Clone & Crush result", performCloneAndCrush);
+
+    if (!isAuthenticated) {
+      const inMemoryPending = createPendingAuthWorkflow(
+        useCloneCrushStore.getState(),
+        selectedVideo.videoId,
+      );
+      // sessionStorage survives a same-tab OAuth redirect but remains scoped to
+      // this tab. It cannot leak a pending workflow into another signed-in tab.
+      persistPendingAuthWorkflow(inMemoryPending);
+      const authenticated = await requestAuthentication("complete your Free Chain-Loop");
+      if (!authenticated) {
+        consumePendingAuthWorkflow();
+        return;
+      }
+
+      // SoftGate intentionally purges guest state on an identity transition.
+      // Restore only this explicitly pending workflow into the newly
+      // authenticated user's namespace; never migrate arbitrary prior-user
+      // state. The in-memory fallback covers browsers that disable storage.
+      const pending = consumePendingAuthWorkflow() ?? inMemoryPending;
+      if (!restorePendingAuthWorkflow(pending)) {
+        toast.info("Slot 1 advanced while sign-in was completing. Your next result is ready.");
+        return;
+      }
+    }
+
+    return performCloneAndCrush();
   };
+
+  // A full-page OAuth fallback destroys the Promise continuation above. Once
+  // AuthCallback returns to /clone-crush, consume the tab-scoped snapshot,
+  // restore the selected Slot 1, and resume exactly once on the next render.
+  useEffect(() => {
+    if (!isAuthenticated || !isTierReady || pendingAuthResumeVideoIdRef.current) return;
+    const pending = consumePendingAuthWorkflow();
+    if (!pending) return;
+    if (!restorePendingAuthWorkflow(pending)) {
+      toast.info("Slot 1 advanced while sign-in was completing. Your next result is ready.");
+      return;
+    }
+    pendingAuthResumeVideoIdRef.current = pending.selectedVideoId;
+    setPendingAuthResumeNonce((nonce) => nonce + 1);
+  }, [isAuthenticated, isTierReady]);
+
+  useEffect(() => {
+    const pendingVideoId = pendingAuthResumeVideoIdRef.current;
+    if (
+      !pendingAuthResumeNonce ||
+      !pendingVideoId ||
+      !isAuthenticated ||
+      !isTierReady ||
+      selectedVideo?.videoId !== pendingVideoId ||
+      isExecutingRef.current
+    ) {
+      return;
+    }
+    pendingAuthResumeVideoIdRef.current = null;
+    void performCloneAndCrush();
+    // performCloneAndCrush is render-local and intentionally omitted. The
+    // nonce + ref form a one-shot handoff after the restored store re-renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAuthResumeNonce, isAuthenticated, isTierReady, selectedVideo?.videoId]);
+
   const handleCopyThumbnailPrompt = async () => { if (!activeRewrite) return; try { await navigator.clipboard.writeText(activeRewrite.thumbnailPrompt || "Cinematic thumbnail"); toast.success("Thumbnail prompt copied!"); } catch { toast.error("Copy failed"); } };
   const handleCopySeoTags = async () => { if (!activeRewrite) return; try { await navigator.clipboard.writeText((activeRewrite.seoTags||[]).join(", ")); toast.success("SEO tags copied!"); } catch { toast.error("Copy failed"); } };
   const handleCopyScript = async () => { if (!activeRewrite) return; const txt = `TITLE: ${activeRewrite.rewrittenTitle}\nHOOK: ${activeRewrite.glitchHook}\nSCRIPT: ${activeRewrite.fullScript}`; try { await navigator.clipboard.writeText(txt); setCopiedText(true); toast.success("Script copied!"); setTimeout(()=>setCopiedText(false),2000); } catch { toast.error("Copy failed"); } };
@@ -830,7 +1126,7 @@ export default function CloneCrush() {
                         }
                         if (isFreeCooldownActive) { toast.error("24h cooldown active — finish this Chain-Loop before switching", { id: "cooldown-switch" }); return; }
                         switchActiveSlot(i);
-                        if (slot.url !== channelInput) setChannelInput(slot.url);
+                        if (slot.url !== displayedChannelInput) setChannelDraft(slot.url, "pro");
                         toast.success(`Switched to slot ${i+1}: ${slot.name || slot.handle}`, { id: "slot-switch" });
                       }}
                       className={
@@ -895,30 +1191,79 @@ export default function CloneCrush() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1">
                   <Youtube className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input placeholder="YouTube Channel URL or Handle (e.g. @MrBeast)" value={channelInput} onChange={e=>{
-                    const next = e.target.value;
-                    setChannelInput(next);
-                    // During the 24h free-tier cooldown the locked result
-                    // must remain pinned — do not wipe any state on input
-                    // change. Otherwise, clear stale per-run assets as the
-                    // user starts a new link (beginNewWorkflow still fires
-                    // on submit to do the hard reset).
-                    if (isFreeCooldownActive) return;
-                    if (next.trim().length > 0 && (activeRewrite || logSteps.length > 0 || rewrites.length > 0)) {
-                      setActiveRewrite(null);
-                      setLogSteps([]);
-                      setActiveVideoId(null);
-                    }
-                  }} className="pl-10 bg-secondary/40 border-border/80 h-11 text-sm placeholder:text-muted-foreground/60" readOnly={isFreeCooldownActive} />
+                  <Input
+                    aria-label="YouTube Channel URL or Handle"
+                    placeholder="YouTube Channel URL or Handle (e.g. @MrBeast)"
+                    value={displayedChannelInput}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      const result = setChannelDraft(next, isPro ? "pro" : "free");
+                      if (!result.ok) { routeToProUpsell("channel"); return; }
+                      if (next.trim().length > 0 && (activeRewrite || logSteps.length > 0 || rewrites.length > 0)) {
+                        setActiveRewrite(null);
+                        setLogSteps([]);
+                        setActiveVideoId(null);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (!isFreeChannelLocked) return;
+                      if (event.key.length === 1 || event.key === "Backspace" || event.key === "Delete") {
+                        event.preventDefault();
+                        routeToProUpsell("channel");
+                      }
+                    }}
+                    onPaste={(event) => {
+                      if (!isFreeChannelLocked) return;
+                      event.preventDefault();
+                      routeToProUpsell("channel");
+                    }}
+                    className="pl-10 pr-24 bg-secondary/40 border-border/80 h-11 text-sm placeholder:text-muted-foreground/60"
+                    readOnly={!isTierReady || isFreeChannelLocked}
+                  />
+                  {isFreeChannelLocked && (
+                    <button
+                      type="button"
+                      onClick={() => routeToProUpsell("channel")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-primary hover:bg-primary/20"
+                    >
+                      <Lock className="h-3 w-3" /> Free URL locked
+                    </button>
+                  )}
                 </div>
-                <Button onClick={handleProfileChannel} disabled={isProfiling || isFreeCooldownActive} className="cyber-button px-5 h-11 shrink-0 font-display text-sm flex gap-2">
+                <div className="relative sm:w-[190px] shrink-0 group">
+                  <span className="pointer-events-none absolute left-9 top-1.5 z-10 font-mono text-[7px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">
+                    Output Language
+                  </span>
+                  <Languages className="pointer-events-none absolute bottom-3 left-3 z-10 h-4 w-4 text-cyan-400 transition-colors group-focus-within:text-primary" />
+                  <Select
+                    value={outputLanguage}
+                    onValueChange={(value) => setOutputLanguage(normalizeCloneCrushOutputLanguage(value))}
+                    disabled={isProfiling || isSearchingCompetitors || isRewriting}
+                  >
+                    <SelectTrigger
+                      aria-label="Output Language"
+                      className="h-11 border-cyan-400/30 bg-gradient-to-r from-cyan-500/10 via-secondary/50 to-fuchsia-500/10 pl-9 pt-3 font-display text-xs uppercase tracking-wider shadow-[inset_0_0_18px_rgba(34,211,238,0.06)] hover:border-cyan-400/50 focus:ring-cyan-400/40"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="border-cyan-400/30 bg-background/95 font-display backdrop-blur-xl">
+                      <SelectItem value="English">English</SelectItem>
+                      <SelectItem value="Hindi">Hindi</SelectItem>
+                      <SelectItem value="Hinglish">Hinglish</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={handleProfileChannel} disabled={isProfiling || !isTierReady} className="cyber-button px-5 h-11 shrink-0 font-display text-sm flex gap-2">
                   {isProfiling ? <><Loader2 className="w-4 h-4 animate-spin" />Ghost Scraping...</>
-                    : isFreeCooldownActive ? <><Lock className="w-4 h-4" />24h Cooldown Active</>
+                    : !isTierReady ? <><Loader2 className="w-4 h-4 animate-spin" />Verifying...</>
+                    : isFreeConveyorActive ? <><Lock className="w-4 h-4" />Slot 1 Active</>
                     : <><Cpu className="w-4 h-4" />Launch Ghost Showdown</>}
                 </Button>
               </div>
-              <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground">
-                <Radio className="w-3 h-3 text-green-400 animate-pulse" /> Ghost Relay Mesh: 6 Piped nodes • 3 Invidious • Synthetic fallback active
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-muted-foreground">
+                <Radio className="w-3 h-3 text-green-400 animate-pulse" />
+                <span>Ghost Relay Mesh: 6 Piped nodes • 3 Invidious • Synthetic fallback active</span>
+                <span className="text-cyan-400/80">• {outputLanguage} titles, insights & scripts</span>
               </div>
             </CardContent>
           </Card>
@@ -967,7 +1312,7 @@ export default function CloneCrush() {
                       // Free users can never click teaser slots — they
                       // require pro to unlock early.
                       const tileLocked = (isTeaserSlot && !isPro) || (!isPro && dailyLimitActive && !isSelected);
-                      const tileLabel = isCooldownPinnedTile ? "Locked • 24h" : isTeaserSlot ? `Next #${idx}` : "Unlocked";
+                      const tileLabel = isCooldownPinnedTile ? "Locked • 24h" : isTeaserSlot ? "NEXT • LOCKED" : "SLOT 1 • ACTIVE";
                       return (
                       <div key={video.videoId} onClick={()=>{
                         if (isTeaserSlot && !isPro) { routeToProUpsell("locked"); return; }
@@ -983,10 +1328,15 @@ export default function CloneCrush() {
                         setActiveTab("script");
                         setCopiedText(false);
                         setActiveVideoId(video.videoId); selectWorkflowCompetitor({videoId:video.videoId,title:video.title,url:video.url,channelName:video.channelName,thumbnail:video.thumbnail}, nicheInput);
-                      }} className={`group relative rounded-xl border p-2 transition-all duration-300 flex flex-col justify-between bg-secondary/30 ${isSelected||isCooldownPinnedTile?"border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow":"border-border/60 hover:border-border"} ${tileLocked?"pointer-events-none":"cursor-pointer"}`}>
+                      }} className={`group relative rounded-xl border p-2 transition-all duration-300 flex cursor-pointer flex-col justify-between bg-secondary/30 ${isSelected||isCooldownPinnedTile?"border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow":"border-border/60 hover:border-border"} ${tileLocked?"opacity-80":""}`}>
                         <div className="absolute top-1 left-1 z-10 bg-primary text-primary-foreground text-[7px] font-bold px-1.5 py-0.5 rounded-full">{tileLabel}</div>
                         <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0 mb-1.5">
                           <img src={video.thumbnail} alt={video.title} className={`w-full h-full object-cover ${isTeaserSlot && !isPro ? "opacity-30 blur-[3px]" : ""}`} />
+                          {!isPro && idx === 0 && isFreeConveyorActive && (
+                            <div className="absolute right-1 top-1 z-20 rounded border border-cyan-300/40 bg-black/80 px-1.5 py-1 font-mono text-[8px] font-black tracking-wider text-cyan-200">
+                              SLOT 1 • {formatConveyorCountdown(cooldownRemainingMs)}
+                            </div>
+                          )}
                           {isTeaserSlot && !isPro ? (
                             // Teaser slots: countdown band ABOVE
                             // thumbnail + large-font view count.
@@ -1175,12 +1525,12 @@ export default function CloneCrush() {
                 <div className="relative w-full">
                   {(() => {
                     const freeBlocked = !isPro && (dailyLimitActive || selectedTier === "premium" || isFreeCooldownActive);
-                    const buttonDisabled = isRewriting || freeBlocked || !tierHydrated;
+                    const buttonDisabled = isRewriting || freeBlocked || !isTierReady;
                     return (
                       <>
                         <Button onClick={handleCloneAndCrush} disabled={buttonDisabled} className="w-full h-12 bg-gradient-to-r from-primary to-accent text-primary-foreground font-display font-bold uppercase tracking-wider text-sm flex gap-2">
                           {isRewriting ? <><Loader2 className="w-4 h-4 animate-spin" />Executing Chain-Loop via Ghost Mesh...</>
-                            : !tierHydrated ? <><Loader2 className="w-4 h-4 animate-spin" />Verifying clearance...</>
+                            : !isTierReady ? <><Loader2 className="w-4 h-4 animate-spin" />Verifying clearance...</>
                             : isFreeCooldownActive ? <><Lock className="w-4 h-4" />24h Cooldown — Skip Wait with Pro</>
                             : !isPro && dailyLimitActive ? <><Lock className="w-4 h-4" />Daily Limit Reached — Unlock Premium</>
                             : !isPro && selectedTier==="premium" ? <><Lock className="w-4 h-4" />99% Glitch — Unlock Pro</>
@@ -1233,7 +1583,7 @@ export default function CloneCrush() {
         <div className="lg:col-span-4 space-y-6">
           {activeRewrite ? (
             <Card className={`glass-strong ${isFreeCooldownActive ? "border-amber-500/40" : "border-primary/40"} shadow-neon-glow animate-fade-in bracket relative overflow-hidden`}>{isFreeCooldownActive && freeCooldownUntil && <FreeCooldownOverlay unlocksAt={freeCooldownUntil} views={selectedVideo?.views} onUpgrade={()=>routeToProUpsell("premium")} variant="result" />}
-              <CardHeader className="pb-3 border-b border-border/40"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[9px] font-mono tracking-widest uppercase">Chain-Loop Master • Ghost Secured</span><CardTitle className="font-display text-base text-foreground mt-2 line-clamp-2">{activeRewrite.rewrittenTitle}</CardTitle><p className="text-[10px] text-muted-foreground truncate mt-1">Based on: {activeRewrite.targetVideoTitle} • MUM-01</p></div><Button variant="outline" size="icon" onClick={handleCopyScript} className="shrink-0 border-border hover:border-primary/40 text-muted-foreground hover:text-primary active:scale-95"><Copy className="w-4 h-4" /></Button></div></CardHeader>
+              <CardHeader className="pb-3 border-b border-border/40"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[9px] font-mono tracking-widest uppercase">Chain-Loop Master • {activeRewrite.outputLanguage || "English"} • Ghost Secured</span><CardTitle className="font-display text-base text-foreground mt-2 line-clamp-2">{activeRewrite.rewrittenTitle}</CardTitle><p className="text-[10px] text-muted-foreground truncate mt-1">Based on: {activeRewrite.targetVideoTitle} • MUM-01</p></div><Button variant="outline" size="icon" onClick={handleCopyScript} className="shrink-0 border-border hover:border-primary/40 text-muted-foreground hover:text-primary active:scale-95"><Copy className="w-4 h-4" /></Button></div></CardHeader>
               <CardContent className="pt-5 space-y-5">
                 <div className="p-4 rounded-xl glass-ghost border-primary/30 space-y-3"><div className="flex items-center justify-between"><p className="text-xs font-display font-bold text-foreground flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-primary animate-pulse" />Chain-Loop Complete: 5 Assets</p><span className="text-[10px] bg-primary text-primary-foreground font-mono font-bold px-2 py-0.5 rounded-full uppercase">No-Click Handoff</span></div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><Button onClick={handleSendToVoiceover} size="sm" className="cyber-button text-xs h-9 font-display gap-1.5 justify-start px-3"><Mic className="w-3.5 h-3.5 shrink-0" /><span>Send to Voiceover</span></Button><Button onClick={handleCopyFullPackage} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Copy className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy Full Package</span></Button><Button onClick={handleSendToRepurposer} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Share2 className="w-3.5 h-3.5 text-primary shrink-0" /><span>Repurpose</span></Button><Button onClick={handleCopyThumbnailPrompt} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Image className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy Thumb Prompt</span></Button><Button onClick={handleCopySeoTags} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Search className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy SEO</span></Button></div>
@@ -1262,7 +1612,7 @@ export default function CloneCrush() {
             </Card>
           )}
 
-          <Card className="glass-strong border-border"><CardHeader className="pb-2"><CardTitle className="font-display text-sm font-semibold text-foreground flex items-center gap-2"><History className="w-4 h-4 text-primary" />Historic Packages ({rewrites.length}) • Ghost Cache</CardTitle></CardHeader><CardContent className="px-3 pb-3">{rewrites.length>0 ? (<div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">{rewrites.map((r:any)=>{ const isSelected = activeRewrite?.id===r.id; return (<div key={r.id} className={`group relative flex items-center justify-between p-2.5 rounded-lg border text-left cursor-pointer transition-colors ${isSelected?"border-primary bg-primary/10":"border-border/40 hover:border-border bg-secondary/10"}`}><div onClick={()=>setActiveRewrite(r)} className="flex-1 min-w-0 pr-6"><p className="text-[11px] font-bold text-foreground truncate">{r.rewrittenTitle}</p><p className="text-[9px] text-muted-foreground truncate mt-0.5">{r.tier==="premium"?"99% Glitch":"60% Standard"} • {r.glitchIntensity||60}% • {new Date(r.createdAt).toLocaleDateString()}</p></div><button onClick={e=>{ e.stopPropagation(); deleteRewrite(r.id); toast.success("Package removed"); }} className="absolute right-2 opacity-0 group-hover:opacity-100 hover:text-destructive text-muted-foreground transition-all duration-200"><XCircle className="w-3.5 h-3.5" /></button></div>);})}</div>) : (<div className="text-center py-6 text-muted-foreground/60 text-xs">Generated Chain-Loop packages appear here • Ghost cached</div>)}</CardContent></Card>
+          <Card className="glass-strong border-border"><CardHeader className="pb-2"><CardTitle className="font-display text-sm font-semibold text-foreground flex items-center gap-2"><History className="w-4 h-4 text-primary" />Historic Packages ({rewrites.length}) • Ghost Cache</CardTitle></CardHeader><CardContent className="px-3 pb-3">{rewrites.length>0 ? (<div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">{rewrites.map((r:any)=>{ const isSelected = activeRewrite?.id===r.id; return (<div key={r.id} className={`group relative flex items-center justify-between p-2.5 rounded-lg border text-left cursor-pointer transition-colors ${isSelected?"border-primary bg-primary/10":"border-border/40 hover:border-border bg-secondary/10"}`}><div onClick={()=>setActiveRewrite(r)} className="flex-1 min-w-0 pr-6"><p className="text-[11px] font-bold text-foreground truncate">{r.rewrittenTitle}</p><p className="text-[9px] text-muted-foreground truncate mt-0.5">{r.tier==="premium"?"99% Glitch":"60% Standard"} • {r.outputLanguage || "English"} • {r.glitchIntensity||60}% • {new Date(r.createdAt).toLocaleDateString()}</p></div><button onClick={e=>{ e.stopPropagation(); deleteRewrite(r.id); toast.success("Package removed"); }} className="absolute right-2 opacity-0 group-hover:opacity-100 hover:text-destructive text-muted-foreground transition-all duration-200"><XCircle className="w-3.5 h-3.5" /></button></div>);})}</div>) : (<div className="text-center py-6 text-muted-foreground/60 text-xs">Generated Chain-Loop packages appear here • Ghost cached</div>)}</CardContent></Card>
         </div>
       </div>
       <GhostInterrogationDrawer />

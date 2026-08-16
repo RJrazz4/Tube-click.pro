@@ -16,13 +16,14 @@
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "./e2e/specs",
+  // Paths are resolved relative to this config file in /e2e.
+  testDir: "./specs",
   timeout: 30000,
   expect: {
     timeout: 10000,
   },
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: "http://localhost:8080",
     trace: "on-first-retry",
   },
   projects: [
@@ -30,8 +31,8 @@ export default defineConfig({
     { name: "mobile-chromium", use: { ...devices["iPhone 13"] } },
   ],
   webServer: {
-    command: "npm run dev",
-    port: 5173,
+    command: "npm run dev -- --host 0.0.0.0",
+    port: 8080,
     reuseExistingServer: true,
   },
 });
