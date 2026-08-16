@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { toastFriendlyError } from "@/lib/errorToast";
-import { fetchEdgeFunctionBlob } from "@/api/client/secureClient";
+import { generateNeuralVoice } from "@/api/client/backendEngineVoice";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -20,6 +20,8 @@ import { useSoftGate } from "@/contexts/SoftGateContext";
 import { useWorkflowStore } from "@/stores/useWorkflowStore";
 
 const voiceSponsor = getSponsorForPlacement("voice");
+const BROWSER_TTS_MAX_CHARS = 500;
+const NEURAL_TTS_MAX_CHARS = 5000;
 
 // White-labeled voice options — maps to VectorEngine (ElevenLabs) IDs server-side
 const ELEVENLABS_VOICES = [
@@ -43,8 +45,6 @@ export default function VoiceStudio() {
   const { runGuarded } = useSoftGate();
   const navigate = useNavigate();
   const license = useAuthStore((s) => s.license);
-  const dailyUsage = useAuthStore((s) => s.dailyUsage);
-  const updateVoiceUsage = useAuthStore((s) => s.updateVoiceUsage);
   const activeWorkflow = useWorkflowStore((s) => s.activeWorkflow);
   const completeWorkflowHandoff = useWorkflowStore((s) => s.completeHandoff);
 
@@ -81,8 +81,11 @@ export default function VoiceStudio() {
       const availableVoices = speechSynthesis.getVoices();
       setVoices(availableVoices);
       if (availableVoices.length > 0 && !selectedVoice) {
-        const englishVoice = availableVoices.find((v) => v.lang.startsWith("en"));
-        setSelectedVoice(englishVoice?.name || availableVoices[0].name);
+        const australianEnglish = availableVoices.find(
+          (voice) => voice.lang.replace("_", "-").toLowerCase() === "en-au",
+        );
+        const englishVoice = availableVoices.find((voice) => voice.lang.startsWith("en"));
+        setSelectedVoice(australianEnglish?.name || englishVoice?.name || availableVoices[0].name);
       }
     };
     loadVoices();
@@ -136,32 +139,34 @@ export default function VoiceStudio() {
 
   const performElevenLabsGeneration = async () => {
     if (!text.trim()) { toast.error("Please enter some text to convert to speech"); return; }
-    if (text.length > 5000) { toast.error("Text too long. Maximum 5000 characters allowed."); return; }
+    if (text.length > NEURAL_TTS_MAX_CHARS) {
+      toast.error(`Text too long. Neural Voice supports up to ${NEURAL_TTS_MAX_CHARS} characters.`);
+      return;
+    }
 
+    // Client-side UX gate only. The backend independently verifies the live
+    // Supabase subscription and never trusts this persisted frontend state.
     if (license.tier === "free") {
-      const voiceCharsUsed = dailyUsage.voiceCharactersUsed || 0;
-      if (voiceCharsUsed + text.length > 500) {
-        toast.error(`Daily Voiceover Limit Exceeded. Your Free plan has ${Math.max(0, 500 - voiceCharsUsed)} characters remaining today. Unlock Pro for free through Referral Rewards.`, {
-          duration: 5000,
-          action: {
-            label: "Unlock Pro for Free",
-            onClick: () => navigate("/rewards"),
-          },
-        });
-        return;
-      }
+      toast.error("TubeClick Neural Voice requires Pro. Browser TTS remains free.", {
+        duration: 5000,
+        action: {
+          label: "Unlock Pro for Free",
+          onClick: () => navigate("/rewards"),
+        },
+      });
+      return;
     }
 
     setIsGenerating(true);
     animateVisualizer();
 
     try {
-      const audioBlob = await fetchEdgeFunctionBlob("elevenlabs-tts", {
-        text,
-        voiceId: selectedElevenLabsVoice,
+      const audioBlob = await generateNeuralVoice({
+        text: text.trim(),
+        voiceAlias: selectedElevenLabsVoice,
         stability: stability[0],
-        similarityBoost: 0.75,
         speed: speed[0],
+        outputFormat: "mp3",
       });
 
       if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -178,11 +183,7 @@ export default function VoiceStudio() {
       saveContent({ type: 'voiceover', title: `Neural Voice - ${selectedElevenLabsVoice} via TubeClick Neural Voice`, content: text });
       completeWorkflowHandoff("voice");
 
-      if (license.tier === "free") {
-        updateVoiceUsage(text.length);
-      }
-
-      toast.success("Cinematic voiceover generated via secure voice route!");
+      toast.success("Cinematic voiceover generated via the TubeClick VoiceRouter!");
 
     } catch (error) {
       toastFriendlyError(error, "Failed to generate voiceover");
@@ -193,35 +194,52 @@ export default function VoiceStudio() {
   const generateElevenLabsAudio = () => runGuarded("generate the next voiceover", performElevenLabsGeneration);
 
   const performBrowserTTSPlay = () => {
-    if (!text.trim()) { toast.error("Please enter some text to convert to speech"); return; }
-    if (text.length > 10000) toast.warning("Very long text may cause browser TTS to be slow");
-    if (isPaused) { speechSynthesis.resume(); setIsPaused(false); setIsPlaying(true); animateVisualizer(); return; }
-    speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voice = voices.find((v) => v.name === selectedVoice);
-    if (voice) utterance.voice = voice;
+    const cleanText = text.trim();
+    if (!cleanText) { toast.error("Please enter some text to convert to speech"); return; }
+    if (cleanText.length > BROWSER_TTS_MAX_CHARS) {
+      toast.error(`Browser TTS supports a maximum of ${BROWSER_TTS_MAX_CHARS} characters.`);
+      return;
+    }
+    if (!("speechSynthesis" in window)) {
+      toast.error("Browser speech synthesis is not available on this device");
+      return;
+    }
+    if (isPaused) { window.speechSynthesis.resume(); setIsPaused(false); setIsPlaying(true); animateVisualizer(); return; }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    const selected = voices.find((voice) => voice.name === selectedVoice);
+    const australianEnglish = voices.find(
+      (voice) => voice.lang.replace("_", "-").toLowerCase() === "en-au",
+    );
+    const browserVoice = selected || australianEnglish;
+    if (browserVoice) { utterance.voice = browserVoice; utterance.lang = browserVoice.lang; }
+    else utterance.lang = "en-AU";
     utterance.rate = rate[0]; utterance.pitch = pitch[0];
     utterance.onstart = () => { setIsPlaying(true); animateVisualizer(); };
     utterance.onend = () => { setIsPlaying(false); setIsPaused(false); stopVisualizer(); };
     utterance.onerror = () => { setIsPlaying(false); setIsPaused(false); stopVisualizer(); toast.error("Speech synthesis error"); };
-    speechSynthesis.speak(utterance);
+
+    // Strict zero-backend path: Toggle OFF never calls the backend engine.
+    window.speechSynthesis.speak(utterance);
     incrementStat('voiceoversGenerated');
-    saveContent({ type: 'voiceover', title: `Browser TTS - ${selectedVoice}`, content: text });
+    saveContent({ type: 'voiceover', title: `Browser TTS - ${browserVoice?.name || "en-AU"}`, content: cleanText });
     completeWorkflowHandoff("voice");
   };
 
   const handleBrowserTTSPlay = () => runGuarded("generate the next voiceover", performBrowserTTSPlay);
 
   const handlePlay = () => {
-    if (useElevenLabs) {
-      if (audioUrl && audioRef.current) { audioRef.current.play(); return; }
-      if (!text.trim()) { toast.error("Please enter some text to convert to speech"); return; }
-      if (audioUrl) { audioRef.current?.play(); return; }
-      generateElevenLabsAudio();
-    } else {
+    if (!useElevenLabs) {
+      // Toggle OFF is a strict browser-only branch.
       if (isPaused || isPlaying) performBrowserTTSPlay();
       else handleBrowserTTSPlay();
+      return;
     }
+
+    if (audioUrl && audioRef.current) { void audioRef.current.play(); return; }
+    if (!text.trim()) { toast.error("Please enter some text to convert to speech"); return; }
+    generateElevenLabsAudio();
   };
 
   const handlePause = () => {
@@ -307,7 +325,7 @@ export default function VoiceStudio() {
 
                 <div className="p-2.5 rounded-lg bg-green-500/10 border border-green-500/20 text-[11px] text-green-400 space-y-1">
                   <p className="flex items-center gap-1.5"><Zap className="w-3 h-3" />Preview Strategy: Static MP3s in public/previews/voices/ — 2-3 sec samples, no ElevenLabs call</p>
-                  <p className="text-green-400/70">Final generation uses the secure /api/elevenlabs-tts route. Provider credentials remain server-side.</p>
+                  <p className="text-green-400/70">Final generation uses the backend /api/voice/generate VoiceRouter. Provider credentials remain server-side.</p>
                 </div>
 
                 <div className="space-y-2">
@@ -355,11 +373,11 @@ export default function VoiceStudio() {
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>
                 {text.length} characters
-                {license.tier === "free" && (
-                  <span className="ml-2 px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-[10px]">
-                    Free Limit: {dailyUsage.voiceCharactersUsed || 0} / 500 characters used today
-                  </span>
-                )}
+                <span className="ml-2 px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-[10px]">
+                  {useElevenLabs
+                    ? `Neural limit: ${text.length} / ${NEURAL_TTS_MAX_CHARS}`
+                    : `Browser limit: ${text.length} / ${BROWSER_TTS_MAX_CHARS}`}
+                </span>
               </span>
               <span>~{Math.ceil(text.split(/\s+/).filter(Boolean).length / 150)} min read</span>
             </div>
