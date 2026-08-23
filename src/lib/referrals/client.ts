@@ -20,6 +20,8 @@ export interface ReferralProfile {
   rewardDays: number;
   proActive: boolean;
   proTierExpiresAt: string | null;
+  /** Server-side one-time free-unlock ledger: true if already consumed. */
+  freeUnlockUsed: boolean;
   lifetimeDaysGranted: number;
   lifetimeDayCap: number;
 }
@@ -78,6 +80,7 @@ function parseReferralProfile(value: unknown): ReferralProfile {
     rewardDays: Number(profile.reward_days || 21),
     proActive: profile.pro_active === true,
     proTierExpiresAt: typeof profile.pro_expires_at === "string" ? profile.pro_expires_at : null,
+    freeUnlockUsed: profile.free_unlock_used === true,
     lifetimeDaysGranted: Number(profile.lifetime_days_granted || 0),
     lifetimeDayCap: Number(profile.lifetime_day_cap || 180),
   };

@@ -7,6 +7,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { createAppQueryClient } from "@/lib/cache/queryClient";
 import { SoftGateProvider } from "@/contexts/SoftGateContext";
+import { ProUpgradeProvider } from "@/contexts/ProUpgradeContext";
+import { ProUpgradeModal } from "@/components/subscription/ProUpgradeModal";
 import { SoftGateRoute } from "@/components/auth/SoftGateRoute";
 import { AppErrorBoundary } from "@/components/ui/AppErrorBoundary";
 import { ConnectionStatus } from "@/components/ui/ConnectionStatus";
@@ -62,29 +64,32 @@ const App = () => (
         }}
       />
       <SoftGateProvider>
-        <BrowserRouter>
-          <MainLayout>
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/voice" element={<SoftGateRoute><VoiceStudio /></SoftGateRoute>} />
-                <Route path="/repurposer" element={<SoftGateRoute><Repurposer /></SoftGateRoute>} />
-                <Route path="/analytics" element={<SoftGateRoute><Analytics /></SoftGateRoute>} />
-                <Route path="/seo" element={<SoftGateRoute><SeoOptimizer /></SoftGateRoute>} />
-                <Route path="/privacy" element={<Privacy />} />
-                <Route path="/terms" element={<Terms />} />
-                <Route path="/about" element={<About />} />
-                <Route path="/admin" element={<AdminPanel />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/rewards" element={<Rewards />} />
-                <Route path="/clone-crush" element={<SoftGateRoute><CloneCrush /></SoftGateRoute>} />
-                <Route path="/ref/:code" element={<ReferralCapture />} />
-                <Route path="/auth/callback" element={<AuthCallback />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
-          </MainLayout>
-        </BrowserRouter>
+        <ProUpgradeProvider>
+          <BrowserRouter>
+            <MainLayout>
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/voice" element={<SoftGateRoute><VoiceStudio /></SoftGateRoute>} />
+                  <Route path="/repurposer" element={<SoftGateRoute><Repurposer /></SoftGateRoute>} />
+                  <Route path="/analytics" element={<SoftGateRoute><Analytics /></SoftGateRoute>} />
+                  <Route path="/seo" element={<SoftGateRoute><SeoOptimizer /></SoftGateRoute>} />
+                  <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/terms" element={<Terms />} />
+                  <Route path="/about" element={<About />} />
+                  <Route path="/admin" element={<AdminPanel />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/rewards" element={<Rewards />} />
+                  <Route path="/clone-crush" element={<SoftGateRoute><CloneCrush /></SoftGateRoute>} />
+                  <Route path="/ref/:code" element={<ReferralCapture />} />
+                  <Route path="/auth/callback" element={<AuthCallback />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </MainLayout>
+          </BrowserRouter>
+          <ProUpgradeModal />
+        </ProUpgradeProvider>
       </SoftGateProvider>
     </TooltipProvider>
     </QueryClientProvider>

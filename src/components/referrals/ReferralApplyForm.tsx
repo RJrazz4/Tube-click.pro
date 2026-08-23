@@ -17,7 +17,7 @@ const REFERRAL_API_URL = import.meta.env.VITE_REFERRAL_API_URL || "";
 
 type Status = "idle" | "submitting" | "success";
 
-export function ReferralApplyForm() {
+export function ReferralApplyForm({ onApplied }: { onApplied?: () => void } = {}) {
   const [code, setCode] = useState("");
   const [status, setStatus] = useState<Status>("idle");
 
@@ -53,6 +53,7 @@ export function ReferralApplyForm() {
       if (res.ok && body.ok) {
         setStatus("success");
         toast.success(body.granted ? "Code applied — the referrer hit their milestone! 🎉" : "Referral code applied.");
+        onApplied?.();
       } else if (res.status === 404) {
         toast.error("That referral code is invalid.");
       } else if (res.status === 409) {

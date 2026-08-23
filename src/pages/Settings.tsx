@@ -29,8 +29,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { CryptoCheckout } from "@/components/subscription/CryptoCheckout";
+import { PaymentCheckout } from "@/components/subscription/PaymentCheckout";
 import { ReferralApplyForm } from "@/components/referrals/ReferralApplyForm";
+import { useProUpgrade } from "@/contexts/ProUpgradeContext";
 import { toast } from "sonner";
 import {
   useAuthStore,
@@ -149,7 +150,7 @@ function GeneralSection() {
 
 function AccountSection() {
   const license = useLicense();
-  const navigate = useNavigate();
+  const { openProUpgrade } = useProUpgrade();
   const isPro = isProTier(license);
   const cooldownRemaining = useFreeCooldownRemaining();
   const onCooldown = !isPro && cooldownRemaining > 0;
@@ -205,7 +206,7 @@ function AccountSection() {
           </div>
 
           {!isPro && (
-            <Button onClick={() => navigate("/rewards")} className="w-full cyber-button" size="lg">
+            <Button onClick={() => openProUpgrade({ reason: "settings" })} className="w-full cyber-button" size="lg">
               <Crown className="w-4 h-4 mr-2" />
               Unlock Pro for Free — Skip 24h Cooldown
             </Button>
@@ -704,7 +705,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="subscription">
-          <CryptoCheckout />
+          <PaymentCheckout />
         </TabsContent>
         
         <TabsContent value="dashboard">
