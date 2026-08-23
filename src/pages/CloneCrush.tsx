@@ -37,6 +37,7 @@ import { useContentStore } from "@/stores/useContentStore";
 import { useAuthStore, isProTier } from "@/stores/useAuthStore";
 import { useTranscriptExtraction, useCloneCrushMutation } from "@/hooks/useSecureQuery";
 import { useSoftGate } from "@/contexts/SoftGateContext";
+import { useProUpgrade } from "@/contexts/ProUpgradeContext";
 import { useWorkflowStore } from "@/stores/useWorkflowStore";
 import { DailyLimitOverlay } from "@/components/showdown/DailyLimitOverlay";
 import { FreeCooldownOverlay } from "@/components/showdown/FreeCooldownOverlay";
@@ -198,6 +199,7 @@ export default function CloneCrush() {
     isEntitlementVerified,
     isAuthenticated,
   } = useSoftGate();
+  const { openProUpgrade } = useProUpgrade();
 
   // Synchronous cold-start hygiene: if the user reopens the page AFTER
   // their 24h cooldown has expired (offline/sleep across expiry), wipe
@@ -321,34 +323,13 @@ export default function CloneCrush() {
   const pendingAuthResumeVideoIdRef = useRef<string | null>(null);
   const [pendingAuthResumeNonce, setPendingAuthResumeNonce] = useState(0);
 
-  // Single paywall route helper — also resets selectedTier to "free" so if
-  // the user navigates back they're not left on the 99% card. Accepts an
-  // optional feature slug (e.g. "interrogate") so we can upsell into the
-  // correct Rewards tab.
+  // Single paywall route helper — opens the central Pro Upgrade modal
+  // (Payment vs Referral choice) instead of force-redirecting to /rewards.
+  // Resets selectedTier to "free" so the user isn't stranded on the 99% card.
   const routeToProUpsell = useCallback((reason: "premium" | "locked" | "channel" | "interrogate" | "squad" = "premium") => {
     setSelectedVideoTier("free");
-    let upsell = "clonecrush";
-    let tier = "locked";
-    let msg = "Locked competitor reserved for Pro • Rerouting to Private Tracker";
-    if (reason === "premium") {
-      tier = "99glitch";
-      msg = "99% Glitch reserved for Pro • Rerouting to Private Tracker";
-    } else if (reason === "channel") {
-      upsell = "clonecrush-channel";
-      tier = "pro";
-      msg = "Your Free channel URL is locked • Upgrade to Pro to analyze another channel";
-    } else if (reason === "interrogate") {
-      upsell = "interrogate";
-      tier = "pro";
-      msg = "Ghost Interrogation is Pro • Rerouting to Rewards";
-    } else if (reason === "squad") {
-      upsell = "squad";
-      tier = "pro";
-      msg = "Ghost Intel Squad is Pro • Rerouting to Rewards";
-    }
-    toast.error(msg, { id: `pro-upsell-${reason}` });
-    navigate(`/rewards?upsell=${upsell}&tier=${tier}`);
-  }, [navigate]);
+    openProUpgrade({ defaultTab: "payment", reason });
+  }, [openProUpgrade]);
 
   // Premium access is allowed only after the current session's entitlement
   // verification completed. Reading the latest license here still protects
@@ -1043,7 +1024,7 @@ export default function CloneCrush() {
   const handleCopyThumbnailPrompt = async () => { if (!activeRewrite) return; try { await navigator.clipboard.writeText(activeRewrite.thumbnailPrompt || "Cinematic thumbnail"); toast.success("Thumbnail prompt copied!"); } catch { toast.error("Copy failed"); } };
   const handleCopySeoTags = async () => { if (!activeRewrite) return; try { await navigator.clipboard.writeText((activeRewrite.seoTags||[]).join(", ")); toast.success("SEO tags copied!"); } catch { toast.error("Copy failed"); } };
   const handleCopyScript = async () => { if (!activeRewrite) return; const txt = `TITLE: ${activeRewrite.rewrittenTitle}\nHOOK: ${activeRewrite.glitchHook}\nSCRIPT: ${activeRewrite.fullScript}`; try { await navigator.clipboard.writeText(txt); setCopiedText(true); toast.success("Script copied!"); setTimeout(()=>setCopiedText(false),2000); } catch { toast.error("Copy failed"); } };
-  const openReferralRewards = () => navigate("/rewards?upsell=clonecrush");
+  const openReferralRewards = () => openProUpgrade({ defaultTab: "referral", reason: "referral" });
 
   return (
     <div className="relative space-y-6 md:space-y-8 animate-fade-in pb-12">

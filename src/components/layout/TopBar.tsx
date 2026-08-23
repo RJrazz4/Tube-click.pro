@@ -1,10 +1,10 @@
 import { LogIn, ShieldCheck, Sparkles, Server, Terminal, Cpu, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
 import { useState } from "react";
 import { GhostAdminModal } from "@/components/GhostAdminModal";
 import { useGhostTrigger } from "@/hooks/useGhostTrigger";
 import { useSoftGate } from "@/contexts/SoftGateContext";
+import { useProUpgrade } from "@/contexts/ProUpgradeContext";
 import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
 import { LiveActiveCounter } from "@/components/ui/LiveActiveCounter";
 import { UserMenu } from "@/components/layout/UserMenu";
@@ -13,6 +13,7 @@ export function TopBar() {
   const [ghostOpen, setGhostOpen] = useState(false);
   const handleGhostTrigger = useGhostTrigger(() => setGhostOpen(true));
   const { isAuthenticated, requestAuthentication } = useSoftGate();
+  const { openProUpgrade } = useProUpgrade();
 
   return (
     <header className="fixed top-0 left-20 right-0 z-40 flex h-16 items-center justify-between border-b border-primary/10 glass-strong px-6 backdrop-blur-2xl max-md:left-0 max-md:px-3">
@@ -47,12 +48,15 @@ export function TopBar() {
           </Button>
         )}
 
-        <Button variant="outline" size="sm" asChild className="relative gap-2 border-primary/20 bg-primary/5 pr-7 hover:border-primary/40 hover:bg-primary/10 font-mono text-xs">
-          <Link to="/rewards">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="hidden sm:inline">Unlock Pro ₹0</span>
-            <span className="absolute -right-1.5 -top-2 whitespace-nowrap rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-lg shadow-pink-500/30 animate-pulse">$97→₹0</span>
-          </Link>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => openProUpgrade({ defaultTab: "referral", reason: "topbar" })}
+          className="relative gap-2 border-primary/20 bg-primary/5 pr-7 hover:border-primary/40 hover:bg-primary/10 font-mono text-xs"
+        >
+          <Sparkles className="h-4 w-4 text-primary" />
+          <span className="hidden sm:inline">Unlock Pro ₹0</span>
+          <span className="absolute -right-1.5 -top-2 whitespace-nowrap rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-lg shadow-pink-500/30 animate-pulse">$97→₹0</span>
         </Button>
       </div>
     </header>
