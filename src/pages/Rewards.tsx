@@ -22,6 +22,7 @@ import { VideoWallBackground } from "@/components/ui/VideoWallBackground";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
 import { RewardsPanelFallback, RewardsShellSkeleton } from "@/components/referrals/RewardsSkeletons";
+import { ChallengeConsistencyBlock } from "@/components/challenge/ChallengeConsistencyBlock";
 
 // Heavy referral sub-components lazy-loaded so the route shell paints
 // instantly. These chunks only download after the hero/progress card is
@@ -172,6 +173,7 @@ export default function Rewards() {
         <ParticleBurst trigger={burst} />
       </div>
       <div className="relative z-10 space-y-6">
+        <ChallengeConsistencyBlock />
         <WarRoomTicker />
         <div className="flex flex-wrap items-center gap-3"><LiveActiveCounter /><GhostNodeStatus compact /><BroadcastSyncIndicator compact /><span className="text-[10px] font-mono text-muted-foreground">LEVEL 4 • PRIVATE TRACKER • tubeclickpro.in • Ghost Protocol • Value $97 → ₹0</span></div>
         <GhostIntelDrop />

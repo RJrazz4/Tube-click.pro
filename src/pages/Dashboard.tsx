@@ -13,6 +13,7 @@ import type { SavedContent } from "@/stores/useContentStore";
 import { VerificationModal } from "@/components/VerificationModal";
 import { DeferredModule } from "@/components/performance/DeferredModule";
 import { WorkflowContinueCard } from "@/components/workflow/WorkflowContinueCard";
+import { AudienceIntelligenceSection } from "@/components/audience/AudienceIntelligenceSection";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
 import { VideoWallBackground } from "@/components/ui/VideoWallBackground";
 import { WarRoomTicker } from "@/components/ui/WarRoomTicker";
@@ -138,6 +139,7 @@ export default function Dashboard() {
           </div>
         )}
 
+        <AudienceIntelligenceSection />
         <WorkflowContinueCard />
         <Suspense fallback={<div className="h-28 animate-pulse rounded-2xl border border-border bg-card/60" />}><ViralGrowthPass /></Suspense>
 

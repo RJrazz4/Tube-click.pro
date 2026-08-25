@@ -43,6 +43,7 @@ import { DailyLimitOverlay } from "@/components/showdown/DailyLimitOverlay";
 import { FreeCooldownOverlay } from "@/components/showdown/FreeCooldownOverlay";
 import { useQuotaStore } from "@/stores/useQuotaStore";
 import { useCloneCrushQuota } from "@/hooks/useCloneCrushQuota";
+import { EngineScriptLoop } from "@/components/scripts/EngineScriptLoop";
 
 type ProfileWithKeywords = ProfiledChannel & { extractedKeywords?: string[] };
 
@@ -1028,6 +1029,7 @@ export default function CloneCrush() {
 
   return (
     <div className="relative space-y-6 md:space-y-8 animate-fade-in pb-12">
+      <EngineScriptLoop />
       <VideoWallBackground intensity="high" />
       <div className="relative z-10 space-y-4">
         <WarRoomTicker />
