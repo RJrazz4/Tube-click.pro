@@ -22,7 +22,7 @@ export function getAppConfig(): AppConfig {
   try {
     const stored = localStorage.getItem(CONFIG_KEY);
     if (stored) return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
-  } catch {}
+  } catch { /* noop */ }
   return DEFAULT_CONFIG;
 }
 

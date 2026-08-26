@@ -27,16 +27,16 @@ export function useCanonicalMeta() {
       }
 
       // Enforce OG URL
-      let ogUrl = document.querySelector('meta[property="og:url"]') as HTMLMetaElement | null;
+      const ogUrl = document.querySelector('meta[property="og:url"]') as HTMLMetaElement | null;
       if (ogUrl) {
         ogUrl.content = link.href;
       }
 
       // Enforce OG image to use canonical domain artifact (existing referral-banner.svg is canonical)
-      let ogImage = document.querySelector('meta[property="og:image"]') as HTMLMetaElement | null;
+      const ogImage = document.querySelector('meta[property="og:image"]') as HTMLMetaElement | null;
       if (ogImage && ogImage.content.includes("vercel.app")) {
         ogImage.content = `${canonicalRoot}/TubeGenius_app_icon_202604081246.jpeg`;
       }
-    } catch {}
+    } catch { /* noop */ }
   }, []);
 }

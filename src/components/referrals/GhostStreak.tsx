@@ -11,12 +11,12 @@ function getStreak(): { streak: number; xp: number; lastDate: string } {
   try {
     const raw = localStorage.getItem("ghost_streak_v2");
     if (raw) return JSON.parse(raw);
-  } catch {}
+  } catch { /* noop */ }
   return { streak: 1, xp: 20, lastDate: new Date().toDateString() };
 }
 
 function saveStreak(s: { streak: number; xp: number; lastDate: string }) {
-  try { localStorage.setItem("ghost_streak_v2", JSON.stringify(s)); } catch {}
+  try { localStorage.setItem("ghost_streak_v2", JSON.stringify(s)); } catch { /* noop */ }
 }
 
 export function GhostStreak({ compact = false }: { compact?: boolean }) {

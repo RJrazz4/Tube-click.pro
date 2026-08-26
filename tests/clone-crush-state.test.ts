@@ -258,7 +258,7 @@ describe("Clone & Crush Free conveyor", () => {
     expect(refill).toContain("if (conveyorShiftPending && !isFreeCooldownActive && !isPro)");
     expect(refill).not.toContain("conveyorShiftPending && profile");
     expect(source).toContain("if (useCloneCrushStore.getState().conveyorQueue.length > 0) return;");
-    expect(refill).toContain('if (!fresh) throw new Error("Ghost mesh returned no fresh viral slot")');
+    expect(refill).toContain('if (!fresh) throw new Error("No fresh analysis available — try again in a moment")');
     expect(refill).toMatch(/appendConveyorTile\([\s\S]*markConveyorShiftConsumed\(\)[\s\S]*toast\.success/);
     expect(refill).toContain("conveyorRetryBlockedRef.current = true");
     const refillCatch = refill.slice(refill.indexOf(".catch((error: unknown)"));

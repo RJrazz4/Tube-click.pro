@@ -38,7 +38,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         <span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />
         <span>Press</span>
         <kbd className="px-1 py-0.5 rounded bg-secondary border border-border text-[9px]">⌘K</kbd>
-        <span>for Ghost Commands • MUM-01 • tubeclickpro.in</span>
+        <span>for commands</span>
       </div>
     </div>
   );

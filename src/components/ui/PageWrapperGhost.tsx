@@ -1,18 +1,16 @@
 import { ReactNode } from "react";
-import { VideoWallBackground } from "./VideoWallBackground";
-import { WarRoomTicker } from "./WarRoomTicker";
-import { GhostNodeStatus } from "./GhostNodeStatus";
-import { LiveActiveCounter } from "./LiveActiveCounter";
-import { BroadcastSyncIndicator } from "./BroadcastSyncIndicator";
-import { GhostIntelDrop } from "./GhostIntelDrop";
 import { ViralOverdriveMiniBanner } from "@/components/referrals/ViralOverdriveMiniBanner";
 
 /**
  * Page shell for tool routes.
  *
- * Composes the shared chrome — video-wall background, ticker, node
- * status, live counter, broadcast indicator, and mini referral
- * banner — for a consistent look across tool pages.
+ * v2 ("Signal over Noise"): the shared status chrome (ticker, node status,
+ * live counter, broadcast indicator, intel drop, page-level video wall) now
+ * lives ONCE in the app shell — TopBar carries a compact status cluster and
+ * MainLayout owns the ambient background. Pages get clean content rhythm.
+ *
+ * The legacy props are still accepted (no-op) so existing call sites keep
+ * working; they can be cleaned up opportunistically later.
  */
 
 interface Props {
@@ -23,21 +21,10 @@ interface Props {
   showNodes?: boolean;
 }
 
-export function PageWrapperGhost({ children, intensity = "low", showTicker = true, showIntel = false, showNodes = true }: Props) {
+export function PageWrapperGhost({ children }: Props) {
   return (
     <div className="relative min-h-[60vh]">
-      <VideoWallBackground intensity={intensity} />
-      <div className="relative z-10 space-y-4">
-        {showTicker && <WarRoomTicker />}
-        {showNodes && (
-          <div className="flex flex-wrap items-center gap-3">
-            <LiveActiveCounter compact />
-            <GhostNodeStatus compact />
-            <BroadcastSyncIndicator compact />
-            <span className="hidden md:inline text-[10px] font-mono text-muted-foreground">LEVEL 4 • PRIVATE TRACKER • tubeclickpro.in • Ghost Protocol • $97→₹0</span>
-          </div>
-        )}
-        {showIntel && <GhostIntelDrop />}
+      <div className="relative z-10 space-y-4 sm:space-y-6">
         <ViralOverdriveMiniBanner />
         {children}
       </div>

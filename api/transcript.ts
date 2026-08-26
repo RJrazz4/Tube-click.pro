@@ -29,7 +29,7 @@ function extractId(url: string): string | null {
     const u = new URL(url);
     const v = u.searchParams.get('v');
     if (v && v.length === 11) return v;
-  } catch {}
+  } catch { /* noop */ }
   return null;
 }
 

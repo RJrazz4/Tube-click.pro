@@ -4,14 +4,14 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard • Ghost War Room", path: "/" },
-  { icon: Zap, label: "Clone & Crush • Ghost Protocol", path: "/clone-crush" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
+  { icon: Zap, label: "Clone & Crush", path: "/clone-crush" },
   { icon: Gift, label: "Referral Rewards • Private Tracker", path: "/rewards" },
   { icon: Mic, label: "Voiceover • Neural Engine", path: "/voice" },
   { icon: Share2, label: "Multi-Platform Repurposer", path: "/repurposer" },
-  { icon: TrendingUp, label: "Analytics & ROI • Ghost Calc", path: "/analytics" },
+  { icon: TrendingUp, label: "Analytics & ROI", path: "/analytics" },
   { icon: Search, label: "SEO & Tag Optimizer", path: "/seo" },
-  { icon: Settings, label: "Settings • Ghost Mesh", path: "/settings" },
+  { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
 export function Sidebar() {
@@ -45,7 +45,7 @@ export function Sidebar() {
                   {item.path === "/rewards" && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />}
                 </Link>
               </TooltipTrigger>
-              <TooltipContent side="right" className="glass-strong border-primary/20 font-mono text-xs"><p>{item.label}</p><p className="text-[9px] text-muted-foreground mt-1">MUM-01 • tubeclickpro.in • Ghost Protocol</p></TooltipContent>
+              <TooltipContent side="right" className="glass-strong border-primary/20 font-mono text-xs"><p>{item.label}</p><p className="text-[9px] text-muted-foreground mt-1">tubeclickpro.in</p></TooltipContent>
             </Tooltip>
           );
         })}
@@ -53,18 +53,18 @@ export function Sidebar() {
 
       <div className="mt-auto pt-2 max-md:hidden relative z-10 flex flex-col items-center gap-2">
         <div className="rounded-lg border border-primary/15 bg-secondary/30 px-2 py-1.5 flex flex-col items-center gap-1">
-          <span className="flex items-center gap-1 text-[8px] font-mono text-green-400"><span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />MUM-01</span>
+          <span className="flex items-center gap-1 text-[8px] font-mono text-green-400"><span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />online</span>
           <span className="text-[8px] font-mono text-muted-foreground">87ms • 3 nodes</span>
         </div>
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
-            <div className="w-12 h-12 rounded-xl glass-ghost border-primary/10 flex items-center justify-center cursor-pointer hover:border-primary/30 transition-colors group" role="button" aria-label="Ghost mesh status">
+            <div className="w-12 h-12 rounded-xl glass-ghost border-primary/10 flex items-center justify-center cursor-pointer hover:border-primary/30 transition-colors group" role="button" aria-label="System status">
               <Terminal className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
             </div>
           </TooltipTrigger>
           <TooltipContent side="right" className="glass-strong border-primary/20">
-            <p className="text-xs font-mono flex items-center gap-1.5"><Cpu className="w-3 h-3 text-green-400 animate-pulse" />Ghost Mesh • 3 Nodes • Quantum Cached</p>
-            <p className="text-[10px] text-muted-foreground font-mono mt-1">MUM-01 87ms • BLR-02 92ms • DEL-03 78ms • Encrypted</p>
+            <p className="text-xs font-mono flex items-center gap-1.5"><Cpu className="w-3 h-3 text-green-400 animate-pulse" />Engine connected</p>
+            <p className="text-[10px] text-muted-foreground font-mono mt-1">Secure • fast • reliable</p>
           </TooltipContent>
         </Tooltip>
       </div>

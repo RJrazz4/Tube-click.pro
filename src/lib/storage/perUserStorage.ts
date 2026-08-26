@@ -58,7 +58,7 @@ export function pinUserId(userId: string | null): void {
   try {
     if (userId) localStorage.setItem(AUTH_USER_PIN_KEY, userId);
     else localStorage.removeItem(AUTH_USER_PIN_KEY);
-  } catch {}
+  } catch { /* noop */ }
 }
 
 function storageKey(baseKey: string, userId: string | null): string {
@@ -70,10 +70,10 @@ function readRaw(key: string): string | null {
   try { return localStorage.getItem(key); } catch { return null; }
 }
 function writeRaw(key: string, value: string): void {
-  try { localStorage.setItem(key, value); } catch {}
+  try { localStorage.setItem(key, value); } catch { /* noop */ }
 }
 function removeRaw(key: string): void {
-  try { localStorage.removeItem(key); } catch {}
+  try { localStorage.removeItem(key); } catch { /* noop */ }
 }
 
 export function createPerUserStorage(baseKey: string, getUserId?: () => string | null): StateStorage {
@@ -92,7 +92,7 @@ export function createPerUserStorage(baseKey: string, getUserId?: () => string |
       try {
         const uid = getUserId();
         if (uid) return uid;
-      } catch {}
+      } catch { /* noop */ }
     }
     return getPinnedUserId();
   };
@@ -152,7 +152,7 @@ export function purgeAllUserStores(userId?: string | null): void {
       }
     }
     keysToRemove.forEach((k) => removeRaw(k));
-  } catch {}
+  } catch { /* noop */ }
 }
 
 /**

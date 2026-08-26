@@ -26,7 +26,7 @@ export function LiveActiveCounter({ compact = false }: { compact?: boolean }) {
     const id = setInterval(() => {
       setLiveCount(c => {
         const next = c + Math.floor(Math.random() * 3) + 1;
-        try { localStorage.setItem("ghost_base_counter", next.toString()); } catch {}
+        try { localStorage.setItem("ghost_base_counter", next.toString()); } catch { /* noop */ }
         return next;
       });
       setTodayDeployments(t => t + (Math.random() > 0.7 ? 1 : 0));
@@ -69,7 +69,7 @@ export function LossAversionTicker({ dailyLoss = 120 }: { dailyLoss?: number }) 
     try {
       const saved = sessionStorage.getItem("ghost_loss_start");
       if (!saved) sessionStorage.setItem("ghost_loss_start", start.toString());
-    } catch {}
+    } catch { /* noop */ }
 
     const perSecond = dailyLoss / 86400;
     const id = setInterval(() => {
@@ -78,7 +78,7 @@ export function LossAversionTicker({ dailyLoss = 120 }: { dailyLoss?: number }) 
       try {
         const saved = sessionStorage.getItem("ghost_loss_start");
         if (saved) startTime = parseInt(saved, 10);
-      } catch {}
+      } catch { /* noop */ }
       const elapsedSec = Math.floor((now - startTime) / 1000);
       setSeconds(elapsedSec);
       setLost(perSecond * elapsedSec);

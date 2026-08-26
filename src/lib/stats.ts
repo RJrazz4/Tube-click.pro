@@ -67,11 +67,11 @@ export const saveContent = (content: Omit<SavedContent, 'id' | 'createdAt'>): Sa
 export const deleteContent = (id: string): void => {
   try {
     useContentStore.getState().deleteContent(id);
-  } catch {}
+  } catch { /* noop */ }
 };
 
 export const clearAllContent = (): void => {
   try {
     useContentStore.getState().clearAll();
-  } catch {}
+  } catch { /* noop */ }
 };

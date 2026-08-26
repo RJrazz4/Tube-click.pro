@@ -1,4 +1,4 @@
-import { LogIn, ShieldCheck, Sparkles, Server, Terminal, Cpu, Radio } from "lucide-react";
+import { LogIn, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { GhostAdminModal } from "@/components/GhostAdminModal";
@@ -22,7 +22,7 @@ export function TopBar() {
         <h1 className="font-display text-xl font-bold cursor-pointer select-none flex items-center gap-2" onClick={handleGhostTrigger}>
           <span className="text-glow-purple text-primary">Tube</span>
           <span className="text-glow-cyan text-accent max-sm:hidden">Click Pro</span>
-          <span className="ml-1 text-[10px] font-mono bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded-full hidden md:inline">GHOST PROTOCOL v4.2 • LEVEL 4</span>
+          <span className="ml-1 text-[10px] font-mono bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded-full hidden md:inline">Creator OS</span>
         </h1>
         <div className="hidden lg:flex items-center gap-2 ml-4">
           <LiveActiveCounter compact />
@@ -33,18 +33,19 @@ export function TopBar() {
       <GhostAdminModal open={ghostOpen} onOpenChange={setGhostOpen} />
 
       <div className="flex items-center gap-2 max-sm:gap-1.5 relative z-10">
-        <div className="hidden md:flex items-center gap-1.5 text-[10px] font-mono">
-          <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20"><ShieldCheck className="w-3 h-3" />Ghost Secure</span>
-          <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20"><Server className="w-3 h-3" />MUM-01 • 87ms</span>
-          <span className="hidden xl:flex items-center gap-1 px-2 py-1 rounded-full bg-cyan-400/10 text-cyan-300 border border-cyan-400/20"><Radio className="w-3 h-3 animate-pulse" />War Room Live</span>
+        <div className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
+            <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+            All systems operational
+          </span>
         </div>
 
         {isAuthenticated ? (
           <UserMenu />
         ) : (
-          <Button variant="outline" size="sm" onClick={() => void requestAuthentication("save your work and start earning Pro via ghost uplink")} className="gap-2 border-primary/20 bg-primary/5 hover:bg-primary/10 font-mono text-xs">
+          <Button variant="outline" size="sm" onClick={() => void requestAuthentication("save your work and unlock Pro rewards")} className="gap-2 border-primary/20 bg-primary/5 hover:bg-primary/10 font-mono text-xs">
             <LogIn className="h-4 w-4" />
-            <span className="hidden sm:inline">Sign In • Ghost</span>
+            <span className="hidden sm:inline">Sign In</span>
           </Button>
         )}
 
@@ -52,11 +53,11 @@ export function TopBar() {
           variant="outline"
           size="sm"
           onClick={() => openProUpgrade({ defaultTab: "referral", reason: "topbar" })}
-          className="relative gap-2 border-primary/20 bg-primary/5 pr-7 hover:border-primary/40 hover:bg-primary/10 font-mono text-xs"
+          className="relative gap-2 border-primary/20 bg-primary/5 hover:border-primary/40 hover:bg-primary/10 text-xs"
+          title="Upgrade — or earn Pro free with referrals"
         >
           <Sparkles className="h-4 w-4 text-primary" />
-          <span className="hidden sm:inline">Unlock Pro ₹0</span>
-          <span className="absolute -right-1.5 -top-2 whitespace-nowrap rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-lg shadow-pink-500/30 animate-pulse">$97→₹0</span>
+          <span className="hidden sm:inline">Go Pro</span>
         </Button>
       </div>
     </header>

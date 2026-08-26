@@ -26,7 +26,7 @@ export function ViralOverdriveMiniBanner() {
         const diff = Date.now() - parseInt(lastDismiss, 10);
         if (diff < 24 * 60 * 60 * 1000) return; // dismissed within 24h
       }
-    } catch {}
+    } catch { /* noop */ }
 
     const load = async () => {
       try {
@@ -38,7 +38,7 @@ export function ViralOverdriveMiniBanner() {
           setProgress({ invited, required: profile.requiredForReward, rewardDays: profile.rewardDays });
           setShow(true);
         }
-      } catch {}
+      } catch { /* noop */ }
     };
     // Show after 8s - not intrusive
     const t = setTimeout(load, 8000);
@@ -46,7 +46,7 @@ export function ViralOverdriveMiniBanner() {
   }, []);
 
   const dismiss = () => {
-    try { localStorage.setItem("ghost_mini_banner_dismiss", Date.now().toString()); } catch {}
+    try { localStorage.setItem("ghost_mini_banner_dismiss", Date.now().toString()); } catch { /* noop */ }
     setDismissed(true);
     setShow(false);
   };

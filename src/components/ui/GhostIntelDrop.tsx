@@ -33,13 +33,13 @@ export function GhostIntelDrop() {
         const t = setTimeout(() => setShow(true), 2500);
         return () => clearTimeout(t);
       }
-    } catch {}
+    } catch { /* noop */ }
   }, []);
 
   const dismiss = () => {
     try {
       localStorage.setItem("ghost_intel_last_seen", new Date().toDateString());
-    } catch {}
+    } catch { /* noop */ }
     setShow(false);
   };
 

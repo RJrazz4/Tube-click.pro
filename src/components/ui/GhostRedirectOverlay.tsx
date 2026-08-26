@@ -66,7 +66,7 @@ export function GhostRedirectOverlay() {
       timeoutRef.current = window.setTimeout(() => {
         triggerCanonicalRedirect();
       }, 0);
-    } catch {}
+    } catch { /* noop */ }
 
     return () => {
       if (timeoutRef.current !== null) {

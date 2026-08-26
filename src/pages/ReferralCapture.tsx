@@ -9,7 +9,7 @@ import { getCanonicalRoot, isTemporaryHost } from "@/lib/domain/canonical";
 export default function ReferralCapture() {
   const { code = "" } = useParams();
   const navigate = useNavigate();
-  const [message, setMessage] = useState("Establishing ghost uplink via MUM-01... Activating private tracker perk");
+  const [message, setMessage] = useState("Validating your invite code…");
   const [logs, setLogs] = useState<string[]>(["> GHOST PROTOCOL v4.2 • BOOT", "> DETECTING REFERRAL CODE..."]);
 
   useEffect(() => {
@@ -17,7 +17,7 @@ export default function ReferralCapture() {
     const capture = async () => {
       try {
         // Add boot logs - lightweight illusion
-        setLogs(l => [...l, `> CODE: ${code.toUpperCase()} • LEVEL 4 CLEARANCE`, "> QUANTUM CACHE CHECK • MUM-01..."]);
+        setLogs(l => [...l, `> CODE: ${code.toUpperCase()} accepted`, "> Activating your bonus…"]);
 
         // If on temporary host, capture still works but remind canonical
         try {
@@ -25,12 +25,12 @@ export default function ReferralCapture() {
           if (isTemporaryHost(host)) {
             setLogs(l => [...l, `> TEMP HOST DETECTED (${host}) • CANONICAL ENFORCED`, `> SECURE ROOT: ${getCanonicalRoot()}`]);
           }
-        } catch {}
+        } catch { /* noop */ }
 
         await captureReferralClick(code);
         if (active) {
-          setLogs(l => [...l, "> GHOST UPLINK SECURED • QUANTUM CACHE SYNCED ✓", "> ENCRYPTED TUNNEL • TUBECCLICKPRO.IN"]);
-          setMessage("Ghost uplink secured via MUM-01. Private tracker perk activated. Redirecting to war room...");
+          setLogs(l => [...l, "> Invite code verified ✓", "> Welcome aboard"]);
+          setMessage("Invite code applied! Your bonus is active. Redirecting…");
         }
       } catch {
         if (active) {
@@ -70,7 +70,7 @@ export default function ReferralCapture() {
             ))}
             <div className="flex items-center gap-2 pt-2 mt-2 border-t border-border/20">
               <Cpu className="w-3 h-3 text-green-400 animate-pulse" />
-              <span className="text-[9px] text-muted-foreground">MUM-01 • 87ms • tubeclickpro.in • Quantum cached • Encrypted</span>
+              <span className="text-[9px] text-muted-foreground">tubeclickpro.in • secure</span>
             </div>
           </div>
         </CardContent>

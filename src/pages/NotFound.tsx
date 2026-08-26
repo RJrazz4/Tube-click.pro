@@ -20,10 +20,10 @@ const NotFound = () => {
           <Ghost className="w-8 h-8 text-red-400" />
         </div>
         <h1 className="font-display text-4xl font-black text-foreground">404 • Ghost Tunnel Lost</h1>
-        <p className="mt-3 text-sm font-mono text-muted-foreground">Route <span className="text-cyan-300">{location.pathname}</span> not found in ghost mesh • MUM-01 • Encrypted uplink failed • Re-routing to secure domain tubeclickpro.in</p>
+        <p className="mt-3 text-sm font-mono text-muted-foreground">Route <span className="text-cyan-300">{location.pathname}</span> not found. Let us get you back on track.</p>
         <div className="mt-4 flex items-center justify-center gap-2 text-[10px] font-mono">
           <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary border border-primary/20"><Terminal className="w-3 h-3" />404 • GHOST</span>
-          <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20"><Cpu className="w-3 h-3" />MUM-01 • 87ms</span>
+          
         </div>
         <Link to="/" className="mt-6 inline-block"><Button className="cyber-button gap-2 font-mono text-xs"><ArrowRight className="w-4 h-4" />Return to Ghost War Room • tubeclickpro.in</Button></Link>
       </div>

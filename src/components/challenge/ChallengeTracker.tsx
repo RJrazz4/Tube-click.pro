@@ -114,7 +114,7 @@ export function ChallengeTracker({
         <Progress value={(total / 30) * 100} className="h-1.5 mt-2" />
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-10 gap-1.5 md:gap-2">
+        <div className="grid grid-cols-6 sm:grid-cols-10 gap-1.5 md:gap-2">
           {cells.map((cell, i) => (
             <div
               key={i}

@@ -119,7 +119,7 @@ export function ReferralPromoArtifact({ referralCode, className = "", showQR = t
         URL.revokeObjectURL(url);
       };
       img.src = url;
-    } catch {}
+    } catch { /* noop */ }
   };
 
   return (

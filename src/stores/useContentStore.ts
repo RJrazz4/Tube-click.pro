@@ -132,7 +132,7 @@ export const useContentStore = create<ContentState>()(
               }, 1000);
             }
           }
-        } catch {}
+        } catch { /* noop */ }
       },
     }
   )

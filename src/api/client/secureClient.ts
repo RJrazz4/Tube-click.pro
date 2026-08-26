@@ -496,5 +496,5 @@ export function clearQuantumCache() {
     if (typeof localStorage !== "undefined") {
       Object.keys(localStorage).forEach(k => { if (k.startsWith("qc:v2:")) localStorage.removeItem(k); });
     }
-  } catch {}
+  } catch { /* noop */ }
 }

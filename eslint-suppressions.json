@@ -1,90 +1,26 @@
 {
   "api/_shared.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 20
-    },
     "no-useless-escape": {
-      "count": 1
-    }
-  },
-  "api/analyze-storyboard.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "api/clone-crush.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 8
-    },
-    "no-empty": {
-      "count": 1
-    },
-    "no-useless-escape": {
-      "count": 2
-    }
-  },
-  "api/generate-text.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "api/seo-tags.ts": {
-    "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },
   "api/transcript.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 6
-    },
-    "no-empty": {
-      "count": 3
-    },
     "no-useless-escape": {
       "count": 4
-    }
-  },
-  "apps/api/src/routes/middleware/tier.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "packages/ai/logger.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "packages/ai/providers/agnes-flash-adapter.ts": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 2
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
     }
   },
   "packages/ai/providers/gemini-flash-adapter.ts": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 2
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 6
-    }
-  },
-  "packages/orchestrator/generator/scene-pipeline.test.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/api/client/secureClient.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 8
     }
   },
   "src/components/ui/LazyImage.tsx": {
     "@next/next/no-img-element": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },
@@ -98,23 +34,8 @@
       "count": 1
     }
   },
-  "src/hooks/useSecureQuery.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    }
-  },
   "src/lib/export.ts": {
     "no-case-declarations": {
-      "count": 1
-    }
-  },
-  "src/lib/friendlyError.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
-  "src/lib/referrals/client.ts": {
-    "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },
@@ -123,60 +44,7 @@
       "count": 11
     }
   },
-  "src/lib/stats.ts": {
-    "no-empty": {
-      "count": 2
-    }
-  },
-  "src/pages/AdminPanel.tsx": {
-    "no-empty": {
-      "count": 1
-    }
-  },
-  "src/pages/CloneCrush.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 8
-    }
-  },
-  "src/pages/Dashboard.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/pages/Repurposer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/pages/SeoOptimizer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/stores/useContentStore.ts": {
-    "no-empty": {
-      "count": 1
-    }
-  },
-  "supabase/functions/analyze-storyboard/index.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "supabase/functions/generate-content/index.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "supabase/functions/generate-seo/index.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
   "supabase/functions/transcript/index.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
     "no-empty": {
       "count": 1
     },

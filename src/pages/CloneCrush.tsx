@@ -7,15 +7,8 @@ import { GhostInterrogationDrawer } from "@/components/ghost/GhostInterrogationD
 import { GhostSquadDossier } from "@/components/ghost/GhostSquadDossier";
 import { GhostVisualRecon } from "@/components/ghost/GhostVisualRecon";
 import { DawnPatrolCard } from "@/components/ghost/DawnPatrolCard";
-import { GhostBootSequence } from "@/components/ui/GhostBootSequence";
-import { WarRoomTicker } from "@/components/ui/WarRoomTicker";
-import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
-import { LiveActiveCounter, LossAversionTicker } from "@/components/ui/LiveActiveCounter";
-import { VideoWallBackground } from "@/components/ui/VideoWallBackground";
 import { NeuralVelocityEngine } from "@/components/ui/NeuralVelocityEngine";
 import { ParticleBurst } from "@/components/ui/ParticleBurst";
-import { GhostIntelDrop } from "@/components/ui/GhostIntelDrop";
-import { BroadcastSyncIndicator } from "@/components/ui/BroadcastSyncIndicator";
 import { ProtectedVideoPreview } from "@/components/showdown/ProtectedVideoPreview";
 import { XpGainPopup } from "@/components/ui/XpGainPopup";
 import { Button } from "@/components/ui/button";
@@ -308,10 +301,8 @@ export default function CloneCrush() {
   const [copiedText, setCopiedText] = useState(false);
   const [activeTab, setActiveTab] = useState("script");
   const [logSteps, setLogSteps] = useState<{ label: string; status: "pending" | "processing" | "success" | "rerouting" | "error"; meta?: string }[]>([]);
-  const [showBoot, setShowBoot] = useState(true);
   const [burstTrigger, setBurstTrigger] = useState(0);
   const [xpTrigger, setXpTrigger] = useState(0);
-  const [showIntelDrop, setShowIntelDrop] = useState(true);
   const [workflowNonce, setWorkflowNonce] = useState(0);
   const [dailyLimitActive, setDailyLimitActive] = useState(false);
 
@@ -463,7 +454,7 @@ export default function CloneCrush() {
             conveyorCursor: res.nextCursor || null,
             conveyorWindowId: res.windowId || state0.conveyorWindowId,
           });
-          if (!fresh) throw new Error("Ghost mesh returned no fresh viral slot");
+          if (!fresh) throw new Error("No fresh analysis available — try again in a moment");
 
           appendConveyorTile(fresh as CompetitorVideo);
           markSeenVideo(fresh.videoId);
@@ -472,11 +463,11 @@ export default function CloneCrush() {
           // Consume the persisted pending flag only after a real replacement
           // tile has been appended. Failed/empty requests must remain retryable.
           markConveyorShiftConsumed();
-          toast.success("New slot unlocked • Ghost mesh advanced", { id: "conveyor-shift" });
+          toast.success("New slot unlocked", { id: "conveyor-shift" });
         })
         .catch((error: unknown) => {
           console.warn("[clone-crush] Conveyor refill failed:", error instanceof Error ? error.message : String(error));
-          toast.error("Conveyor refill delayed • Ghost mesh will retry", { id: "conveyor-shift" });
+          toast.error("Refill delayed — retrying automatically", { id: "conveyor-shift" });
           conveyorRetryBlockedRef.current = true;
           if (conveyorRetryTimerRef.current !== null) {
             window.clearTimeout(conveyorRetryTimerRef.current);
@@ -498,7 +489,7 @@ export default function CloneCrush() {
     if (!profile && lastChannelUrl && isTierReady && !conveyorShiftPending) {
       if (autoRefreshRunningRef.current) return;
       autoRefreshRunningRef.current = true;
-      toast.loading("Reconnecting to your saved channel via MUM-01...", { id: "returning-profile" });
+      toast.loading("Reconnecting to your saved channel…", { id: "returning-profile" });
       setIsProfiling(true);
       cloneCrushMutation
         .mutateAsync({ action: "profile", channelUrl: lastChannelUrl, language: outputLanguage })
@@ -511,7 +502,7 @@ export default function CloneCrush() {
           };
           setProfile(profiledChannel, lastChannelUrl);
           startWorkflowProfile({ id: profiledChannel.id, name: profiledChannel.name, handle: profiledChannel.handle, avatar: profiledChannel.avatar });
-          toast.success(`Reconnected to ${profiledChannel.name} • MUM-01`, { id: "returning-profile" });
+          toast.success(`Reconnected to ${profiledChannel.name}`, { id: "returning-profile" });
           // A migrated/reloaded workspace may retain its conveyor while profile
           // metadata is absent. Rehydrate the profile without replacing that
           // active 24-hour queue or restarting Slot 1's timer.
@@ -562,7 +553,7 @@ export default function CloneCrush() {
     setSavedNiche(deducedNiche);
     setCustomDescription((prof.description || discoveryDescription).slice(0, 150));
     setIsSearchingCompetitors(true);
-    toast.loading(`AI deducing niche "${deducedNiche}" & auditing viral velocity via ghost mesh...`, { id: "competitors-find" });
+    toast.loading(`Analyzing "${deducedNiche}" and auditing what is working...`, { id: "competitors-find" });
 
     try {
       // Bootstrap the sliding window — request 3 tiles with no cursor.
@@ -588,14 +579,14 @@ export default function CloneCrush() {
         viralCompetitors.forEach((v: any) => markSeenVideo(v.videoId));
         selectWorkflowCompetitor({ videoId: unlocked.videoId, title: unlocked.title, url: unlocked.url, channelName: unlocked.channelName, thumbnail: unlocked.thumbnail }, deducedNiche);
         const isGhost = (res as any).ghostReconstructed;
-        toast.success(isGhost ? `Ghost Matrix Reconstructed! ${viralCompetitors.length} viral competitors via MUM-01 mesh` : `Showdown Matrix Ready! ${viralCompetitors.length} 50k+ live competitors`, { id: "competitors-find" });
+        toast.success(isGhost ? `Analysis ready — ${viralCompetitors.length} viral competitors found` : `Analysis ready — ${viralCompetitors.length} 50k+ competitors found`, { id: "competitors-find" });
         cloneCrushMutation.mutateAsync({ action: "threat-alerts", competitors: viralCompetitors, userSubscribers: prof.subscriberCount || 0, language: outputLanguage }).then((alertRes: any) => {
           if (alertRes.success) setThreatAlerts(alertRes.alerts || [], alertRes.wideningGap || null);
         }).catch(() => {});
       } else throw new Error(res.error || "No competitors");
     } catch (err: any) {
       // Even on error, ghost synthetic should have returned - but fallback toast
-      toast.error(err.message || "Ghost mesh activated - synthetic matrix deployed", { id: "competitors-find" });
+      toast.error(err.message || "Showing cached analysis while we retry", { id: "competitors-find" });
     } finally { setIsSearchingCompetitors(false); }
   };
 
@@ -642,7 +633,6 @@ export default function CloneCrush() {
     setCopiedText(false);
     setBurstTrigger(0);
     setXpTrigger(0);
-    setShowIntelDrop(true);
     setNicheInput("");
     setCustomDescription("");
     setWorkflowNonce((n) => n + 1);
@@ -673,7 +663,7 @@ export default function CloneCrush() {
         setProfile(profiledChannel, input);
         startWorkflowProfile({ id: profiledChannel.id, name: profiledChannel.name, handle: profiledChannel.handle, avatar: profiledChannel.avatar });
         const isGhost = (res as any).ghostReconstructed;
-        toast.success(isGhost ? `Ghost Profile Reconstructed: ${profiledChannel.name} via MUM-01` : `Connected to ${profiledChannel.name}'s Channel Profile`, { id: "profile-scrape" });
+        toast.success(isGhost ? `Profile loaded: ${profiledChannel.name}` : `Profile loaded: ${profiledChannel.name}`, { id: "profile-scrape" });
         await autoDiscoverCompetitors(profiledChannel);
       } else throw new Error(res.error || "Channel not found");
     } catch (err: any) {
@@ -756,7 +746,7 @@ export default function CloneCrush() {
       }
 
       steps = [
-        { label: "Establishing Secure Tunnel via Ghost Node MUM-01...", status: "processing", meta: "ENCRYPTED" },
+        { label: "Fetching video data…", status: "processing", meta: "secure" },
         { label: `Arming ${requestedTier === "premium" ? "99% GLITCH PROTOCOL" : "60% Standard Optimization"}...`, status: "pending", meta: "ARMING" },
         { label: "Scraping Captions via Ghost Relay Mesh (6 nodes)...", status: "pending", meta: "PIPED MESH" },
         { label: "Enforcing Stealth Disguise & Anti-Clone Shield...", status: "pending", meta: "STEALTH" },
@@ -765,9 +755,9 @@ export default function CloneCrush() {
         { label: "Compiling Chain-Loop (5 Viral Assets Package)...", status: "pending", meta: "CHAIN-LOOP" },
       ];
       setLogSteps(steps);
-      steps[0].status = "success"; steps[0].meta = transcriptData.source?.includes("ghost") ? `${transcriptData.ghostNode || "MUM-01"} • SYNTH` : "MUM-01 • 87ms"; steps[1].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,400));
+      steps[0].status = "success"; steps[0].meta = transcriptData.source?.includes("ghost") ? "transcripts • cached" : "transcripts • live"; steps[1].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,400));
       steps[1].status = "success"; steps[2].status = steps[0].meta.includes("SYNTH") ? "rerouting" : "processing"; steps[2].meta = steps[0].meta.includes("SYNTH") ? "GHOST RECONSTRUCT" : "PIPED MESH"; setLogSteps([...steps]); if (steps[2].status === "rerouting") await new Promise(r=>setTimeout(r,300));
-      steps[2].status = "success"; steps[2].meta = transcriptData.source?.includes("ghost") ? `${transcriptData.ghostNode || "MUM-01"} • SYNTH` : "LIVE CAPTIONS"; steps[3].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,300));
+      steps[2].status = "success"; steps[2].meta = transcriptData.source?.includes("ghost") ? "captions • cached" : "captions • live"; steps[3].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,300));
       steps[3].status = "success"; steps[4].status = "processing"; setLogSteps([...steps]);
 
       const rewriteRes = await withClientTimeout(cloneCrushMutation.mutateAsync({
@@ -956,7 +946,7 @@ export default function CloneCrush() {
   const handleCloneAndCrush = async () => {
     if (!selectedVideo) { toast.error("Select a competitor video from matrix"); return; }
     if (isExecutingRef.current) return;
-    if (!isTierReady) { toast.loading("Verifying clearance via MUM-01...", { id: "tier-hydrating" }); return; }
+    if (!isTierReady) { toast.loading("Checking your plan…", { id: "tier-hydrating" }); return; }
     if (isFreeCooldownActive) { routeToProUpsell("premium"); return; }
     if (enforcePremiumPaywall()) return;
 
@@ -1030,21 +1020,9 @@ export default function CloneCrush() {
   return (
     <div className="relative space-y-6 md:space-y-8 animate-fade-in pb-12">
       <EngineScriptLoop />
-      <VideoWallBackground intensity="high" />
-      <div className="relative z-10 space-y-4">
-        <WarRoomTicker />
-        <div className="flex flex-wrap items-center gap-3">
-          <LiveActiveCounter compact />
-          <GhostNodeStatus compact />
-          <BroadcastSyncIndicator compact />
-          {wideningGap && wideningGap.dailyLoss>0 && <LossAversionTicker dailyLoss={wideningGap.dailyLoss} />}
-        </div>
-        {showIntelDrop && <GhostIntelDrop />}
-      </div>
-
       {/* Dopamine overlays */}
-      <XpGainPopup trigger={xpTrigger} xp={30} label="XP • Ghost Chain-Loop" />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] pointer-events-none z-50">
+      <XpGainPopup trigger={xpTrigger} xp={30} label="XP earned" />
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] pointer-events-none z-30">
         <ParticleBurst trigger={burstTrigger} />
       </div>
 
@@ -1053,25 +1031,17 @@ export default function CloneCrush() {
           <h1 className="font-display text-2xl md:text-3xl font-bold text-foreground flex items-center gap-2 text-glitch">
             <Zap className="w-7 h-7 md:w-8 md:h-8 text-primary animate-pulse" />
             Clone &amp; Crush AI
-            <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] border border-primary/20 font-display tracking-wide">Ghost Protocol v4.2 • Chain-Loop</span>
           </h1>
-          <p className="text-sm md:text-base text-muted-foreground mt-1 max-w-3xl">Auto-profile via ghost mesh, live velocity audit, Stealth Disguise Protocol • <span className="text-cyan-300 font-mono text-xs">MUM-01 • ENCRYPTED UPLINK</span></p>
+          <p className="text-sm md:text-base text-muted-foreground mt-1 max-w-3xl">Profile any channel, audit what's working right now, and generate your next hit — automatically.</p>
         </div>
         <div className="flex items-center gap-3">
-          <GhostNodeStatus />
           <div className="p-3 bg-card border border-border rounded-xl flex items-center gap-3">
             <Award className="w-5 h-5 text-primary" />
-            <div><p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Clearance</p><p className="text-sm font-bold text-foreground capitalize">{isPro ? "pro" : "free"} • Level 4</p></div>
-            {!isPro && <Button size="sm" onClick={openReferralRewards} className="cyber-button text-[10px] px-3 h-8 font-display">Unlock Pro ₹0</Button>}
+            <div><p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Plan</p><p className="text-sm font-bold text-foreground capitalize">{isPro ? "Pro" : "Free"}</p></div>
+            {!isPro && <Button size="sm" onClick={openReferralRewards} className="text-[10px] px-3 h-8 font-display">Go Pro</Button>}
           </div>
         </div>
       </div>
-
-      {showBoot && (
-        <div className="relative z-10">
-          <GhostBootSequence onComplete={()=>setShowBoot(false)} />
-        </div>
-      )}
 
       <div className="relative z-10 grid lg:grid-cols-12 gap-6 items-start">
         <div className="lg:col-span-8 space-y-6">
@@ -1167,8 +1137,8 @@ export default function CloneCrush() {
 
           <Card className="glass-strong bracket border-primary/20">
             <CardHeader className="pb-3">
-              <CardTitle className="font-display text-base flex items-center gap-2"><Terminal className="w-5 h-5 text-primary" />1. Auto-Profile Channel (Ghost Mesh • Zero-Friction)</CardTitle>
-              <CardDescription className="text-xs">Paste YouTube URL or Handle. Ghost Protocol reconstructs even if API quota dead. You never see red FAILED.</CardDescription>
+              <CardTitle className="font-display text-base flex items-center gap-2"><Terminal className="w-5 h-5 text-primary" />1. Profile a channel (just paste a URL)</CardTitle>
+              <CardDescription className="text-xs">Paste a YouTube URL or handle — we pull the channel's data automatically, with smart fallbacks if the API is busy.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col sm:flex-row gap-3">
@@ -1276,14 +1246,14 @@ export default function CloneCrush() {
                   <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-primary/20 text-primary px-2.5 py-0.5 rounded-full font-bold">Your Channel • Ghost Verified</span><span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" /></div>
                   <div className="flex items-center gap-3.5 mt-2"><img src={profile.avatar} alt={profile.name} className="w-14 h-14 rounded-full border-2 border-primary/50 object-cover bg-card shadow-md shrink-0" /><div className="min-w-0"><p className="text-base font-bold text-foreground truncate">{profile.name}</p><p className="text-xs text-primary font-medium mt-0.5">{profile.handle} {(profile as any).isGhostReconstructed && <span className="text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded-full ml-1">GHOST RECON</span>}</p></div></div>
                   <p className="text-xs text-muted-foreground mt-3 line-clamp-3 leading-relaxed">{profile.description}</p></div>
-                  <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between text-[11px] text-muted-foreground"><span>Niche: <strong className="text-foreground">{nicheInput||"Auto"}</strong></span><span className="text-green-400 font-semibold flex items-center gap-1"><Activity className="w-3 h-3" />Active • {(profile as any).ghostNode||"MUM-01"}</span></div>
+                  <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between text-[11px] text-muted-foreground"><span>Niche: <strong className="text-foreground">{nicheInput||"Auto"}</strong></span><span className="text-green-400 font-semibold flex items-center gap-1"><Activity className="w-3 h-3" />Active</span></div>
                 </Card>
               </div>
               <div className="lg:col-span-2 flex flex-col items-center justify-center py-2 lg:py-0"><div className="relative flex items-center justify-center"><div className="absolute inset-0 bg-red-500/30 rounded-full blur-xl animate-pulse" /><div className="w-14 h-14 rounded-full bg-gradient-to-br from-red-600 to-rose-950 border-2 border-red-500 flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.9)] relative z-10 animate-pulse"><Zap className="w-7 h-7 text-white fill-white animate-bounce" /></div></div><span className="text-[11px] font-display font-extrabold text-red-500 tracking-widest mt-2 uppercase drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">VS SHOWDOWN</span></div>
               <div className="lg:col-span-5 h-full">
                 <Card className="glass-strong border-border/80 p-5 h-full flex flex-col justify-between">
                   <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">Live Velocity Matrix</span><span className="text-xs text-muted-foreground">{competitors.length} Outliers {(competitors[0] as any)?.isGhostReconstructed && <span className="text-amber-300">• Ghost</span>}</span></div>
-                  {isSearchingCompetitors ? (<div className="py-10 text-center space-y-2"><Loader2 className="w-7 h-7 animate-spin text-primary mx-auto" /><p className="text-xs text-muted-foreground">Auditing via ghost mesh (6 relays)...</p><div className="flex justify-center gap-1 mt-2">{[0,1,2,3].map(i=><span key={i} className="w-1 h-1 rounded-full bg-primary/60 animate-pulse" style={{animationDelay:`${i*150}ms`}} />)}</div></div>) : competitors.length>0 ? (
+                  {isSearchingCompetitors ? (<div className="py-10 text-center space-y-2"><Loader2 className="w-7 h-7 animate-spin text-primary mx-auto" /><p className="text-xs text-muted-foreground">Auditing what's working…</p><div className="flex justify-center gap-1 mt-2">{[0,1,2,3].map(i=><span key={i} className="w-1 h-1 rounded-full bg-primary/60 animate-pulse" style={{animationDelay:`${i*150}ms`}} />)}</div></div>) : competitors.length>0 ? (
                     <div key={workflowNonce} className="grid grid-cols-3 gap-2 mt-2">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400';
                       // Conveyor semantics: slot0 (idx===0) is the
                       // actionable tile (or the pinned 24h-locked result
@@ -1487,7 +1457,7 @@ export default function CloneCrush() {
 
           {selectedVideo && (
             <Card key={workflowNonce} className="glass-strong border-border bracket">
-              <CardHeader className="pb-3"><CardTitle className="font-display text-base flex items-center gap-2"><Zap className="w-5 h-5 text-primary" />3. Chain-Loop Loophole Configurator (Ghost Mesh Active)</CardTitle><CardDescription className="text-xs">Ghost Protocol ensures never red FAILED - amber re-routing + quantum cache. 1 click = 5 assets via MUM-01 edge node.</CardDescription></CardHeader>
+              <CardHeader className="pb-3"><CardTitle className="font-display text-base flex items-center gap-2"><Zap className="w-5 h-5 text-primary" />3. Generate your assets (1 click = 5 outputs)</CardTitle><CardDescription className="text-xs">One click produces 5 ready-to-use assets: script, thumbnail prompts, guide, and more — with automatic fallbacks so it just works.</CardDescription></CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div onClick={()=>setSelectedVideoTier("free")} className={`rounded-xl border p-4 cursor-pointer transition-all ${selectedTier==="free"?"border-primary bg-primary/5 ring-1 ring-primary/30":"border-border/60 hover:border-border bg-secondary/10"}`}>
@@ -1504,7 +1474,7 @@ export default function CloneCrush() {
                     <p className="text-[10px] text-muted-foreground leading-relaxed">Extreme Curiosity Glitches, time-jumps, hidden secrets. Reverse-engineers thumbnails ruthlessly.</p>
                   </div>
                 </div>
-                <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex gap-3 items-start"><ShieldAlert className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" /><div><p className="text-xs font-bold text-yellow-500">Stealth Disguise Protocol Active • Ghost Node MUM-01</p><p className="text-[10px] text-muted-foreground leading-relaxed">All outputs deploy Anti-Clone Illusion: analogies discarded, case studies swapped, vocabularies updated. Never cloned.</p></div></div>
+                <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex gap-3 items-start"><ShieldAlert className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" /><div><p className="text-xs font-bold text-yellow-500">Originality guard active</p><p className="text-[10px] text-muted-foreground leading-relaxed">Every output is rewritten to be genuinely yours — examples swapped, wording rebuilt. Never a raw copy.</p></div></div>
                 <div className="relative w-full">
                   {(() => {
                     const freeBlocked = !isPro && (dailyLimitActive || selectedTier === "premium" || isFreeCooldownActive);
@@ -1512,12 +1482,12 @@ export default function CloneCrush() {
                     return (
                       <>
                         <Button onClick={handleCloneAndCrush} disabled={buttonDisabled} className="w-full h-12 bg-gradient-to-r from-primary to-accent text-primary-foreground font-display font-bold uppercase tracking-wider text-sm flex gap-2">
-                          {isRewriting ? <><Loader2 className="w-4 h-4 animate-spin" />Executing Chain-Loop via Ghost Mesh...</>
+                          {isRewriting ? <><Loader2 className="w-4 h-4 animate-spin" />Generating your assets…</>
                             : !isTierReady ? <><Loader2 className="w-4 h-4 animate-spin" />Verifying clearance...</>
                             : isFreeCooldownActive ? <><Lock className="w-4 h-4" />24h Cooldown — Skip Wait with Pro</>
                             : !isPro && dailyLimitActive ? <><Lock className="w-4 h-4" />Daily Limit Reached — Unlock Premium</>
                             : !isPro && selectedTier==="premium" ? <><Lock className="w-4 h-4" />99% Glitch — Unlock Pro</>
-                            : <><Zap className="w-4 h-4 fill-primary-foreground" />Execute Chain-Loop (1 Click = 5 Assets) • MUM-01</>}
+                            : <><Zap className="w-4 h-4 fill-primary-foreground" />Generate assets (1 click = 5)</>}
                         </Button>
                         {!isPro && dailyLimitActive && <div className="absolute inset-0 pointer-events-none" aria-hidden="true" />}
                         {!isPro && dailyLimitActive && <div className="mt-3"><DailyLimitOverlay variant="hero" /></div>}
@@ -1534,7 +1504,7 @@ export default function CloneCrush() {
                 {logSteps.length>0 && (
                   <div className="font-mono bg-black rounded-xl border border-primary/20 p-4 text-xs space-y-2 max-h-[260px] overflow-y-auto relative overflow-hidden">
                     <div className="absolute inset-0 ghost-scanline opacity-[0.04] pointer-events-none" />
-                    <p className="text-primary font-bold border-b border-border/50 pb-1.5 flex items-center justify-between relative z-10"><span className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5" />GHOST CHAIN-LOOP CONSOLE • MUM-01</span><span className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /><span className="text-[9px] bg-primary/20 px-2 py-0.5 rounded text-primary animate-pulse">LIVE</span></span></p>
+                    <p className="text-primary font-bold border-b border-border/50 pb-1.5 flex items-center justify-between relative z-10"><span className="flex items-center gap-2"><Terminal className="w-3.5 h-3.5" />GENERATION LOG</span><span className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /><span className="text-[9px] bg-primary/20 px-2 py-0.5 rounded text-primary animate-pulse">LIVE</span></span></p>
                     <div className="relative z-10 space-y-1.5">
                     {logSteps.map((step, idx)=>(
                       <div key={idx} className="flex items-center justify-between text-muted-foreground leading-relaxed">
@@ -1551,10 +1521,10 @@ export default function CloneCrush() {
                     </div>
                     {/* Fake node dots */}
                     <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border/20 relative z-10">
-                      {["MUM-01","BLR-02","DEL-03"].map((n,i)=>(
+                      {["api","cache","fallback"].map((n,i)=>(
                         <span key={n} className={`text-[8px] font-mono px-1.5 py-0.5 rounded border ${logSteps.some(s=>s.status==="processing") && i===0 ?"bg-primary/20 border-primary/30 text-primary animate-pulse":"bg-secondary/40 border-border/30 text-muted-foreground"}`}>{n}</span>
                       ))}
-                      <span className="text-[8px] text-muted-foreground ml-auto">Quantum Cache: 87ms • Encrypted</span>
+                      <span className="text-[8px] text-muted-foreground ml-auto">redundant sources • secure</span>
                     </div>
                   </div>
                 )}
@@ -1566,7 +1536,7 @@ export default function CloneCrush() {
         <div className="lg:col-span-4 space-y-6">
           {activeRewrite ? (
             <Card className={`glass-strong ${isFreeCooldownActive ? "border-amber-500/40" : "border-primary/40"} shadow-neon-glow animate-fade-in bracket relative overflow-hidden`}>{isFreeCooldownActive && freeCooldownUntil && <FreeCooldownOverlay unlocksAt={freeCooldownUntil} views={selectedVideo?.views} onUpgrade={()=>routeToProUpsell("premium")} variant="result" />}
-              <CardHeader className="pb-3 border-b border-border/40"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[9px] font-mono tracking-widest uppercase">Chain-Loop Master • {activeRewrite.outputLanguage || "English"} • Ghost Secured</span><CardTitle className="font-display text-base text-foreground mt-2 line-clamp-2">{activeRewrite.rewrittenTitle}</CardTitle><p className="text-[10px] text-muted-foreground truncate mt-1">Based on: {activeRewrite.targetVideoTitle} • MUM-01</p></div><Button variant="outline" size="icon" onClick={handleCopyScript} className="shrink-0 border-border hover:border-primary/40 text-muted-foreground hover:text-primary active:scale-95"><Copy className="w-4 h-4" /></Button></div></CardHeader>
+              <CardHeader className="pb-3 border-b border-border/40"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[9px] font-mono tracking-widest uppercase">Master output • {activeRewrite.outputLanguage || "English"}</span><CardTitle className="font-display text-base text-foreground mt-2 line-clamp-2">{activeRewrite.rewrittenTitle}</CardTitle><p className="text-[10px] text-muted-foreground truncate mt-1">Based on: {activeRewrite.targetVideoTitle}</p></div><Button variant="outline" size="icon" onClick={handleCopyScript} className="shrink-0 border-border hover:border-primary/40 text-muted-foreground hover:text-primary active:scale-95"><Copy className="w-4 h-4" /></Button></div></CardHeader>
               <CardContent className="pt-5 space-y-5">
                 <div className="p-4 rounded-xl glass-ghost border-primary/30 space-y-3"><div className="flex items-center justify-between"><p className="text-xs font-display font-bold text-foreground flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-primary animate-pulse" />Chain-Loop Complete: 5 Assets</p><span className="text-[10px] bg-primary text-primary-foreground font-mono font-bold px-2 py-0.5 rounded-full uppercase">No-Click Handoff</span></div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><Button onClick={handleSendToVoiceover} size="sm" className="cyber-button text-xs h-9 font-display gap-1.5 justify-start px-3"><Mic className="w-3.5 h-3.5 shrink-0" /><span>Send to Voiceover</span></Button><Button onClick={handleCopyFullPackage} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Copy className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy Full Package</span></Button><Button onClick={handleSendToRepurposer} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Share2 className="w-3.5 h-3.5 text-primary shrink-0" /><span>Repurpose</span></Button><Button onClick={handleCopyThumbnailPrompt} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Image className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy Thumb Prompt</span></Button><Button onClick={handleCopySeoTags} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Search className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy SEO</span></Button></div>
@@ -1590,8 +1560,8 @@ export default function CloneCrush() {
             <Card className="glass-strong border-border p-6 text-center h-[420px] flex flex-col justify-center items-center bracket">
               <div className="w-16 h-16 rounded-2xl bg-secondary/60 flex items-center justify-center mb-4 border border-border"><FileText className="w-8 h-8 text-muted-foreground" /></div>
               <p className="text-base text-foreground font-bold">No Active Chain-Loop Package</p>
-              <p className="text-xs text-muted-foreground max-w-[250px] mt-2 leading-relaxed">Profile your channel, select video from Showdown Matrix, hit <strong className="text-foreground">Execute Chain-Loop</strong> via Ghost Mesh.</p>
-              <div className="mt-4 flex items-center gap-2 text-[9px] font-mono text-muted-foreground"><Cpu className="w-3 h-3" />Ghost Node MUM-01 • Encrypted • Quantum Cache Active</div>
+              <p className="text-xs text-muted-foreground max-w-[250px] mt-2 leading-relaxed">Profile your channel, select video from Showdown Matrix, hit <strong className="text-foreground">Generate assets</strong>.</p>
+              <div className="mt-4 flex items-center gap-2 text-[9px] font-mono text-muted-foreground"><Cpu className="w-3 h-3" />Automatic fallbacks • runs even when the API is busy</div>
             </Card>
           )}
 

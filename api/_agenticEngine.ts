@@ -82,7 +82,7 @@ export async function runAgenticPipeline(opts: AgenticRequestOptions): Promise<A
 
   const incomingContext = context ? `\n\nIncoming Chain-Loop Intel:\n"""${context.slice(0, 3000)}"""` : "";
 
-  let currentPrompt = `Topic: ${topic}
+  const currentPrompt = `Topic: ${topic}
 Platform: ${platform}
 Style: ${style}
 Language: ${language}
@@ -126,7 +126,7 @@ Return exact JSON only matching the requested schema.`;
       lastModel = result.model;
       attemptedModels = result.modelsAttempted;
 
-      let cleaned = result.text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+      const cleaned = result.text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
       lastParsed = JSON.parse(cleaned);
 
       const criticSystem = `You are a ruthless YouTube Retention Critic and Chief Content Auditor. Evaluate the provided JSON content on a scale of 0-100 against:
@@ -150,7 +150,7 @@ Respond in exact JSON only:
         deadlineMs: 10_000,
       });
 
-      let criticClean = criticResult.text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+      const criticClean = criticResult.text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
       const evaluation = JSON.parse(criticClean);
 
       const score = typeof evaluation.score === "number" ? evaluation.score : 80;

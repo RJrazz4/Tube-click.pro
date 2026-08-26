@@ -123,7 +123,7 @@ function cacheAlign(systemPrompt: string): { out: string; changed: boolean } {
   const sentinelIdx = lines.findIndex((ln) =>
     CACHE_ALIGN_SENTINELS.some((s) => ln.trim().startsWith(s)),
   );
-  let out = lines;
+  const out = lines;
   let changed = false;
   if (sentinelIdx > 0) {
     const [picked] = lines.splice(sentinelIdx, 1);
@@ -505,7 +505,7 @@ export function compressHeadroom(opts: HeadroomCompressOpts): HeadroomCompressed
 
     // 1) CacheAligner on system prompt.
     const aligned = cacheAlign(opts.systemPrompt ?? "");
-    let systemPrompt = aligned.out;
+    const systemPrompt = aligned.out;
     if (aligned.changed) strategiesApplied.push("cache-align");
 
     let userPrompt = opts.userPrompt ?? "";
