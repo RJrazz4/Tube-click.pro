@@ -67,7 +67,7 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
 
   // Reset dependent state whenever the payment method changes.
   useEffect(() => {
-    setSelectedPlan(method === "upi" ? "upi_full" : "usdt_crypto");
+    setSelectedPlan(method === "upi" ? "upi_trial_3" : "usdt_trial_3");
     setProof("");
     setSubmitted(false);
     setCopied(null);
@@ -77,8 +77,7 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
     () => (method ? plansForMethod(method) : []),
     [method],
   );
-  const activePlan: Plan =
-    method === "usdt" ? PLANS.usdt_crypto : PLANS[selectedPlan];
+  const activePlan: Plan = PLANS[selectedPlan];
 
   const copy = async (text: string, kind: "addr" | "upi") => {
     try {
@@ -260,8 +259,8 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
             </div>
           )}
 
-          {/* Plan selection (two INR plans) */}
-          <div className="grid gap-3 sm:grid-cols-2">
+          {/* Plan selection — trials first; stacks on mobile */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {visiblePlans.map((plan) => {
               const selected = selectedPlan === plan.id;
               return (
@@ -275,12 +274,17 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
                       : "border-border/70 bg-secondary/30 hover:border-primary/40"
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-display font-bold text-foreground">{plan.name}</span>
-                    {selected && <Check className="h-4 w-4 text-primary" />}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-display font-bold text-foreground flex items-center gap-1.5">
+                      {plan.name}
+                      {plan.durationDays <= 3 && (
+                        <span className="rounded-full border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[8px] font-mono font-bold uppercase tracking-wider text-accent">Trial</span>
+                      )}
+                    </span>
+                    {selected && <Check className="h-4 w-4 text-primary shrink-0" />}
                   </div>
                   <p className="mt-1 font-display text-xl font-black text-foreground">
-                    ₹{plan.amount}
+                    {plan.priceLabel}
                     <span className="ml-1 text-[11px] font-normal text-muted-foreground">· {plan.durationDays} days</span>
                   </p>
                   <p className="mt-1 text-[11px] text-muted-foreground">{plan.description}</p>

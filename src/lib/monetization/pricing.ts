@@ -1,8 +1,10 @@
 /**
  * Centralized pricing + payment configuration for TubeClick Pro.
  *
- * New structure (per product decision):
+ * Current structure (per product decision):
+ *   - USDT Trial .............. $1 USD .... paid via USDT (TRC-20) only ... 3 days
  *   - USDT Crypto Plan ........ $9 USD .... paid via USDT (TRC-20) only ... 30 days
+ *   - UPI Trial ............... ₹99 INR ... paid via UPI only ............ 3 days
  *   - UPI Full Plan ........... ₹860 INR .. paid via UPI only ............ 30 days
  *   - 15-Days Mini Plan ....... ₹400 INR .. paid via UPI only ............ 15 days
  *
@@ -17,7 +19,7 @@
  */
 
 export type PaymentMethod = "usdt" | "upi";
-export type PlanId = "usdt_crypto" | "upi_full" | "mini_15";
+export type PlanId = "usdt_trial_3" | "usdt_crypto" | "upi_trial_3" | "upi_full" | "mini_15";
 
 export interface Plan {
   id: PlanId;
@@ -62,6 +64,16 @@ export const IS_UPI_CONFIGURED = Boolean(UPI_ID);
 /* ---------------------------------------------------------------------- plans */
 
 export const PLANS: Record<PlanId, Plan> = {
+  usdt_trial_3: {
+    id: "usdt_trial_3",
+    name: "3-Days Trial Plan",
+    priceLabel: "$1",
+    amount: 1,
+    currency: "USD",
+    durationDays: 3,
+    method: "usdt",
+    description: "Test-drive full Pro for 3 days with USDT (TRC-20).",
+  },
   usdt_crypto: {
     id: "usdt_crypto",
     name: "USDT Crypto Plan",
@@ -72,6 +84,16 @@ export const PLANS: Record<PlanId, Plan> = {
     method: "usdt",
     description: "Pay once with USDT on TRON (TRC-20). 30-day Pro pass.",
     highlight: true,
+  },
+  upi_trial_3: {
+    id: "upi_trial_3",
+    name: "3-Days Trial Plan",
+    priceLabel: "₹99",
+    amount: 99,
+    currency: "INR",
+    durationDays: 3,
+    method: "upi",
+    description: "Test-drive full Pro for 3 days via UPI (India).",
   },
   upi_full: {
     id: "upi_full",
@@ -95,7 +117,7 @@ export const PLANS: Record<PlanId, Plan> = {
   },
 };
 
-export const PLAN_LIST: Plan[] = [PLANS.usdt_crypto, PLANS.upi_full, PLANS.mini_15];
+export const PLAN_LIST: Plan[] = [PLANS.usdt_trial_3, PLANS.usdt_crypto, PLANS.upi_trial_3, PLANS.upi_full, PLANS.mini_15];
 
 /** Plans available under a given payment method. */
 export function plansForMethod(method: PaymentMethod): Plan[] {
