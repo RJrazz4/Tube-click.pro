@@ -13,12 +13,13 @@ Use this document as the guardrail when adding or removing features.
 | Route | Purpose |
 |---|---|
 | `/` | Dashboard — competitive intelligence overview and key actions |
-| `/clone-crush` | Clone & Crush — competitor channel analysis and asset generation |
+| `/clone-crush` | Analyze & Create — competitor channel analysis and content package generation |
+| `/create` | Create from a topic — TubeBot topic-based content generation |
+| `/chat` | Backward-compatible alias for Create from a topic |
 | `/seo` | SEO Optimizer — titles, descriptions, tag packs |
 | `/voice` | Voiceover Studio — script-to-speech with preview caching |
-| `/repurpose` | Content Repurposer — transcript-based asset generation |
-| `/chat` | TubeBot — on-demand AI assistant |
-| `/storyboard` | Storyboard Studio (when wired by feature flag) |
+| `/repurposer` | Content Repurposer — transcript-based asset generation |
+| `/library` | Local Library — saved content search, filters, and exports |
 | `/rewards` | Referral program dashboard and share toolkit |
 | `/settings` | Account, subscription, and API configuration |
 | `/about` | Product information |
