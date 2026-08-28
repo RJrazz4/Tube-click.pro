@@ -234,7 +234,7 @@ export function CryptoCheckout() {
           <span className="tcp-price-sym">{TOKEN_SYMBOL}</span>
         </div>
         <p className="tcp-price-note">
-          One-time payment · instant activation · no market fluctuation
+          One-time payment · activation after payment review
         </p>
       </div>
 

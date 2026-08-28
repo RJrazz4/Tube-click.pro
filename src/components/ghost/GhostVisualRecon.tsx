@@ -130,13 +130,13 @@ export function GhostVisualRecon({ video, savedNiche, onUpgrade, slotId = 0 }: P
           <div className="min-w-0">
             <CardTitle className="font-display text-sm flex items-center gap-2">
               <Radar className="w-4 h-4 text-cyan-300" />
-              VISUAL RECON
+              Visual moment search
               <span className="ml-1 px-1.5 py-0.5 rounded bg-cyan-400/15 text-cyan-300 border border-cyan-400/30 text-[9px] font-mono font-black tracking-widest">
-                ⚡ BLACK-OPS LANE
+                VISUAL RECON · BLACK OPS
               </span>
             </CardTitle>
             <CardDescription className="text-[11px] mt-1">
-              Multimodal frame-level visual search across competitor moments. One recon credit per video.
+              Search a selected competitor&apos;s sampled moments by words like &quot;red arrow&quot; or &quot;shocked face.&quot; One Pro credit per video.
             </CardDescription>
           </div>
           {allowed && reconCredit && (
@@ -157,23 +157,23 @@ export function GhostVisualRecon({ video, savedNiche, onUpgrade, slotId = 0 }: P
             <div className="w-12 h-12 rounded-full bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-center">
               <Lock className="w-6 h-6 text-cyan-300" />
             </div>
-            <p className="font-mono text-xs tracking-widest text-cyan-300">// BLACK-OPS CLEARANCE REQUIRED</p>
+            <p className="font-mono text-xs tracking-widest text-cyan-300">// ADVANCED VISUAL SEARCH LOCKED</p>
             <p className="text-[11px] text-muted-foreground max-w-xs leading-relaxed">
-              Visual DNA extraction, thumbnail heists, and moment-level search are reserved for Black-Ops operatives.
+              Visual moment search requires Pro plus Black Ops access. Use it to find reusable visual patterns in a selected competitor video.
             </p>
             <Button asChild size="sm" className="cyber-button text-[10px] font-display mt-1">
-              <a href="/rewards?upsell=recon&tier=pro">Request Clearance</a>
+              <a href="/rewards?upsell=recon&tier=pro">See access options</a>
             </Button>
           </div>
         ) : !video ? (
-          <div className="text-center text-xs text-muted-foreground py-6 font-mono">// select a video to scan</div>
+          <div className="text-center text-xs text-muted-foreground py-6 font-mono">Select a competitor video to search its visual moments.</div>
         ) : (
           <>
             {!state?.ready ? (
               <div className="rounded-lg border border-cyan-400/20 bg-cyan-500/5 p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <Eye className="w-4 h-4 text-cyan-300" />
-                  <p className="text-xs font-mono text-cyan-300">// EXTRACT VISUAL DNA</p>
+                  <p className="text-xs font-mono text-cyan-300">// INDEX VISUAL MOMENTS</p>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
                   Scout 12 evenly-spaced keyframes across the video, caption each with multimodal Flash, and
@@ -189,7 +189,7 @@ export function GhostVisualRecon({ video, savedNiche, onUpgrade, slotId = 0 }: P
                   {state?.ingesting ? (
                     <><Loader2 className="w-3 h-3 animate-spin mr-1" /> extracting frames…</>
                   ) : (
-                    <><Zap className="w-3 h-3 mr-1" /> Extract Visual DNA (1 credit)</>
+                    <><Zap className="w-3 h-3 mr-1" /> Index moments (1 credit)</>
                   )}
                 </Button>
               </div>

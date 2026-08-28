@@ -23,6 +23,10 @@ export function LiveActiveCounter({ compact = false }: { compact?: boolean }) {
   const [todayDeployments, setTodayDeployments] = useState<number>(() => 127 + (new Date().getHours() * 7) % 100);
 
   useEffect(() => {
+    const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const isSmallScreen = window.matchMedia?.("(max-width: 1023px)").matches ?? false;
+    if (prefersReducedMotion || isSmallScreen) return;
+
     const id = setInterval(() => {
       setLiveCount(c => {
         const next = c + Math.floor(Math.random() * 3) + 1;

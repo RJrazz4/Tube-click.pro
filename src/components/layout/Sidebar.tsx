@@ -1,73 +1,231 @@
-import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Mic, Sparkles, Share2, TrendingUp, Search, Settings, Zap, Gift, Terminal, Cpu } from "lucide-react";
+import { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import {
+  BarChart3,
+  BookOpen,
+  ChevronRight,
+  Gift,
+  LayoutDashboard,
+  Menu,
+  Mic,
+  PenLine,
+  Search,
+  Settings,
+  Share2,
+  Sparkles,
+  X,
+  Zap,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Zap, label: "Clone & Crush", path: "/clone-crush" },
-  { icon: Gift, label: "Referral Rewards • Private Tracker", path: "/rewards" },
-  { icon: Mic, label: "Voiceover • Neural Engine", path: "/voice" },
-  { icon: Share2, label: "Multi-Platform Repurposer", path: "/repurposer" },
-  { icon: TrendingUp, label: "Analytics & ROI", path: "/analytics" },
-  { icon: Search, label: "SEO & Tag Optimizer", path: "/seo" },
-  { icon: Settings, label: "Settings", path: "/settings" },
+const navGroups = [
+  {
+    label: "Workspace",
+    items: [
+      { icon: LayoutDashboard, label: "Dashboard", description: "Your creator home", path: "/" },
+      { icon: Zap, label: "Analyze", description: "Find winning videos and create a package", path: "/clone-crush" },
+      { icon: BookOpen, label: "Library", description: "Find your saved content", path: "/library" },
+    ],
+  },
+  {
+    label: "Create & grow",
+    items: [
+      { icon: PenLine, label: "Create from a topic", description: "Generate titles, hooks, and scripts", path: "/create" },
+      { icon: Mic, label: "Voiceover", description: "Turn scripts into narration", path: "/voice" },
+      { icon: Share2, label: "Repurpose", description: "Format content for other platforms", path: "/repurposer" },
+      { icon: Search, label: "SEO", description: "Improve titles and tags", path: "/seo" },
+      { icon: BarChart3, label: "Growth estimator", description: "Plan reach and revenue", path: "/analytics" },
+    ],
+  },
 ];
+
+const mobilePrimaryItems = [
+  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
+  { icon: Zap, label: "Analyze", path: "/clone-crush" },
+  { icon: Mic, label: "Voiceover", path: "/voice" },
+  { icon: Share2, label: "Repurpose", path: "/repurposer" },
+];
+
+const mobileMoreItems = [
+  { icon: BookOpen, label: "Library", description: "Find your saved content", path: "/library" },
+  { icon: PenLine, label: "Create from topic", description: "Generate titles, hooks, and scripts", path: "/create" },
+  { icon: Search, label: "SEO", description: "Improve titles and tags", path: "/seo" },
+  { icon: BarChart3, label: "Growth estimator", description: "Plan reach and revenue", path: "/analytics" },
+  { icon: Gift, label: "Referral rewards", description: "Earn Pro with qualified referrals", path: "/rewards" },
+  { icon: Settings, label: "Settings", description: "Account, plan, and data", path: "/settings" },
+];
+
+function isActivePath(currentPath: string, itemPath: string): boolean {
+  return itemPath === "/" ? currentPath === "/" : currentPath.startsWith(itemPath);
+}
 
 export function Sidebar() {
   const location = useLocation();
-  return (
-    <aside className="mobile-safe-bottom fixed left-0 top-0 z-50 flex h-screen w-20 flex-col items-center border-r border-primary/10 glass-strong py-6 max-md:bottom-0 max-md:top-auto max-md:h-[calc(4.5rem+env(safe-area-inset-bottom))] max-md:w-full max-md:flex-row max-md:border-r-0 max-md:border-t max-md:px-2 max-md:py-1 backdrop-blur-2xl">
-      <div className="absolute inset-0 ghost-scanline opacity-[0.015] pointer-events-none max-md:hidden" />
-      <Link to="/" className="mb-8 group max-md:hidden relative z-10" aria-label="Go to Dashboard">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-neon-purple to-neon-cyan flex items-center justify-center neon-glow-purple transition-all duration-300 group-hover:scale-110 border border-primary/20">
-          <Sparkles className="w-6 h-6 text-white" aria-hidden="true" />
-        </div>
-        <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-green-400 border-2 border-background animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.8)]" />
-      </Link>
+  const navigate = useNavigate();
+  const [moreOpen, setMoreOpen] = useState(false);
 
-      <nav aria-label="Primary navigation" className="flex flex-1 flex-col items-center gap-1.5 overflow-y-auto py-2 scrollbar-none max-md:flex-row max-md:gap-1 max-md:overflow-x-auto max-md:overflow-y-hidden max-md:py-0 relative z-10">
-        {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
+  return (
+    <aside
+      aria-label="Primary navigation"
+      className="mobile-safe-bottom fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-primary/10 glass-strong py-5 backdrop-blur-2xl max-md:bottom-0 max-md:top-auto max-md:h-[calc(4.5rem+env(safe-area-inset-bottom))] max-md:w-full max-md:flex-row max-md:border-r-0 max-md:border-t max-md:px-2 max-md:py-1"
+    >
+      <div className="absolute inset-0 ghost-scanline opacity-[0.015] pointer-events-none max-md:hidden" />
+
+      {/* Desktop navigation */}
+      <div className="relative z-10 hidden h-full min-h-0 flex-col md:flex">
+        <Link to="/" className="mb-7 flex items-center gap-3 px-4" aria-label="Go to TubeClick Pro dashboard">
+          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-gradient-to-br from-neon-purple to-neon-cyan neon-glow-purple transition-transform duration-300 hover:scale-105">
+            <Sparkles className="h-5 w-5 text-white" aria-hidden="true" />
+            <span className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-background bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-display text-sm font-black tracking-wide text-foreground">
+              TubeClick <span className="text-cyan-300">Pro</span>
+            </p>
+            <p className="mt-0.5 text-[9px] font-mono uppercase tracking-[0.18em] text-muted-foreground">Creator workspace</p>
+          </div>
+        </Link>
+
+        <nav aria-label="Workspace navigation" className="min-h-0 flex-1 space-y-6 overflow-y-auto px-3 scrollbar-none">
+          {navGroups.map((group) => (
+            <div key={group.label}>
+              <p className="mb-2 px-3 text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/60">
+                {group.label}
+              </p>
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const active = isActivePath(location.pathname, item.path);
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "group flex min-h-[52px] items-center gap-3 rounded-xl border px-3 py-2 transition-all duration-200",
+                        active
+                          ? "border-primary/25 bg-primary/15 text-primary shadow-[0_0_18px_rgba(139,92,246,0.14)]"
+                          : "border-transparent text-sidebar-foreground hover:border-primary/15 hover:bg-secondary/60 hover:text-foreground",
+                      )}
+                    >
+                      <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border", active ? "border-primary/25 bg-primary/15" : "border-border/50 bg-secondary/40 group-hover:border-primary/20")}>
+                        <item.icon className="h-4 w-4" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold leading-tight">{item.label}</span>
+                        <span className="mt-0.5 block truncate text-[10px] leading-tight text-muted-foreground">{item.description}</span>
+                      </span>
+                      <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground/40 transition-transform", active && "translate-x-0.5 text-primary")} aria-hidden="true" />
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        <div className="mt-4 space-y-2 px-3">
+          <Link
+            to="/rewards"
+            className={cn(
+              "group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors",
+              isActivePath(location.pathname, "/rewards")
+                ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                : "border-amber-400/15 bg-amber-400/5 text-amber-200/80 hover:border-amber-400/30 hover:bg-amber-400/10",
+            )}
+          >
+            <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber-400/20 bg-amber-400/10">
+              <Gift className="h-4 w-4 text-amber-300" aria-hidden="true" />
+              <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-300" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold leading-tight">Referral rewards</span>
+              <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">Earn Pro with qualified referrals</span>
+            </span>
+          </Link>
+
+          <Link
+            to="/settings"
+            aria-current={isActivePath(location.pathname, "/settings") ? "page" : undefined}
+            className={cn(
+              "flex min-h-[46px] items-center gap-3 rounded-xl border px-3 transition-colors",
+              isActivePath(location.pathname, "/settings")
+                ? "border-primary/25 bg-primary/15 text-primary"
+                : "border-transparent text-sidebar-foreground hover:border-primary/15 hover:bg-secondary/60 hover:text-foreground",
+            )}
+          >
+            <Settings className="ml-1 h-4 w-4" aria-hidden="true" />
+            <span className="text-sm font-semibold">Settings</span>
+          </Link>
+
+          <div className="flex items-center justify-between rounded-lg border border-primary/10 bg-secondary/25 px-3 py-2">
+            <span className="flex items-center gap-1.5 text-[9px] font-mono text-green-400"><span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />System ready</span>
+            <span className="text-[9px] font-mono text-muted-foreground">Creator tools</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile navigation: four frequent destinations plus a labeled More menu. */}
+      <nav aria-label="Mobile navigation" className="relative z-10 flex w-full items-center justify-between gap-1 md:hidden">
+        {mobilePrimaryItems.map((item) => {
+          const active = isActivePath(location.pathname, item.path);
           return (
-            <Tooltip key={item.path} delayDuration={0}>
-              <TooltipTrigger asChild>
-                <Link
-                  to={item.path}
-                  aria-label={item.label}
-                  className={cn(
-                    "touch-target w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 relative group shrink-0 max-md:h-11 max-md:w-11 border",
-                    isActive ? "bg-primary/15 text-primary border-primary/20 neon-glow-purple shadow-[0_0_15px_rgba(139,92,246,0.2)]" : "text-sidebar-foreground hover:text-primary hover:bg-secondary/60 border-transparent hover:border-primary/10"
-                  )}
-                >
-                  <item.icon className="w-5 h-5" aria-hidden="true" />
-                  {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary rounded-r-full shadow-[0_0_8px_rgba(139,92,246,0.8)]" aria-hidden="true" />}
-                  {item.path === "/rewards" && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />}
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="glass-strong border-primary/20 font-mono text-xs"><p>{item.label}</p><p className="text-[9px] text-muted-foreground mt-1">tubeclickpro.in</p></TooltipContent>
-            </Tooltip>
+            <Link
+              key={item.path}
+              to={item.path}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "flex min-h-[50px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 text-[10px] font-semibold transition-colors",
+                active ? "border-primary/25 bg-primary/15 text-primary" : "border-transparent text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+              )}
+            >
+              <item.icon className="h-4 w-4" aria-hidden="true" />
+              <span className="truncate">{item.label}</span>
+            </Link>
           );
         })}
+        <button
+          type="button"
+          aria-label="Open more navigation options"
+          aria-expanded={moreOpen}
+          onClick={() => setMoreOpen((open) => !open)}
+          className={cn(
+            "flex min-h-[50px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 text-[10px] font-semibold transition-colors",
+            moreOpen ? "border-primary/25 bg-primary/15 text-primary" : "border-transparent text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+          )}
+        >
+          {moreOpen ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-4 w-4" aria-hidden="true" />}
+          <span>More</span>
+        </button>
       </nav>
 
-      <div className="mt-auto pt-2 max-md:hidden relative z-10 flex flex-col items-center gap-2">
-        <div className="rounded-lg border border-primary/15 bg-secondary/30 px-2 py-1.5 flex flex-col items-center gap-1">
-          <span className="flex items-center gap-1 text-[8px] font-mono text-green-400"><span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />online</span>
-          <span className="text-[8px] font-mono text-muted-foreground">87ms • 3 nodes</span>
+      {moreOpen && (
+        <div className="absolute bottom-[calc(100%+0.5rem)] left-2 right-2 z-20 rounded-2xl border border-primary/20 bg-background/95 p-2 shadow-[0_0_35px_rgba(0,0,0,0.45)] backdrop-blur-2xl md:hidden">
+          <div className="mb-1 flex items-center justify-between px-2 py-1">
+            <p className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-muted-foreground">More tools</p>
+            <button type="button" aria-label="Close more navigation options" onClick={() => setMoreOpen(false)} className="rounded-md p-1 text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-1">
+            {mobileMoreItems.map((item) => {
+              const active = isActivePath(location.pathname, item.path);
+              return (
+                <button
+                  key={item.path}
+                  type="button"
+                  onClick={() => { setMoreOpen(false); navigate(item.path); }}
+                  className={cn("flex min-h-[54px] items-center gap-2 rounded-xl border px-3 text-left transition-colors", active ? "border-primary/25 bg-primary/15 text-primary" : "border-border/50 bg-secondary/30 text-foreground hover:border-primary/20 hover:bg-secondary/60")}
+                >
+                  <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold">{item.label}</span>
+                    <span className="mt-0.5 block truncate text-[9px] text-muted-foreground">{item.description}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <Tooltip delayDuration={0}>
-          <TooltipTrigger asChild>
-            <div className="w-12 h-12 rounded-xl glass-ghost border-primary/10 flex items-center justify-center cursor-pointer hover:border-primary/30 transition-colors group" role="button" aria-label="System status">
-              <Terminal className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="glass-strong border-primary/20">
-            <p className="text-xs font-mono flex items-center gap-1.5"><Cpu className="w-3 h-3 text-green-400 animate-pulse" />Engine connected</p>
-            <p className="text-[10px] text-muted-foreground font-mono mt-1">Secure • fast • reliable</p>
-          </TooltipContent>
-        </Tooltip>
-      </div>
+      )}
+
     </aside>
   );
 }

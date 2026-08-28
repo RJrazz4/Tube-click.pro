@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { PaymentCheckout } from "@/components/subscription/PaymentCheckout";
+import { EntitlementStatus } from "@/components/subscription/EntitlementStatus";
 import { ReferralApplyForm } from "@/components/referrals/ReferralApplyForm";
 import { useProUpgrade } from "@/contexts/ProUpgradeContext";
 import { toast } from "sonner";
@@ -43,6 +44,13 @@ import {
 // useDailyUsage removed — legacy 10/day counter replaced by 24h conveyor.
 import { useAppStore } from "@/stores/useAppStore";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useWorkflowStore } from "@/stores/useWorkflowStore";
+import { useDawnPatrolStore } from "@/stores/useDawnPatrolStore";
+import { useGhostCreditsStore } from "@/stores/useGhostCreditsStore";
+import { useInterrogateStore } from "@/stores/useInterrogateStore";
+import { useReconStore } from "@/stores/useReconStore";
+import { useSquadStore } from "@/stores/useSquadStore";
 
 function useFreeCooldownRemaining(): number {
   const freeCooldownUntil = useCloneCrushStore((s) => s.freeCooldownUntil);
@@ -72,14 +80,24 @@ function formatCountdown(ms: number): string {
 // Clearing preferences/content must never become an implicit sign-out; only the
 // dedicated sign-out action is allowed to destroy a Supabase session.
 const AUTH_STORAGE_KEYS = new Set(["tubegenius-auth-store"]);
+const AUTH_NAMESPACED_PREFIX = "tc:u:tubegenius-auth-store";
 const APP_STORAGE_PREFIXES = ["tubegenius-", "tubeclick-"];
+const APP_STORAGE_EXACT_KEYS = new Set([
+  "ghost_base_counter",
+  "ghost_intel_last_seen",
+  "ghost_mini_banner_dismiss",
+  "ghost_streak_v2",
+]);
 
 function clearLocalAppData() {
   Object.keys(localStorage)
-    .filter((key) =>
-      APP_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix)) &&
-      !AUTH_STORAGE_KEYS.has(key),
-    )
+    .filter((key) => {
+      const isNamespacedAppData = key.startsWith("tc:u:") && !key.startsWith(AUTH_NAMESPACED_PREFIX);
+      const isLegacyAppData = APP_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix)) && !AUTH_STORAGE_KEYS.has(key);
+      const isTransientCache = key.startsWith("qc:v2:") || key.startsWith("tc-cache:");
+      const isReferralMarker = key.startsWith("tc:free-unlock-used:");
+      return isNamespacedAppData || isLegacyAppData || isTransientCache || isReferralMarker || APP_STORAGE_EXACT_KEYS.has(key);
+    })
     .forEach((key) => localStorage.removeItem(key));
 }
 
@@ -159,26 +177,13 @@ function AccountSection() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-display font-semibold text-foreground mb-2">Account & Licensing</h2>
-        <p className="text-sm text-muted-foreground">Manage your subscription and account</p>
+        <p className="text-sm text-muted-foreground">Manage your Pro access, account, and usage</p>
       </div>
 
       {/* Current Plan */}
       <Card className={cn("cyber-card border-border", isPro && "neon-glow-purple")}>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base font-display flex items-center gap-2">
-                Current Plan: <span className="text-primary capitalize">{license.tier}</span>
-              </CardTitle>
-              <CardDescription className="text-xs">Your active subscription</CardDescription>
-            </div>
-            <Badge
-              variant={license.status === "active" ? "default" : "destructive"}
-              className="capitalize"
-            >
-              {license.status}
-            </Badge>
-          </div>
+          <EntitlementStatus />
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 mb-4">
@@ -186,7 +191,7 @@ function AccountSection() {
                 "Generations Today 0/10" which contradicted the 1-per-24h
                 free-tier model. */}
             <div className="p-3 rounded-lg bg-secondary/50">
-              <p className="text-xs text-muted-foreground">Daily Chain-Loop</p>
+              <p className="text-xs text-muted-foreground">Content package quota</p>
               <p className="text-2xl font-display font-bold text-foreground">
                 {isPro ? (
                   <span className="text-primary">Unlimited</span>
@@ -200,7 +205,7 @@ function AccountSection() {
                 )}
               </p>
               <p className="text-[10px] text-muted-foreground mt-1">
-                {isPro ? "No cooldown • 3-slot conveyor unlocked" : "1 Chain-Loop / 24h • Niche-strict conveyor"}
+                {isPro ? "Unlimited packages • no waiting period" : "Free includes 1 content package every 24h"}
               </p>
             </div>
           </div>
@@ -208,7 +213,7 @@ function AccountSection() {
           {!isPro && (
             <Button onClick={() => openProUpgrade({ reason: "settings" })} className="w-full cyber-button" size="lg">
               <Crown className="w-4 h-4 mr-2" />
-              Unlock Pro for Free — Skip 24h Cooldown
+              See Pro options
             </Button>
           )}
         </CardContent>
@@ -307,15 +312,15 @@ function DashboardSection() {
 
       <Card className="cyber-card border-border">
         <CardHeader>
-          <CardTitle className="text-base font-display">Chain-Loop Limits</CardTitle>
-          <CardDescription className="text-xs">Your current tier limits — Niche-Strict Daily Conveyor Belt</CardDescription>
+          <CardTitle className="text-base font-display">Content package limits</CardTitle>
+          <CardDescription className="text-xs">How many packages your current plan can create</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
               <div>
-                <span className="text-sm text-foreground">Daily Chain-Loops (Free)</span>
-                <p className="text-[10px] text-muted-foreground">1 per 24h • 3-slot conveyor • Niche-locked</p>
+                <span className="text-sm text-foreground">Free content packages</span>
+                <p className="text-[10px] text-muted-foreground">1 package per 24h • 3 opportunity cards</p>
               </div>
               <Badge variant="secondary">
                 {isPro ? "Unlimited" : onCooldown ? `Next in ${formatCountdown(cooldownRemaining)}` : "1 Available"}
@@ -339,20 +344,59 @@ function DataPrivacySection() {
   const handleExportData = async () => {
     setIsExporting(true);
     try {
-      // Export all user data
+      // Export the live Zustand snapshots instead of obsolete unnamespaced
+      // localStorage keys. This keeps the download compatible with the
+      // current per-user storage adapter while never exposing store actions.
+      const authState = useAuthStore.getState();
+      const contentState = useContentStore.getState();
+      const appState = useAppStore.getState();
+      const cloneState = useCloneCrushStore.getState();
+      const workflowState = useWorkflowStore.getState();
       const data = {
+        exportVersion: 1,
         exportDate: new Date().toISOString(),
-        license: useAuthStore.getState().license,
-        user: useAuthStore.getState().user,
-        content: JSON.parse(localStorage.getItem("tubegenius-content-store") || "{}"),
-        preferences: JSON.parse(localStorage.getItem("tubegenius-app-store") || "{}"),
+        account: {
+          user: authState.user,
+          license: authState.license,
+        },
+        content: {
+          stats: contentState.stats,
+          items: contentState.contents,
+        },
+        preferences: {
+          tier: appState.tier,
+          sidebarOpen: appState.sidebarOpen,
+        },
+        workspace: {
+          profile: cloneState.profile,
+          savedChannels: cloneState.savedChannels,
+          activeSlotIndex: cloneState.activeSlotIndex,
+          savedNiche: cloneState.savedNiche,
+          outputLanguage: cloneState.outputLanguage,
+          rewrites: cloneState.rewrites,
+        },
+        workflow: workflowState.activeWorkflow,
+        ghostIntelligence: {
+          credits: {
+            tier: useGhostCreditsStore.getState().tier,
+            isBlackOps: useGhostCreditsStore.getState().isBlackOps,
+            actions: useGhostCreditsStore.getState().actions,
+          },
+          interrogation: useInterrogateStore.getState().session,
+          recon: useReconStore.getState().videos,
+          squadBriefs: useSquadStore.getState().briefs,
+          dawnPatrol: {
+            briefs: useDawnPatrolStore.getState().briefs,
+            config: useDawnPatrolStore.getState().config,
+          },
+        },
       };
-      
+
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-        a.download = `tubeclickpro-data-${new Date().toISOString().split("T")[0]}.json`;
+      a.download = `tubeclickpro-data-${new Date().toISOString().split("T")[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
       
@@ -386,7 +430,7 @@ function DataPrivacySection() {
             <Database className="w-4 h-4" />
             Your Data
           </CardTitle>
-          <CardDescription className="text-xs">Export or delete your data</CardDescription>
+          <CardDescription className="text-xs">Export or delete your local workspace data</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -607,26 +651,26 @@ function ReferralRewardsSection() {
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10">
           <Crown className="h-7 w-7 text-primary" />
         </div>
-        <h2 className="font-display text-2xl font-black text-foreground md:text-3xl">Unlock Pro for Free</h2>
+        <h2 className="font-display text-2xl font-black text-foreground md:text-3xl">Referral reward path</h2>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          TubeClick Pro has no paid checkout. Two qualified referrals activate your 21-Day Pro Pass.
+          Earn time-limited Pro access through qualified referrals. Paid plans are shown separately in the Subscription tab.
         </p>
       </div>
 
       <Card className="cyber-card mx-auto max-w-3xl overflow-hidden border-primary/30 bg-gradient-to-br from-card via-primary/[0.06] to-cyan-400/[0.04] shadow-[0_0_55px_rgba(139,92,246,0.14)]">
         <CardContent className="grid gap-4 p-6 md:grid-cols-2 md:p-8">
           <div className="rounded-2xl border border-primary/20 bg-background/35 p-5">
-            <p className="font-mono text-xs font-bold uppercase tracking-widest text-primary">Condition 1</p>
-            <p className="mt-2 font-display text-lg font-bold">Invite 3 Friends</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">They must create verified accounts through your unique referral link.</p>
+            <p className="font-mono text-xs font-bold uppercase tracking-widest text-primary">Step 1</p>
+            <p className="mt-2 font-display text-lg font-bold">Share your referral link</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Share it with creators who will genuinely use TubeClick Pro.</p>
           </div>
           <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.04] p-5">
-            <p className="font-mono text-xs font-bold uppercase tracking-widest text-cyan-300">Condition 2</p>
-            <p className="mt-2 font-display text-lg font-bold">Help 1 Friend Unlock Pro</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">When one invited friend completes their own loop, your pass activates automatically.</p>
+            <p className="font-mono text-xs font-bold uppercase tracking-widest text-cyan-300">Step 2</p>
+            <p className="mt-2 font-display text-lg font-bold">Earn qualified referrals</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">When two invited creators complete a real product action, your 21-day Pro reward activates automatically.</p>
           </div>
           <Button onClick={() => navigate("/rewards")} className="cyber-button h-12 gap-2 md:col-span-2">
-            <Gift className="h-4 w-4" /> Unlock Pro for Free <ChevronRight className="h-4 w-4" />
+            <Gift className="h-4 w-4" /> Open referral dashboard <ChevronRight className="h-4 w-4" />
           </Button>
         </CardContent>
       </Card>

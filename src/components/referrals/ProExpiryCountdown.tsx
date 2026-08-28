@@ -37,7 +37,7 @@ export function ProExpiryCountdown({ expiresAt, compact = false }: Props) {
   if (remaining <= 0) {
     return (
       <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300">
-        ELITE NODE EXPIRED • Ghost cache purged • Re-qualify via referral uplink
+        Pro access expired • You are on the Free plan • Re-qualify through referrals or see paid options
       </div>
     );
   }
@@ -58,8 +58,8 @@ export function ProExpiryCountdown({ expiresAt, compact = false }: Props) {
           <span className={`w-2 h-2 rounded-full ${isCritical ? "bg-red-400 animate-ping" : "bg-green-400 animate-pulse"}`} />
         </div>
         <div>
-          <p className={`text-[11px] font-mono font-bold uppercase tracking-widest ${isCritical ? "text-red-400" : "text-green-400"}`}>{isCritical ? "⚠️ ELITE NODE EXPIRING" : "Elite Node Active"}</p>
-          <p className="text-[10px] font-mono text-muted-foreground">Ghost Node MUM-01 • Encrypted • Quantum cached • tubeclickpro.in</p>
+          <p className={`text-[11px] font-mono font-bold uppercase tracking-widest ${isCritical ? "text-red-400" : "text-green-400"}`}>{isCritical ? "⚠️ PRO ACCESS EXPIRING" : "PRO ACCESS ACTIVE"}</p>
+          <p className="text-[10px] font-mono text-muted-foreground">Your Pro entitlement • Expires automatically</p>
         </div>
       </div>
       <div className="flex items-center gap-1 font-mono text-xs font-bold">

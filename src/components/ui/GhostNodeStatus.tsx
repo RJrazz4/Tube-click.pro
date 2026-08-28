@@ -24,6 +24,10 @@ export function GhostNodeStatus({ compact = false }: { compact?: boolean }) {
   const [activeNode, setActiveNode] = useState(0);
 
   useEffect(() => {
+    const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const isSmallScreen = window.matchMedia?.("(max-width: 1023px)").matches ?? false;
+    if (prefersReducedMotion || isSmallScreen) return;
+
     // Lightweight interval: every 3.5s update fake metrics
     const id = setInterval(() => {
       setLatencies(prev => prev.map((l, i) => {

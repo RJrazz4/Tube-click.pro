@@ -188,7 +188,7 @@ export function ReferralPromoArtifact({ referralCode, className = "", showQR = t
 
         {/* Domain footer */}
         <text x="66" y="468" fill="#6B7280" fontFamily="monospace" fontSize="16">{displayDomain.toUpperCase()} / REF / {shortCode}</text>
-        <text x="66" y="494" fill="#22D3EE" fontFamily="monospace" fontSize="13" opacity="0.7">ENCRYPTED UPLINK • GHOST NODE SYNCED • ₹0 ELITE ACCESS</text>
+        <text x="66" y="494" fill="#22D3EE" fontFamily="monospace" fontSize="13" opacity="0.7">REFERRAL LINK • ACCOUNT PROGRESS TRACKED • ₹0 PRO REWARD</text>
 
         {/* CTA pill */}
         <g opacity="0.95">

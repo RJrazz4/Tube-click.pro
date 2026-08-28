@@ -7,7 +7,7 @@ import { useWorkflowStore, type WorkflowDestination } from "@/stores/useWorkflow
 const DESTINATION = {
   voice: { label: "Continue in Voiceover", route: "/voice", icon: Mic },
   repurposer: { label: "Continue in Repurposer", route: "/repurposer", icon: Share2 },
-  tubebot: { label: "Continue in Clone & Crush", route: "/clone-crush", icon: Zap },
+  tubebot: { label: "Continue in Create from a topic", route: "/create", icon: Zap },
 } satisfies Record<WorkflowDestination, { label: string; route: string; icon: typeof Mic }>;
 
 export function WorkflowContinueCard() {

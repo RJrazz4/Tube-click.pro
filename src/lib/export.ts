@@ -61,7 +61,8 @@ const validateExportContent = (content: SavedContent[]): { valid: boolean; count
     thumbnails: 0,
     guides: 0,
     voiceovers: 0,
-    storyboards: 0
+    storyboards: 0,
+    repurposed: 0,
   };
   
   for (const item of content) {
@@ -85,6 +86,9 @@ const validateExportContent = (content: SavedContent[]): { valid: boolean; count
         break;
       case 'storyboard':
         counts.storyboards++;
+        break;
+      case 'repurposed':
+        counts.repurposed++;
         break;
     }
   }
@@ -114,6 +118,7 @@ export const exportAllAsZip = async (): Promise<void> => {
   const guidesFolder = zip.folder('guides');
   const voiceoversFolder = zip.folder('voiceovers');
   const storyboardsFolder = zip.folder('storyboards');
+  const repurposedFolder = zip.folder('repurposed');
 
   let filesAdded = 0;
   const errors: string[] = [];
@@ -195,6 +200,11 @@ export const exportAllAsZip = async (): Promise<void> => {
           );
           filesAdded++;
           break;
+
+        case 'repurposed':
+          repurposedFolder?.file(`${date}_${safeName}.txt`, item.content);
+          filesAdded++;
+          break;
       }
     } catch (e) {
       errors.push(`${item.type} ${safeName}: Export failed`);
@@ -223,6 +233,7 @@ CONTENTS SUMMARY
 📚 Guides:               ${counts.guides}
 🎤 Voiceover Transcripts: ${counts.voiceovers}
 🎬 Storyboard Prompts:   ${counts.storyboards}
+🔁 Repurposed Content:   ${counts.repurposed}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -233,6 +244,7 @@ FOLDER STRUCTURE
 /guides/        → Step-by-step tutorial guides (SnapGuide)
 /voiceovers/    → Clean voiceover text ready for TTS
 /storyboards/   → Scene prompts with motion directions
+/repurposed/    → Platform-ready repurposed copy
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

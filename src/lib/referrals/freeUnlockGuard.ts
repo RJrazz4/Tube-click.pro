@@ -58,21 +58,21 @@ export function evaluateFreeUnlockEligibility(args: {
     return {
       eligible: false,
       reason: "already_pro",
-      message: "You already have Pro access. The free Ghost Uplink unlock is for new accounts only.",
+      message: "You already have Pro access. The one-time referral reward is for new accounts only.",
     };
   }
   if (args.serverUsed) {
     return {
       eligible: false,
       reason: "already_used",
-      message: "You've already used your one-time free Ghost Uplink unlock. Choose a payment plan to continue.",
+      message: "You've already used the one-time referral reward. Review a paid plan to continue.",
     };
   }
   if (!isNewAccount(args.createdAt)) {
     return {
       eligible: false,
       reason: "not_new",
-      message: "The free Ghost Uplink unlock is reserved for new accounts. Upgrade instantly with a one-time payment instead.",
+      message: "The one-time referral reward is reserved for new accounts. Review paid Pro options instead.",
     };
   }
   const key = usedFlagKey(args.userId);
@@ -80,7 +80,7 @@ export function evaluateFreeUnlockEligibility(args: {
     return {
       eligible: false,
       reason: "already_used",
-      message: "You've already used your one-time free Ghost Uplink unlock. Choose a payment plan to continue.",
+      message: "You've already used the one-time referral reward. Review a paid plan to continue.",
     };
   }
   return { eligible: true, message: "" };

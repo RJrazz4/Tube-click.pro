@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, Copy, Crown, Gift, Loader2, LockKeyhole, ShieldCheck, Sparkles, Users, Terminal, Activity, Cpu, Flame, DollarSign } from "lucide-react";
+import { ArrowRight, Check, Copy, Crown, Gift, Loader2, LockKeyhole, ShieldCheck, Sparkles, Users, Terminal, Activity, Cpu } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -147,7 +147,7 @@ export default function Rewards() {
         <Card className="relative z-10 w-full overflow-hidden glass-strong border-primary/30 text-center shadow-[0_0_70px_rgba(139,92,246,0.18)] bracket">
           <CardContent className="relative flex flex-col items-center gap-4 p-8 md:p-12">
             <div className="rounded-2xl border border-primary/25 bg-primary/10 p-4"><LockKeyhole className="h-8 w-8 text-primary" /></div>
-            <div><h1 className="font-display text-2xl font-black">Earn Pro for Free with Referrals</h1><p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">Sign in to get your personal invite link and track your progress to Pro in real time. No checkout. No card. Ever.</p></div>
+            <div><h1 className="font-display text-2xl font-black">Earn Pro with referrals</h1><p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">Sign in to get your personal referral link and track qualified progress to Pro. No payment is required for this referral path.</p></div>
             <Button onClick={() => void requestAuthentication("open your Referral Rewards Dashboard")} className="cyber-button h-11 gap-2 px-6">Sign In to Start Earning Pro <ArrowRight className="h-4 w-4" /></Button>
             <p className="text-[9px] font-mono text-muted-foreground">Progress tracked in real time</p>
           </CardContent>
@@ -174,9 +174,9 @@ export default function Rewards() {
           <div className="pointer-events-none absolute inset-0 ghost-scanline opacity-[0.03]" />
           <div className="relative flex flex-col justify-between gap-5 md:flex-row md:items-center">
             <div>
-              <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-300"><Crown className="h-3.5 w-3.5" /> Qualified Growth Loop</div>
-              <h1 className="font-display text-3xl font-black md:text-4xl">Unlock Pro for <span className="bg-gradient-to-r from-primary to-cyan-300 bg-clip-text text-transparent">₹0</span> <span className="text-lg font-mono font-bold text-muted-foreground line-through decoration-primary/50">$97/mo</span> <span className="text-[11px] font-mono bg-green-500/10 text-green-300 border border-green-500/20 px-2 py-0.5 rounded-full">YOUR PRICE: ₹0 via ghost uplink</span></h1>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">Share your personal invite link. When {requiredForReward} invited creators each complete a real action, {rewardDays} days of Pro activates automatically. No checkout, no card, no subscription.</p>
+              <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-300"><Crown className="h-3.5 w-3.5" /> Referral reward path</div>
+              <h1 className="font-display text-3xl font-black md:text-4xl">Earn Pro with qualified referrals</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">Share your personal referral link. When {requiredForReward} invited creators each complete a real action, {rewardDays} days of Pro activates automatically. This is the referral path; paid plans are available separately.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="text-[10px] font-mono bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded-full">YOUR INVITE LINK</span>
                 <span className="text-[10px] font-mono bg-cyan-400/10 text-cyan-300 border border-cyan-400/20 px-2 py-1 rounded-full">tubeclickpro.in • Canonical • Never Vercel</span>
@@ -202,7 +202,7 @@ export default function Rewards() {
                   {pendingReferrals > 0 && <p className="mt-2 text-[11px] font-mono text-muted-foreground">{pendingReferrals} invited{pendingReferrals === 1 ? "" : "s"} signed up but haven&apos;t completed a core action yet — they don&apos;t count until they do.</p>}
                 </div>
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.07] p-4 text-sm leading-relaxed text-amber-100">
-                  <strong className="flex items-center gap-1.5"><Activity className="w-4 h-4" />How the {requiredForReward}-Node reward works:</strong> Share your private tracker link <span className="font-mono text-cyan-300">tubeclickpro.in/ref/...?clearance=LEVEL4</span>. When <strong>{requiredForReward}</strong> invited creators each complete a real action in the app, you get <strong>{rewardDays} days of Pro</strong> — granted automatically, no checkout, no card. Signing up alone never unlocks it.
+                  <strong className="flex items-center gap-1.5"><Activity className="w-4 h-4" />How the referral reward works:</strong> Share your personal referral link <span className="font-mono text-cyan-300">tubeclickpro.in/ref/...</span>. When <strong>{requiredForReward}</strong> invited creators each complete a real action in the app, you get <strong>{rewardDays} days of Pro</strong>. No payment is required on this path; signing up alone never unlocks it.
                 </div>
                 {profile.proTierExpiresAt && <ProExpiryCountdown expiresAt={profile.proTierExpiresAt} />}
                 <Suspense fallback={<RewardsPanelFallback />}>
@@ -217,16 +217,16 @@ export default function Rewards() {
           </div>
 
           <Card className="glass-strong border-cyan-400/20 lg:col-span-2 bracket h-fit">
-            <CardHeader><CardTitle className="flex items-center gap-2 font-display"><Users className="h-5 w-5 text-cyan-300" />Ghost Invite Toolkit • Classified • $97→₹0</CardTitle><CardDescription className="flex items-center gap-1.5 font-mono text-[11px]"><Cpu className="w-3 h-3" />QR + Private tracker + Matrix artifact • tubeclickpro.in • Ghost cached • Encrypted</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2 font-display"><Users className="h-5 w-5 text-cyan-300" />Referral invite toolkit</CardTitle><CardDescription className="flex items-center gap-1.5 text-[11px]"><Cpu className="w-3 h-3" />Share your link and track qualified referrals. The share card includes a QR code.</CardDescription></CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-xl border border-primary/20 bg-background/45 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />Your Ghost Uplink (Always tubeclickpro.in • Private Tracker)</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />Your referral link</p>
                 <p className="mt-1 truncate font-mono text-xs text-foreground">{referralUrl}</p>
                 <div className="mt-2 flex flex-wrap gap-1">
                   
                   
                   
-                  <span className="text-[8px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded">$97→₹0</span>
+                  <span className="text-[8px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded">Referral reward</span>
                 </div>
               </div>
               <Suspense fallback={<div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><div className="h-11 rounded-md bg-secondary/30 animate-pulse" /><div className="h-11 rounded-md bg-secondary/30 animate-pulse" /></div>}>
@@ -236,12 +236,12 @@ export default function Rewards() {
                 <ReferralPromoArtifact referralCode={profile.referralCode} />
               </Suspense>
               <div className="rounded-lg bg-secondary/30 border border-border/40 p-2.5">
-                <p className="text-[10px] font-mono font-bold text-primary flex items-center gap-1.5"><DollarSign className="w-3 h-3" />Value Anchor • $100/mo Illusion</p>
-                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">This holographic keycard looks like it should cost <span className="line-through">$97/mo</span> <span className="text-green-400 font-bold">→ you get it for ₹0</span> via private tracker. QR encodes <span className="text-cyan-300 font-mono">tubeclickpro.in/ref/...?clearance=LEVEL4</span>. Every share spreads ghost node.</p>
+                <p className="text-[10px] font-mono font-bold text-primary flex items-center gap-1.5"><Gift className="w-3 h-3" />How to share</p>
+                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">Share your referral link with creators who will genuinely use the product. Qualified actions count toward your {requiredForReward}-referral reward. The QR code opens your canonical referral link.</p>
                 <div className="mt-2 flex items-center gap-2 text-[9px] font-mono">
-                  <span className="flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />2,847 Ghost Ops Live</span>
+                  <span className="flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />Link ready to share</span>
                   <span className="text-border">•</span>
-                  <span>connected • Encrypted</span>
+                  <span>Progress updates from your account</span>
                 </div>
               </div>
             </CardContent>

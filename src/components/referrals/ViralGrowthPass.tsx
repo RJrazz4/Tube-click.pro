@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, Check, Copy, Crown, Gift, Loader2, Users, Terminal, Cpu, Flame, DollarSign } from "lucide-react";
+import { ArrowRight, Check, Copy, Crown, Gift, Loader2, Users, Terminal, Cpu, Flame } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -11,7 +11,6 @@ import { claimReferralAttribution, loadReferralProfile, type ReferralProfile } f
 import { buildReferralPromo } from "@/lib/referrals/promo";
 import { buildReferralUrl } from "@/lib/domain/canonical";
 import { ReferralPromoArtifact } from "@/components/referrals/ReferralPromoArtifact";
-import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
 import { ProExpiryCountdown } from "@/components/referrals/ProExpiryCountdown";
 import { ReferralLeaderboardGhost } from "@/components/referrals/ReferralLeaderboardGhost";
 import { GhostStreak } from "@/components/referrals/GhostStreak";
@@ -81,7 +80,7 @@ export function ViralGrowthPass() {
       setCopied(true);
       // Lightweight confetti illusion via toast + vibration
       if (navigator.vibrate) navigator.vibrate(20);
-      toast.success("Ghost uplink copied - QR + private tracker invite ready! MUM-01 synced");
+      toast.success("Referral link copied — ready to share");
       window.setTimeout(() => setCopied(false), 2000);
     } catch { toast.error("Copy failed - ghost relay interference"); }
   };
@@ -97,34 +96,32 @@ export function ViralGrowthPass() {
             <div className="rounded-xl border border-primary/20 bg-primary/10 p-2.5"><Gift className="h-5 w-5 text-primary" /></div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-display text-base font-bold">Viral Growth Pass • Ghost Protocol</h2>
-                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">Elite • ₹0 <span className="line-through text-muted-foreground/60">$97</span></span>
-                <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[8px] font-mono font-bold text-green-300 hidden md:inline-flex">MUM-01 • SECURE • tubeclickpro.in</span>
+                <h2 className="font-display text-base font-bold">Referral Pro unlock</h2>
+                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300">Pro reward • ₹0</span>
               </div>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <GhostNodeStatus compact />
-                <span className="text-[9px] font-mono text-primary/50 flex items-center gap-1"><DollarSign className="w-3 h-3" />ELITE VALUE $97/mo → Your price ₹0 via ghost uplink • No checkout</span>
+                <span className="text-[9px] text-primary/70 flex items-center gap-1"><Gift className="w-3 h-3" />Complete qualified referrals to earn a time-limited Pro reward</span>
               </div>
             </div>
           </div>
-          <span className="hidden md:flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground"><Terminal className="w-3 h-3" /> LEVEL 4 • PRIVATE TRACKER</span>
+          <span className="hidden md:flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground"><Terminal className="w-3 h-3" /> REFERRAL DASHBOARD</span>
         </div>
 
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
           <div className="flex min-w-0 flex-1 flex-col gap-4">
-            {status === "loading" && <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Syncing ghost uplink via MUM-01 quantum cache...</p>}
-            {status === "signed-out" && <p className="mt-1 text-xs text-muted-foreground">Sign in to get your ghost keycard (holographic + QR). Two qualified referrals unlock 21 days of Pro via ghost relay. No card. Ever. tubeclickpro.in</p>}
-            {status === "unavailable" && <p className="mt-1 text-xs text-muted-foreground">Ghost mesh rerouting - your progress safe in quantum cache (30m). Retry via MUM-01 relay.</p>}
+            {status === "loading" && <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading referral progress...</p>}
+            {status === "signed-out" && <p className="mt-1 text-xs text-muted-foreground">Sign in to get your personal referral link. Two qualified referrals can unlock 21 days of Pro through this referral path; no payment is required.</p>}
+            {status === "unavailable" && <p className="mt-1 text-xs text-muted-foreground">Referral progress is temporarily unavailable. Please retry; your account data remains server-side.</p>}
             {status === "ready" && profile && (
               <>
                 <div className="space-y-3 rounded-xl border border-border/40 bg-card/40 p-3.5 backdrop-blur-sm">
                   <div className="flex items-center justify-between"><p className="text-xs font-bold font-mono flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-primary" /> QUALIFIED REFERRALS</p><span className="text-[11px] font-mono font-bold text-primary">{inviteProgress}/{milestoneTarget}</span></div>
-                  <TerminalProgress value={inviteProgress} total={milestoneTarget} label={`> QUALIFIED [${inviteProgress}/${milestoneTarget}] • MUM-01 ENCRYPTED`} />
+                  <TerminalProgress value={inviteProgress} total={milestoneTarget} label={`Qualified referrals [${inviteProgress}/${milestoneTarget}]`} />
                   <Progress value={invitePct} className="h-2" />
-                  <p className="text-[11px] text-muted-foreground mt-2">Share your private tracker uplink via <span className="text-cyan-300 font-mono">tubeclickpro.in/ref/...?clearance=LEVEL4</span>. When {milestoneTarget} invited creators each complete a real action, {rewardDays} days of Pro auto-activate via ghost relay - no checkout, no card, ever. Value anchor: <span className="text-foreground line-through">$97/mo</span> <span className="text-green-400 font-bold">→ ₹0</span></p>
+                  <p className="text-[11px] text-muted-foreground mt-2">Share your referral link. When {milestoneTarget} invited creators each complete a real action, {rewardDays} days of Pro activate automatically. No payment is required on this referral path; paid plans are available separately.</p>
                   <div className="flex items-center gap-2 mt-2">
-                    <Button asChild variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs text-primary"><Link to="/rewards">Open War Room • Live Intel <ArrowRight className="h-3.5 w-3.5" /></Link></Button>
-                    <span className="text-[9px] font-mono text-muted-foreground flex items-center gap-1"><Cpu className="w-3 h-3" /> Quantum cache 87ms • Encrypted • Ghost mesh 3 nodes</span>
+                    <Button asChild variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs text-primary"><Link to="/rewards">View referral dashboard <ArrowRight className="h-3.5 w-3.5" /></Link></Button>
+                    <span className="text-[9px] font-mono text-muted-foreground flex items-center gap-1"><Cpu className="w-3 h-3" /> Progress synced to your account</span>
                   </div>
                 </div>
 
@@ -135,8 +132,8 @@ export function ViralGrowthPass() {
                   <ReferralLeaderboardGhost />
                   <div className="rounded-xl glass-strong border-cyan-400/15 p-3 flex flex-col justify-center">
                     <p className="text-[11px] font-mono font-bold text-cyan-300 flex items-center gap-1.5"><Flame className="w-3 h-3" /> Ghost Streak Bonus</p>
-                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">Daily visit = +20 XP • 7 day streak = Veteran badge • Keep ghost mesh warm. Zero API cost, pure localStorage dopamine loop.</p>
-                    <p className="text-[9px] font-mono text-primary/50 mt-2">tubeclickpro.in • Always canonical • Private tracker illusion</p>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">Daily visit = +20 XP • 7-day streak = Veteran badge • This streak is saved locally in your browser.</p>
+                    <p className="text-[9px] font-mono text-primary/50 mt-2">Referral progress is account-based • Link remains canonical</p>
                   </div>
                 </div>
               </>
@@ -148,17 +145,17 @@ export function ViralGrowthPass() {
               <div className="flex gap-2">
                 <div className="min-w-0 flex-1 rounded-lg border border-primary/20 bg-background/50 px-3 py-2 backdrop-blur-md">
                   <p className="truncate font-mono text-[11px] text-foreground">{referralUrl}</p>
-                  <p className="text-[8px] font-mono text-primary/60 mt-0.5 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />tubeclickpro.in • LEVEL 4 • MUM-01 • Encrypted • Private tracker</p>
+                  <p className="text-[8px] font-mono text-primary/60 mt-0.5 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />Canonical referral link • account progress tracked securely</p>
                 </div>
                 <Button onClick={copyInvite} size="sm" className="cyber-button h-[52px] shrink-0 gap-1.5 px-4 font-mono text-xs">
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "Ghost Copied!" : "Copy Ghost Uplink"}
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "Copied" : "Copy referral link"}
                 </Button>
               </div>
 
               <div className="rounded-xl border border-cyan-400/20 bg-gradient-to-r from-background/60 via-cyan-400/[0.04] to-primary/[0.06] p-3 shadow-[0_0_24px_rgba(34,211,238,0.06)] backdrop-blur-xl">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <div><p className="font-display text-xs font-bold uppercase tracking-wider text-cyan-300">Ghost Keycard • Classified • $97 → ₹0 Illusion</p><p className="text-[10px] text-muted-foreground">Holographic + QR + Matrix rain • Private tracker • Auto SVG/PNG</p></div>
-                  <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">Elite Artifact</span>
+                  <div><p className="font-display text-xs font-bold uppercase tracking-wider text-cyan-300">Referral share card</p><p className="text-[10px] text-muted-foreground">Holographic + QR artwork for sharing your personal referral link</p></div>
+                  <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary">Share card</span>
                 </div>
                 <ReferralPromoArtifact referralCode={profile.referralCode} />
                 <p className="text-[10px] text-muted-foreground mt-2 text-center font-mono">Hover → SVG/PNG download • QR encodes <span className="text-cyan-300">tubeclickpro.in/ref/...?clearance=LEVEL4</span> • Matrix rain canvas lightweight</p>
@@ -166,7 +163,7 @@ export function ViralGrowthPass() {
 
               {profile.proTierExpiresAt && (
                 <div className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 font-mono">
-                  <Crown className="h-4 w-4" />Pro active until {new Date(profile.proTierExpiresAt).toLocaleDateString()} • Ghost node MUM-01 • Live countdown active
+                  <Crown className="h-4 w-4" />Pro access active until {new Date(profile.proTierExpiresAt).toLocaleDateString()}
                 </div>
               )}
             </div>

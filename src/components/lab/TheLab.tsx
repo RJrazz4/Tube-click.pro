@@ -482,7 +482,7 @@ export function TheLab() {
             <Button size="sm" asChild className="cyber-button text-[10px] h-8 px-3 font-display shrink-0">
               <Link to="/rewards">
                 <Zap className="w-3 h-3 text-primary-foreground fill-primary-foreground" />
-                Unlock Pro for Free
+                See Pro options
               </Link>
             </Button>
           )}

@@ -99,6 +99,11 @@ export default function VoiceStudio() {
   }, [activeWorkflow?.id, activeWorkflow?.contentPackage?.fullScript]);
 
   const animateVisualizer = () => {
+    const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    if (prefersReducedMotion) {
+      setVisualizerHeights(Array(30).fill(45));
+      return;
+    }
     const heights = Array(30).fill(0).map(() => 20 + Math.random() * 80);
     setVisualizerHeights(heights);
     animationRef.current = requestAnimationFrame(animateVisualizer);
@@ -147,10 +152,10 @@ export default function VoiceStudio() {
     // Client-side UX gate only. The backend independently verifies the live
     // Supabase subscription and never trusts this persisted frontend state.
     if (license.tier === "free") {
-      toast.error("TubeClick Neural Voice requires Pro. Browser TTS remains free.", {
+      toast.error("TubeClick Neural Voice requires Pro. Browser TTS remains free; review referral options to unlock Pro.", {
         duration: 5000,
         action: {
-          label: "Unlock Pro for Free",
+          label: "See referral Pro options",
           onClick: () => navigate("/rewards"),
         },
       });
@@ -383,11 +388,11 @@ export default function VoiceStudio() {
             </div>
 
             <div className="flex items-center justify-center gap-3 p-4 bg-secondary/50 rounded-xl">
-              <Button variant="outline" size="icon" onClick={handleStop} disabled={!isPlaying && !isPaused && !isGenerating} className="w-10 h-10 rounded-full border-border"><Square className="w-4 h-4" /></Button>
-              <Button onClick={isPlaying ? handlePause : handlePlay} disabled={isGenerating} className={cn("w-14 h-14 rounded-full", isPlaying ? "cyber-button-secondary" : "cyber-button")}>
+              <Button variant="outline" size="icon" aria-label="Stop audio" title="Stop audio" onClick={handleStop} disabled={!isPlaying && !isPaused && !isGenerating} className="w-10 h-10 rounded-full border-border"><Square className="w-4 h-4" /></Button>
+              <Button onClick={isPlaying ? handlePause : handlePlay} aria-label={isPlaying ? "Pause audio" : "Play audio"} title={isPlaying ? "Pause audio" : "Play audio"} disabled={isGenerating} className={cn("w-14 h-14 rounded-full", isPlaying ? "cyber-button-secondary" : "cyber-button")}>
                 {isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
               </Button>
-              <Button variant="outline" size="icon" onClick={handleDownload} disabled={!audioUrl || isGenerating} className={cn("w-10 h-10 rounded-full border-border", audioUrl ? "hover:border-green-500 hover:text-green-400" : "")}><Download className="w-4 h-4" /></Button>
+              <Button variant="outline" size="icon" aria-label="Download audio" title="Download audio" onClick={handleDownload} disabled={!audioUrl || isGenerating} className={cn("w-10 h-10 rounded-full border-border", audioUrl ? "hover:border-green-500 hover:text-green-400" : "")}><Download className="w-4 h-4" /></Button>
             </div>
 
             {useElevenLabs && audioUrl && <div className="flex justify-center"><Button variant="outline" onClick={handleRegenerate} disabled={isGenerating} className="border-border hover:border-primary/50"><Sparkles className="w-4 h-4 mr-2" />Regenerate with New Voice</Button></div>}

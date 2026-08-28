@@ -210,11 +210,11 @@ export function GhostInterrogationDrawer() {
         <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-black/60">
           <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.2em]">
             <Terminal className="w-4 h-4 text-cyan-400" />
-            <span className="text-cyan-400">ghost@tubeclick</span>
-            <span className="text-muted-foreground">:~</span>
-            <span className="text-fuchsia-400">/interrogate</span>
+            <span className="text-cyan-400">Ask about this video</span>
+            <span className="text-muted-foreground">•</span>
+            <span className="text-fuchsia-400">Ghost Interrogation</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={closeDrawer} className="h-8 w-8">
+          <Button variant="ghost" size="icon" onClick={closeDrawer} aria-label="Close video questions" title="Close video questions" className="h-8 w-8">
             <X className="w-4 h-4" />
           </Button>
         </div>
@@ -244,13 +244,13 @@ export function GhostInterrogationDrawer() {
           <div className="flex-1 flex flex-col items-center justify-center p-6 text-center gap-3">
             <Lock className="w-10 h-10 text-muted-foreground" />
             <p className="font-mono text-sm text-muted-foreground">
-              // INTERROGATE LOCKED
+              // ASK ABOUT THIS VIDEO LOCKED
             </p>
             <p className="text-xs text-muted-foreground max-w-[300px]">
-              Chat-with-competitor is a Pro-tier feature. Unlock to cross-examine every word, hook, and retention beat of any video on the conveyor.
+              Ask questions about a competitor&apos;s hooks, retention patterns, and monetization. This Pro feature returns grounded answers with timestamp citations.
             </p>
             <Button asChild className="cyber-button mt-2">
-              <a href="/rewards?upsell=interrogate&tier=pro">Unlock Pro</a>
+              <a href="/rewards?upsell=interrogate&tier=pro">See Pro options</a>
             </Button>
           </div>
         ) : (

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Brain, Loader2, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,8 +30,27 @@ export function AudienceIntelligenceSection() {
   const brief = useAudienceBrief();
   const [briefOpen, setBriefOpen] = useState(false);
 
-  if (!engineConfigured()) return null;
   if (!isAuthenticated) return null;
+  if (!engineConfigured()) {
+    return (
+      <Card className="border-dashed border-border/70 bg-card/30">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-secondary/50">
+            <Brain className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-display font-semibold text-foreground">Audience insights are not connected</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              You can still analyze any public YouTube channel and create a content package. Connect the audience engine when it is available to see viewer-driven topics and daily recommendations.
+            </p>
+          </div>
+          <Button asChild size="sm" variant="outline" className="shrink-0">
+            <Link to="/clone-crush">Analyze a channel</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
   if (connection.isLoading || challenge.isLoading) {
     return (
       <Card className="glass border-border/60">

@@ -9,7 +9,10 @@
 
 import { test, expect } from "@playwright/test";
 
-test.describe("Storyboard — Tier Alert Banner", () => {
+// The versioned storyboard API is live, but there is no /storyboard UI route in
+// the active SPA. Keep this historical UI suite skipped until a Storyboard
+// frontend slice is approved; API coverage remains in api-tier-enforcement.spec.ts.
+test.describe.skip("Storyboard — Tier Alert Banner (UI not in active surface)", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/storyboard");
   });

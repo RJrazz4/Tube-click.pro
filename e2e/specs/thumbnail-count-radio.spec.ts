@@ -10,7 +10,10 @@
 
 import { test, expect } from "@playwright/test";
 
-test.describe("Thumbnails — Count Radio Group", () => {
+// The versioned thumbnail API is live, but there is no /thumbnails UI route
+// in the active SPA. Keep this historical UI suite skipped until a Thumbnail
+// frontend slice is approved; API coverage remains in api-tier-enforcement.spec.ts.
+test.describe.skip("Thumbnails — Count Radio Group (UI not in active surface)", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/thumbnails");
   });
