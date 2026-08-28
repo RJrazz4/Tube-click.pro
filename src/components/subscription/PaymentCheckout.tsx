@@ -111,7 +111,9 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
         });
       }
       setSubmitted(true);
-      toast.success("Payment proof received — your Pro pass will activate after verification.");
+      toast.success(PAYMENT_VERIFY_URL
+        ? "Payment proof submitted — Pro access activates after verification."
+        : "Proof recorded for this session — manual review is still required.");
       onSuccess?.();
     } catch {
       toast.error("Could not submit proof. Please try again or contact support.");
@@ -130,12 +132,18 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-display text-lg font-bold text-foreground flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-primary" /> Upgrade to Pro
+            <CreditCard className="h-4 w-4 text-primary" /> Paid Pro access
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Pick a payment method — your QR &amp; details appear below.
+            Pick a payment method, pay externally, then submit your proof for review.
           </p>
         </div>
+      </div>
+
+      <div role="status" className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-[11px] leading-relaxed text-amber-100">
+        {PAYMENT_VERIFY_URL
+          ? "Payment proof is sent to the configured verifier. Pro access activates only after the payment is verified."
+          : "Manual payment review is not connected in this deployment. Submitting proof records a session status only; contact support before relying on Pro activation."}
       </div>
 
       {/* Interactive method selector — nothing is revealed until chosen. */}
@@ -199,12 +207,12 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
               <UsdtLogo size={22} />
               <div>
                 <p className="font-display font-bold text-foreground leading-tight">{PLANS.usdt_crypto.name}</p>
-                <p className="text-[11px] text-muted-foreground">USDT · {USDT_DEPOSIT_NETWORK} · 30-day Pro</p>
+                <p className="text-[11px] text-muted-foreground">USDT · {USDT_DEPOSIT_NETWORK} · 30-day Pro after verification</p>
               </div>
             </div>
             <div className="text-right">
               <p className="font-display text-2xl font-black text-foreground">$9</p>
-              <p className="text-[10px] text-muted-foreground">one-time</p>
+              <p className="text-[10px] text-muted-foreground">one-time · manual review</p>
             </div>
           </div>
 
@@ -368,7 +376,7 @@ function ProofField({
   if (submitted) {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300">
-        <ShieldCheck className="h-4 w-4" /> Proof submitted — verification in progress.
+        <ShieldCheck className="h-4 w-4" /> Proof submitted — review required before Pro access activates.
       </div>
     );
   }
@@ -389,7 +397,7 @@ function ProofField({
         className="cyber-button h-11 w-full gap-2"
       >
         {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-        {submitting ? "Submitting…" : "Submit Payment Proof"}
+        {submitting ? "Submitting…" : "Submit proof for review"}
       </Button>
     </div>
   );

@@ -23,7 +23,7 @@ export function Footer() {
         </div>
         <div className="mt-4 pt-4 border-t border-border/20 flex flex-col md:flex-row items-center justify-between gap-2 text-[9px] font-mono text-muted-foreground/50">
           <span>TubeClick Pro — creator intelligence, honest pricing, real results.</span>
-          <span className="hidden md:inline">Refer friends to earn Pro free — no card required</span>
+          <span className="hidden md:inline">Refer creators to earn a time-limited Pro reward</span>
         </div>
       </div>
     </footer>

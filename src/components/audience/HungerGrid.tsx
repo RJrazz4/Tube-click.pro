@@ -73,7 +73,7 @@ export function HungerGrid({ profile, onGenerate }: { profile: AudienceProfile; 
               <p className="text-sm font-semibold text-muted-foreground">{locked} more hunger{locked > 1 ? "s" : ""} locked</p>
               <p className="text-[11px] text-muted-foreground/70">Full retention analysis + AI scripts with Pro</p>
               <Button asChild size="sm" className="font-semibold">
-                <Link to="/rewards">Go Pro</Link>
+                <Link to="/rewards">See Pro options</Link>
               </Button>
             </CardContent>
           </Card>

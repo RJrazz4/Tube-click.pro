@@ -64,7 +64,7 @@ export default function About() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">How It Works</h2>
           <p className="text-muted-foreground leading-relaxed">
-            TubeClick Pro uses a free Viral Growth Loop instead of paid subscriptions. Invite two creator friends; once each one completes a real action in the product, your 21-Day Pro Pass activates automatically. Signing up alone does not count — the referral must be earned. AI providers are routed securely through our managed server infrastructure.
+            TubeClick Pro has two clear access paths. The Free plan lets you analyze public YouTube opportunities and create within the Free limits. Pro can be earned through qualified referrals, granted by an authorized administrator, or offered through a paid plan where payment verification is enabled. Referral-earned Pro is time-limited, and signups alone never qualify a referral reward. AI providers are routed securely through our managed server infrastructure.
           </p>
         </section>
 

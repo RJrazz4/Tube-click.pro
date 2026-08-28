@@ -6,7 +6,7 @@
  *
  * - Live server-synced countdown to the next free asset.
  * - Classified, encrypted visual language (lock + monospace).
- * - Dual CTA: Unlock Pro ₹0 (referrals) → navigates to /rewards.
+ * - Dual CTA: See Pro options or share a referral link.
  * - Rendered absolutely over the content it locks; blocks pointer events.
  */
 import { useEffect, useState } from "react";
@@ -48,7 +48,7 @@ export function DailyLimitOverlay({ variant = "tile" }: { variant?: "tile" | "he
         return;
       }
       await navigator.clipboard.writeText(url);
-      toast.success("Referral link copied — send it to 3 creator friends to unlock Pro ₹0");
+      toast.success("Referral link copied — qualified actions from 2 invited creators can unlock Pro");
     } catch {
       // Clipboard/share blocked — still route them to Rewards.
       navigate("/rewards?upsell=clonecrush");
@@ -135,7 +135,7 @@ export function DailyLimitOverlay({ variant = "tile" }: { variant?: "tile" | "he
             ].join(" ")}
           >
             <Crown className={isHero ? "h-3.5 w-3.5" : "h-3 w-3"} />
-            Unlock Pro ₹0
+            See Pro options
             <ArrowRight className={isHero ? "h-3.5 w-3.5" : "h-3 w-3"} />
           </Button>
           <Button

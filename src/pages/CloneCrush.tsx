@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
-  Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, Award, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio, Database, PlusCircle, Shield, Languages,
+  Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio, Database, PlusCircle, Shield, Languages,
 } from "lucide-react";
 import { GhostInterrogationDrawer } from "@/components/ghost/GhostInterrogationDrawer";
 import { GhostSquadDossier } from "@/components/ghost/GhostSquadDossier";
@@ -37,6 +37,7 @@ import { FreeCooldownOverlay } from "@/components/showdown/FreeCooldownOverlay";
 import { useQuotaStore } from "@/stores/useQuotaStore";
 import { useCloneCrushQuota } from "@/hooks/useCloneCrushQuota";
 import { EngineScriptLoop } from "@/components/scripts/EngineScriptLoop";
+import { EntitlementStatus } from "@/components/subscription/EntitlementStatus";
 
 type ProfileWithKeywords = ProfiledChannel & { extractedKeywords?: string[] };
 
@@ -857,7 +858,7 @@ export default function CloneCrush() {
         setDailyLimitActive(true);
         setLogSteps([]);
         setIsRewriting(false);
-        toast.error("Daily free limit reached — unlock Pro ₹0 for unlimited Chain-Loops", { id: "daily-limit" });
+        toast.error("Daily free limit reached — see Pro options for more package access", { id: "daily-limit" });
         return;
       } else {
         const code = (rewriteRes as any).code;
@@ -910,7 +911,7 @@ export default function CloneCrush() {
       if (errCode === "DAILY_LIMIT" || errCode === 402) {
         setDailyLimitActive(true);
         void refreshQuota(true);
-        toast.error("Daily free limit reached — unlock Pro ₹0", { id: "daily-limit" });
+        toast.error("Daily free limit reached — see Pro options", { id: "daily-limit" });
         setIsRewriting(false);
         isExecutingRef.current = false;
         return;
@@ -1035,11 +1036,8 @@ export default function CloneCrush() {
           <p className="text-sm md:text-base text-muted-foreground mt-1 max-w-3xl">Analyze a public YouTube channel, find what is gaining momentum, and turn one opportunity into an original content package.</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-card border border-border rounded-xl flex items-center gap-3">
-            <Award className="w-5 h-5 text-primary" />
-            <div><p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Plan</p><p className="text-sm font-bold text-foreground capitalize">{isPro ? "Pro" : "Free"}</p></div>
-            {!isPro && <Button size="sm" onClick={openReferralRewards} className="text-[10px] px-3 h-8 font-display">Go Pro</Button>}
-          </div>
+          <EntitlementStatus compact />
+          {!isPro && <Button size="sm" onClick={openReferralRewards} className="text-[10px] px-3 h-8 font-display">See Pro options</Button>}
         </div>
       </div>
 

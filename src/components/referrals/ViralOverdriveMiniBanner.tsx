@@ -61,8 +61,8 @@ export function ViralOverdriveMiniBanner() {
           <Gift className="w-4 h-4 text-amber-400 animate-pulse" />
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-mono font-bold text-foreground">Ghost Uplink Progress • {progress.invited}/{progress.required} qualified • {progress.rewardDays}d Pro • $97→₹0</p>
-          <p className="text-[10px] font-mono text-muted-foreground">Establish uplink via <span className="text-cyan-300">tubeclickpro.in/ref/...?clearance=LEVEL4</span> • Private tracker • MUM-01</p>
+          <p className="text-xs font-mono font-bold text-foreground">Referral progress • {progress.invited}/{progress.required} qualified • {progress.rewardDays}d Pro reward</p>
+          <p className="text-[10px] font-mono text-muted-foreground">Share your personal referral link with creators who will genuinely use TubeClick Pro.</p>
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0 relative z-10">

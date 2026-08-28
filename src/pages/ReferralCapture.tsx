@@ -17,7 +17,7 @@ export default function ReferralCapture() {
     const capture = async () => {
       try {
         // Add boot logs - lightweight illusion
-        setLogs(l => [...l, `> CODE: ${code.toUpperCase()} accepted`, "> Activating your bonus…"]);
+        setLogs(l => [...l, `> REFERRAL CODE: ${code.toUpperCase()} accepted`, "> Recording attribution..."]);
 
         // If on temporary host, capture still works but remind canonical
         try {
@@ -29,8 +29,8 @@ export default function ReferralCapture() {
 
         await captureReferralClick(code);
         if (active) {
-          setLogs(l => [...l, "> Invite code verified ✓", "> Welcome aboard"]);
-          setMessage("Invite code applied! Your bonus is active. Redirecting…");
+          setLogs(l => [...l, "> Referral link recorded ✓", "> Continue in TubeClick Pro"]);
+          setMessage("Referral link recorded. Sign in to complete your referral setup. Redirecting…");
         }
       } catch {
         if (active) {
@@ -61,7 +61,7 @@ export default function ReferralCapture() {
             <Loader2 className="absolute -right-2 -top-2 h-5 w-5 animate-spin text-cyan-400" />
           </div>
           <div>
-            <h1 className="font-display text-xl font-bold flex items-center justify-center gap-2"><Terminal className="w-4 h-4 text-primary" />Ghost Uplink • Level 4</h1>
+            <h1 className="font-display text-xl font-bold flex items-center justify-center gap-2"><Terminal className="w-4 h-4 text-primary" />Referral link</h1>
             <p className="mt-2 text-sm text-muted-foreground font-mono">{message}</p>
           </div>
           <div className="w-full text-left rounded-xl bg-black/70 border border-primary/15 p-3 font-mono text-[10px] space-y-1">

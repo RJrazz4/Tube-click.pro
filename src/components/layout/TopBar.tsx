@@ -54,10 +54,10 @@ export function TopBar() {
           size="sm"
           onClick={() => openProUpgrade({ defaultTab: "referral", reason: "topbar" })}
           className="relative gap-2 border-primary/20 bg-primary/5 hover:border-primary/40 hover:bg-primary/10 text-xs"
-          title="Upgrade — or earn Pro free with referrals"
+          title="Review paid and referral Pro options"
         >
           <Sparkles className="h-4 w-4 text-primary" />
-          <span className="hidden sm:inline">Go Pro</span>
+          <span className="hidden sm:inline">Pro options</span>
         </Button>
       </div>
     </header>

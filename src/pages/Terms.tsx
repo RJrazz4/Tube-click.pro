@@ -27,12 +27,13 @@ export default function Terms() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">Free and Pro Access</h2>
           <p>
-            TubeClick Pro does not sell subscriptions. Pro access is a time-limited reward earned through the qualified referral loop or granted manually by an authorized administrator for seed users.
+            TubeClick Pro has a Free plan and a time-limited Pro plan. Pro access may be earned through the qualified referral reward path, granted by an authorized administrator, or offered through a paid plan where the payment verifier is enabled. Paid payment proofs require review; access does not activate until verification is complete.
           </p>
           <ul className="list-disc pl-6 space-y-2">
-            <li>Three verified friend invitations are required for referral qualification</li>
-            <li>At least one invited friend must unlock their own Pro access</li>
-            <li>Signups alone do not guarantee a reward</li>
+            <li>Two qualified referrals are currently required for the referral reward path</li>
+            <li>A referral qualifies only after the invited creator completes a real product action; signup alone does not count</li>
+            <li>Referral-earned Pro access is time-limited and expires automatically</li>
+            <li>Advanced Black Ops access, where enabled, is an additional entitlement and is not a separate public plan</li>
             <li>AI provider credentials are managed securely by our server infrastructure</li>
           </ul>
         </section>

@@ -26,6 +26,7 @@ import { useSoftGate } from "@/contexts/SoftGateContext";
 import { useFreeUnlockEligibility, markFreeUnlockUsed } from "@/lib/referrals/freeUnlockGuard";
 import { loadReferralProfile } from "@/lib/referrals/client";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { EntitlementStatus } from "./EntitlementStatus";
 
 export function ProUpgradeModal() {
   const { isOpen, defaultTab, closeProUpgrade } = useProUpgrade();
@@ -75,20 +76,21 @@ export function ProUpgradeModal() {
       <DialogContent className="max-h-[92vh] overflow-y-auto border-primary/30 bg-card/95 p-0 shadow-[0_0_70px_rgba(139,92,246,0.22)] sm:max-w-[560px]">
         <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-primary/20 blur-3xl" />
         <DialogHeader className="relative border-b border-border/60 bg-gradient-to-br from-primary/10 via-transparent to-cyan-400/5 p-6 pb-5">
-          <DialogTitle className="font-display text-2xl font-black">Upgrade to Pro</DialogTitle>
+          <DialogTitle className="font-display text-2xl font-black">Choose your Pro access path</DialogTitle>
           <DialogDescription className="text-sm leading-relaxed">
-            Choose how you want to unlock. Pay once, or use the free Ghost Uplink (new accounts only).
+            Choose a paid plan or the referral reward path. They are separate options; Pro access expires unless your entitlement says otherwise.
           </DialogDescription>
+          <EntitlementStatus compact className="mt-3 w-fit" />
         </DialogHeader>
 
         <div className="relative p-5 sm:p-6">
           <Tabs value={tab} onValueChange={(v) => setTab(v as ProUpgradeTab)}>
             <TabsList className="grid w-full grid-cols-2 bg-secondary/70">
               <TabsTrigger value="payment" className="gap-2">
-                <CreditCard className="h-4 w-4" /> Payment
+                <CreditCard className="h-4 w-4" /> Paid Pro
               </TabsTrigger>
               <TabsTrigger value="referral" className="gap-2" disabled={!eligibility.eligible}>
-                <Gift className="h-4 w-4" /> Free Unlock
+                <Gift className="h-4 w-4" /> Referral reward
               </TabsTrigger>
             </TabsList>
 
@@ -104,12 +106,10 @@ export function ProUpgradeModal() {
                   <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.08] to-cyan-400/[0.04] p-4">
                     <div className="flex items-center gap-2 text-primary">
                       <Sparkles className="h-4 w-4" />
-                      <span className="font-display font-bold">Free Unlock via Ghost Uplink</span>
+                      <span className="font-display font-bold">Earn Pro through referrals</span>
                     </div>
                     <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                      New here? Apply a friend&apos;s referral code below. When your inviter hits their
-                      milestone, your Pro pass activates automatically — no card, no checkout.{" "}
-                      <span className="font-semibold text-foreground">One-time only.</span>
+                      New here? Apply a friend&apos;s referral code below. Your inviter earns progress only after you complete a real creator action. The referral reward is one-time only and has its own qualification rules.
                     </p>
                   </div>
                   <ReferralApplyForm onApplied={handleReferralApplied} />
@@ -124,7 +124,7 @@ export function ProUpgradeModal() {
                     </div>
                   </div>
                   <Button onClick={goPayment} className="cyber-button h-11 w-full gap-2">
-                    <CreditCard className="h-4 w-4" /> Continue with Payment
+                    <CreditCard className="h-4 w-4" /> View paid plans
                   </Button>
                 </div>
               )}
@@ -133,7 +133,7 @@ export function ProUpgradeModal() {
 
           {!isAuthenticated && (
             <div className="mt-5 flex items-center justify-between rounded-xl border border-border/60 bg-secondary/30 px-4 py-3">
-              <p className="text-xs text-muted-foreground">Sign in to track your Pro activation.</p>
+              <p className="text-xs text-muted-foreground">Sign in to track your entitlement and referral progress.</p>
               <Button
                 size="sm"
                 variant="outline"

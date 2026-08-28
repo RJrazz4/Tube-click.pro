@@ -147,10 +147,10 @@ export default function VoiceStudio() {
     // Client-side UX gate only. The backend independently verifies the live
     // Supabase subscription and never trusts this persisted frontend state.
     if (license.tier === "free") {
-      toast.error("TubeClick Neural Voice requires Pro. Browser TTS remains free.", {
+      toast.error("TubeClick Neural Voice requires Pro. Browser TTS remains free; review referral options to unlock Pro.", {
         duration: 5000,
         action: {
-          label: "Unlock Pro for Free",
+          label: "See referral Pro options",
           onClick: () => navigate("/rewards"),
         },
       });

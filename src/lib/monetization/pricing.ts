@@ -72,7 +72,7 @@ export const PLANS: Record<PlanId, Plan> = {
     currency: "USD",
     durationDays: 3,
     method: "usdt",
-    description: "Test-drive full Pro for 3 days with USDT (TRC-20).",
+    description: "3 days of Pro access after USDT (TRC-20) payment review.",
   },
   usdt_crypto: {
     id: "usdt_crypto",
@@ -82,7 +82,7 @@ export const PLANS: Record<PlanId, Plan> = {
     currency: "USD",
     durationDays: 30,
     method: "usdt",
-    description: "Pay once with USDT on TRON (TRC-20). 30-day Pro pass.",
+    description: "30 days of Pro access after USDT (TRC-20) payment review.",
     highlight: true,
   },
   upi_trial_3: {
@@ -93,7 +93,7 @@ export const PLANS: Record<PlanId, Plan> = {
     currency: "INR",
     durationDays: 3,
     method: "upi",
-    description: "Test-drive full Pro for 3 days via UPI (India).",
+    description: "3 days of Pro access after UPI (India) payment review.",
   },
   upi_full: {
     id: "upi_full",
@@ -103,7 +103,7 @@ export const PLANS: Record<PlanId, Plan> = {
     currency: "INR",
     durationDays: 30,
     method: "upi",
-    description: "Full 30-day Pro pass via UPI (India). Instant activation.",
+    description: "30 days of Pro access after UPI (India) payment review.",
   },
   mini_15: {
     id: "mini_15",
@@ -113,7 +113,7 @@ export const PLANS: Record<PlanId, Plan> = {
     currency: "INR",
     durationDays: 15,
     method: "upi",
-    description: "Short 15-day Pro trial via UPI (India). Low-commitment entry.",
+    description: "15 days of Pro access after UPI (India) payment review.",
   },
 };
 

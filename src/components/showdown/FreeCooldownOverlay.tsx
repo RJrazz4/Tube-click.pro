@@ -62,7 +62,7 @@ export function FreeCooldownOverlay({ unlocksAt, views, onUpgrade, variant = "ti
             </div>
           </div>
           <Button size="sm" onClick={onUpgrade} className="cyber-button h-9 gap-1.5 px-4 text-xs font-display whitespace-nowrap">
-            <Sparkles className="h-3.5 w-3.5" /> Skip Wait — Unlock Pro
+            <Sparkles className="h-3.5 w-3.5" /> See Pro options
           </Button>
         </div>
       </div>
