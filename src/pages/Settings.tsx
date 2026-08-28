@@ -21,6 +21,7 @@ import {
   Sparkles,
   Crown,
   CreditCard,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -592,6 +593,31 @@ function AboutSection() {
           <CardTitle className="text-base font-display">Support</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="rounded-lg border border-primary/20 bg-secondary/30 p-4">
+            <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-muted-foreground mb-3">
+              Contact Us
+            </p>
+            <div className="space-y-2">
+              <Button variant="outline" className="w-full justify-between" asChild>
+                <a href="mailto:tubeclick.support@gmail.com">
+                  <span className="flex items-center gap-2">
+                    <Mail className="w-4 h-4" />
+                    tubeclick.support@gmail.com
+                  </span>
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </Button>
+              <Button variant="outline" className="w-full justify-between" asChild>
+                <a href="mailto:support@tubeclickpro.in">
+                  <span className="flex items-center gap-2">
+                    <Mail className="w-4 h-4" />
+                    support@tubeclickpro.in
+                  </span>
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </Button>
+            </div>
+          </div>
           <Button variant="outline" className="w-full justify-between" asChild>
             <a href="https://github.com/RJrazz4/Tube-click.pro" target="_blank" rel="noopener noreferrer">
               <span className="flex items-center gap-2">

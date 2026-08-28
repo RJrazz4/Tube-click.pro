@@ -5,6 +5,7 @@ import {
   BookOpen,
   ChevronRight,
   Gift,
+  HelpCircle,
   LayoutDashboard,
   Menu,
   Mic,
@@ -17,6 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SupportModal } from "./SupportModal";
 
 const navGroups = [
   {
@@ -53,6 +55,7 @@ const mobileMoreItems = [
   { icon: BarChart3, label: "Growth estimator", description: "Plan reach and revenue", path: "/analytics" },
   { icon: Gift, label: "Referral rewards", description: "Earn Pro with qualified referrals", path: "/rewards" },
   { icon: Settings, label: "Settings", description: "Account, plan, and data", path: "/settings" },
+  { icon: HelpCircle, label: "Support", description: "Contact customer support", path: "/support" },
 ];
 
 function isActivePath(currentPath: string, itemPath: string): boolean {
@@ -63,6 +66,7 @@ export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   return (
     <aside
@@ -157,6 +161,18 @@ export function Sidebar() {
             <span className="text-sm font-semibold">Settings</span>
           </Link>
 
+          <button
+            type="button"
+            onClick={() => setSupportOpen(true)}
+            className={cn(
+              "flex min-h-[46px] w-full items-center gap-3 rounded-xl border px-3 transition-colors text-left",
+              "border-transparent text-sidebar-foreground hover:border-primary/15 hover:bg-secondary/60 hover:text-foreground",
+            )}
+          >
+            <HelpCircle className="ml-1 h-4 w-4" aria-hidden="true" />
+            <span className="text-sm font-semibold">Support</span>
+          </button>
+
           <div className="flex items-center justify-between rounded-lg border border-primary/10 bg-secondary/25 px-3 py-2">
             <span className="flex items-center gap-1.5 text-[9px] font-mono text-green-400"><span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />System ready</span>
             <span className="text-[9px] font-mono text-muted-foreground">Creator tools</span>
@@ -211,7 +227,14 @@ export function Sidebar() {
                 <button
                   key={item.path}
                   type="button"
-                  onClick={() => { setMoreOpen(false); navigate(item.path); }}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    if (item.path === "/support") {
+                      setSupportOpen(true);
+                    } else {
+                      navigate(item.path);
+                    }
+                  }}
                   className={cn("flex min-h-[54px] items-center gap-2 rounded-xl border px-3 text-left transition-colors", active ? "border-primary/25 bg-primary/15 text-primary" : "border-border/50 bg-secondary/30 text-foreground hover:border-primary/20 hover:bg-secondary/60")}
                 >
                   <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -225,6 +248,9 @@ export function Sidebar() {
           </div>
         </div>
       )}
+
+      {/* Support Modal */}
+      <SupportModal isOpen={supportOpen} onClose={() => setSupportOpen(false)} />
 
     </aside>
   );
