@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   BarChart3,
+  BookOpen,
   ChevronRight,
   Gift,
   LayoutDashboard,
@@ -23,6 +24,7 @@ const navGroups = [
     items: [
       { icon: LayoutDashboard, label: "Dashboard", description: "Your creator home", path: "/" },
       { icon: Zap, label: "Analyze", description: "Find winning videos and create a package", path: "/clone-crush" },
+      { icon: BookOpen, label: "Library", description: "Find your saved content", path: "/library" },
     ],
   },
   {
@@ -45,6 +47,7 @@ const mobilePrimaryItems = [
 ];
 
 const mobileMoreItems = [
+  { icon: BookOpen, label: "Library", description: "Find your saved content", path: "/library" },
   { icon: PenLine, label: "Create from topic", description: "Generate titles, hooks, and scripts", path: "/create" },
   { icon: Search, label: "SEO", description: "Improve titles and tags", path: "/seo" },
   { icon: BarChart3, label: "Growth estimator", description: "Plan reach and revenue", path: "/analytics" },

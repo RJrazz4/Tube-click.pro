@@ -44,6 +44,13 @@ import {
 // useDailyUsage removed — legacy 10/day counter replaced by 24h conveyor.
 import { useAppStore } from "@/stores/useAppStore";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
+import { useContentStore } from "@/stores/useContentStore";
+import { useWorkflowStore } from "@/stores/useWorkflowStore";
+import { useDawnPatrolStore } from "@/stores/useDawnPatrolStore";
+import { useGhostCreditsStore } from "@/stores/useGhostCreditsStore";
+import { useInterrogateStore } from "@/stores/useInterrogateStore";
+import { useReconStore } from "@/stores/useReconStore";
+import { useSquadStore } from "@/stores/useSquadStore";
 
 function useFreeCooldownRemaining(): number {
   const freeCooldownUntil = useCloneCrushStore((s) => s.freeCooldownUntil);
@@ -73,14 +80,24 @@ function formatCountdown(ms: number): string {
 // Clearing preferences/content must never become an implicit sign-out; only the
 // dedicated sign-out action is allowed to destroy a Supabase session.
 const AUTH_STORAGE_KEYS = new Set(["tubegenius-auth-store"]);
+const AUTH_NAMESPACED_PREFIX = "tc:u:tubegenius-auth-store";
 const APP_STORAGE_PREFIXES = ["tubegenius-", "tubeclick-"];
+const APP_STORAGE_EXACT_KEYS = new Set([
+  "ghost_base_counter",
+  "ghost_intel_last_seen",
+  "ghost_mini_banner_dismiss",
+  "ghost_streak_v2",
+]);
 
 function clearLocalAppData() {
   Object.keys(localStorage)
-    .filter((key) =>
-      APP_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix)) &&
-      !AUTH_STORAGE_KEYS.has(key),
-    )
+    .filter((key) => {
+      const isNamespacedAppData = key.startsWith("tc:u:") && !key.startsWith(AUTH_NAMESPACED_PREFIX);
+      const isLegacyAppData = APP_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix)) && !AUTH_STORAGE_KEYS.has(key);
+      const isTransientCache = key.startsWith("qc:v2:") || key.startsWith("tc-cache:");
+      const isReferralMarker = key.startsWith("tc:free-unlock-used:");
+      return isNamespacedAppData || isLegacyAppData || isTransientCache || isReferralMarker || APP_STORAGE_EXACT_KEYS.has(key);
+    })
     .forEach((key) => localStorage.removeItem(key));
 }
 
@@ -327,20 +344,59 @@ function DataPrivacySection() {
   const handleExportData = async () => {
     setIsExporting(true);
     try {
-      // Export all user data
+      // Export the live Zustand snapshots instead of obsolete unnamespaced
+      // localStorage keys. This keeps the download compatible with the
+      // current per-user storage adapter while never exposing store actions.
+      const authState = useAuthStore.getState();
+      const contentState = useContentStore.getState();
+      const appState = useAppStore.getState();
+      const cloneState = useCloneCrushStore.getState();
+      const workflowState = useWorkflowStore.getState();
       const data = {
+        exportVersion: 1,
         exportDate: new Date().toISOString(),
-        license: useAuthStore.getState().license,
-        user: useAuthStore.getState().user,
-        content: JSON.parse(localStorage.getItem("tubegenius-content-store") || "{}"),
-        preferences: JSON.parse(localStorage.getItem("tubegenius-app-store") || "{}"),
+        account: {
+          user: authState.user,
+          license: authState.license,
+        },
+        content: {
+          stats: contentState.stats,
+          items: contentState.contents,
+        },
+        preferences: {
+          tier: appState.tier,
+          sidebarOpen: appState.sidebarOpen,
+        },
+        workspace: {
+          profile: cloneState.profile,
+          savedChannels: cloneState.savedChannels,
+          activeSlotIndex: cloneState.activeSlotIndex,
+          savedNiche: cloneState.savedNiche,
+          outputLanguage: cloneState.outputLanguage,
+          rewrites: cloneState.rewrites,
+        },
+        workflow: workflowState.activeWorkflow,
+        ghostIntelligence: {
+          credits: {
+            tier: useGhostCreditsStore.getState().tier,
+            isBlackOps: useGhostCreditsStore.getState().isBlackOps,
+            actions: useGhostCreditsStore.getState().actions,
+          },
+          interrogation: useInterrogateStore.getState().session,
+          recon: useReconStore.getState().videos,
+          squadBriefs: useSquadStore.getState().briefs,
+          dawnPatrol: {
+            briefs: useDawnPatrolStore.getState().briefs,
+            config: useDawnPatrolStore.getState().config,
+          },
+        },
       };
-      
+
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-        a.download = `tubeclickpro-data-${new Date().toISOString().split("T")[0]}.json`;
+      a.download = `tubeclickpro-data-${new Date().toISOString().split("T")[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
       
@@ -374,7 +430,7 @@ function DataPrivacySection() {
             <Database className="w-4 h-4" />
             Your Data
           </CardTitle>
-          <CardDescription className="text-xs">Export or delete your data</CardDescription>
+          <CardDescription className="text-xs">Export or delete your local workspace data</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">

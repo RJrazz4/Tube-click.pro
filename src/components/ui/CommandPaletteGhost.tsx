@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { BarChart3, Gift, LayoutDashboard, Mic, PenLine, Search, Settings, Share2, Zap } from "lucide-react";
+import { BarChart3, BookOpen, Gift, LayoutDashboard, Mic, PenLine, Search, Settings, Share2, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 /**
@@ -17,6 +17,7 @@ const COMMAND_GROUPS = [
     commands: [
       { id: "dashboard", label: "Open Dashboard", description: "Resume your creator workspace", icon: LayoutDashboard, path: "/" },
       { id: "analyze", label: "Analyze a YouTube channel", description: "Find winning videos and create a package", icon: Zap, path: "/clone-crush" },
+      { id: "library", label: "Open Library", description: "Find your saved content", icon: BookOpen, path: "/library" },
     ],
   },
   {
