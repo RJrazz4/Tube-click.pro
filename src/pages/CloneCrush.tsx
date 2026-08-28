@@ -1281,7 +1281,7 @@ export default function CloneCrush() {
                 <Card className="glass-strong border-border/80 p-5 h-full flex flex-col justify-between">
                   <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">Competitor opportunities</span><span className="text-xs text-muted-foreground">{competitors.length} videos {(competitors[0] as any)?.isGhostReconstructed && <span className="text-amber-300">• Estimated</span>}</span></div>
                   {isSearchingCompetitors ? (<div className="py-10 text-center space-y-2"><Loader2 className="w-7 h-7 animate-spin text-primary mx-auto" /><p className="text-xs text-muted-foreground">Auditing what's working…</p><div className="flex justify-center gap-1 mt-2">{[0,1,2,3].map(i=><span key={i} className="w-1 h-1 rounded-full bg-primary/60 animate-pulse" style={{animationDelay:`${i*150}ms`}} />)}</div></div>) : competitors.length>0 ? (
-                    <div key={workflowNonce} className="grid grid-cols-3 gap-2 mt-2">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400';
+                    <div key={workflowNonce} className="grid grid-cols-1 gap-3 mt-2 sm:grid-cols-3">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400';
                       // Conveyor semantics: slot0 (idx===0) is the
                       // actionable tile (or the pinned 24h-locked result
                       // during cooldown). Slots 1+2 are always future
@@ -1293,8 +1293,7 @@ export default function CloneCrush() {
                       // require pro to unlock early.
                       const tileLocked = (isTeaserSlot && !isPro) || (!isPro && dailyLimitActive && !isSelected);
                       const tileLabel = isCooldownPinnedTile ? "Locked • 24h" : isTeaserSlot ? "NEXT • LOCKED" : "SLOT 1 • ACTIVE";
-                      return (
-                      <div key={video.videoId} onClick={()=>{
+                      const selectVideo = () => {
                         if (isTeaserSlot && !isPro) { routeToProUpsell("locked"); return; }
                         if (!isPro && dailyLimitActive) { openReferralRewards(); return; }
                         // During cooldown the pinned tile remains
@@ -1308,8 +1307,16 @@ export default function CloneCrush() {
                         setActiveTab("script");
                         setCopiedText(false);
                         setActiveVideoId(video.videoId); selectWorkflowCompetitor({videoId:video.videoId,title:video.title,url:video.url,channelName:video.channelName,thumbnail:video.thumbnail}, nicheInput);
-                      }} className={`group relative rounded-xl border p-2 transition-all duration-300 flex cursor-pointer flex-col justify-between bg-secondary/30 ${isSelected||isCooldownPinnedTile?"border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow":"border-border/60 hover:border-border"} ${tileLocked?"opacity-80":""}`}>
-                        <div className="absolute top-1 left-1 z-10 bg-primary text-primary-foreground text-[7px] font-bold px-1.5 py-0.5 rounded-full">{tileLabel}</div>
+                      };
+                      return (
+                      <div
+                        key={video.videoId}
+                        onClick={selectVideo}
+                        role="group"
+                        aria-label={`${isTeaserSlot && !isPro ? "Locked" : "Selectable"} competitor opportunity: ${video.title}`}
+                        className={`group relative min-w-0 rounded-xl border p-3 transition-all duration-300 flex cursor-pointer flex-col justify-between bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:p-2 ${isSelected||isCooldownPinnedTile?"border-primary bg-primary/15 ring-2 ring-primary/60 shadow-neon-glow":"border-border/60 hover:border-border"} ${tileLocked?"opacity-80":""}`}
+                      >
+                        <div className="absolute top-1 left-1 z-10 bg-primary text-primary-foreground text-[9px] font-bold px-2 py-1 rounded-full">{tileLabel}</div>
                         <div className="relative aspect-video rounded-lg overflow-hidden bg-black/60 shrink-0 mb-1.5">
                           <img src={video.thumbnail} alt={video.title} className={`w-full h-full object-cover ${isTeaserSlot && !isPro ? "opacity-30 blur-[3px]" : ""}`} />
                           {!isPro && idx === 0 && isFreeConveyorActive && (
@@ -1351,7 +1358,14 @@ export default function CloneCrush() {
                             !isPro && dailyLimitActive && <DailyLimitOverlay />
                           )}
                         </div>
-                        <div><p className="text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p><p className="text-[11px] md:text-sm text-primary font-display font-black mt-1 leading-none">{video.views}</p><div className="flex items-center gap-1.5 mt-1">{video.estimatedRevenue && <span className="text-[7px] font-bold text-green-400 bg-green-400/10 px-1 py-0.5 rounded flex items-center gap-0.5"><DollarSign className="w-2.5 h-2.5" />{video.estimatedRevenue}</span>}{video.viralVelocityScore!==undefined && !showTileCooldown && <span className={`text-[7px] font-bold ${velocityColor} bg-secondary/60 px-1 py-0.5 rounded flex items-center gap-0.5`}><Flame className="w-2.5 h-2.5" />{video.viralVelocityScore}</span>}{!isTeaserSlot && (
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-xs sm:text-[9px] font-bold line-clamp-2 text-foreground leading-tight">{video.title}</p>
+                            <button type="button" onClick={(event) => { event.stopPropagation(); selectVideo(); }} className="min-h-8 shrink-0 rounded-md border border-primary/30 bg-primary/10 px-2 text-[9px] font-semibold text-primary hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:min-h-6 sm:px-1.5" aria-label={`${isTeaserSlot && !isPro ? "View" : "Select"} ${video.title}`}>
+                              {isTeaserSlot && !isPro ? "View" : "Select"}
+                            </button>
+                          </div>
+                          <p className="text-[11px] md:text-sm text-primary font-display font-black mt-1 leading-none">{video.views}</p><div className="flex items-center gap-1.5 mt-1">{video.estimatedRevenue && <span className="text-[9px] sm:text-[7px] font-bold text-green-400 bg-green-400/10 px-1 py-0.5 rounded flex items-center gap-0.5"><DollarSign className="w-2.5 h-2.5" />{video.estimatedRevenue}</span>}{video.viralVelocityScore!==undefined && !showTileCooldown && <span className={`text-[9px] sm:text-[7px] font-bold ${velocityColor} bg-secondary/60 px-1 py-0.5 rounded flex items-center gap-0.5`}><Flame className="w-2.5 h-2.5" />{video.viralVelocityScore}</span>}{!isTeaserSlot && (
                             // 🔍 INTERROGATE chip — free users route to /rewards; pro opens drawer
                             isPro ? (
                               <button
@@ -1363,7 +1377,7 @@ export default function CloneCrush() {
                                     m.useInterrogateStore.getState().openDrawer(video.videoId, { title: video.title, url: video.url });
                                   });
                                 }}
-                                className="text-[7px] font-bold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 px-1 py-0.5 rounded flex items-center gap-0.5 transition-colors"
+                                className="text-[9px] font-bold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 px-1 py-0.5 rounded flex items-center gap-0.5 transition-colors"
                                 title="Ask about this competitor video"
                               >
                                 <Search className="w-2.5 h-2.5" /> ASK
@@ -1372,7 +1386,7 @@ export default function CloneCrush() {
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); routeToProUpsell("interrogate"); }}
-                                className="text-[7px] font-bold text-muted-foreground bg-secondary/60 border border-border px-1 py-0.5 rounded flex items-center gap-0.5"
+                                className="text-[9px] font-bold text-muted-foreground bg-secondary/60 border border-border px-1 py-0.5 rounded flex items-center gap-0.5"
                                 title="Pro feature: chat with competitor video"
                               >
                                 <Lock className="w-2.5 h-2.5" /> ASK
@@ -1395,7 +1409,7 @@ export default function CloneCrush() {
                                     btn?.click();
                                   }, 250);
                                 }}
-                                className="text-[7px] font-bold text-fuchsia-300 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 border border-fuchsia-500/30 px-1 py-0.5 rounded flex items-center gap-0.5 transition-colors"
+                                className="text-[9px] font-bold text-fuchsia-300 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 border border-fuchsia-500/30 px-1 py-0.5 rounded flex items-center gap-0.5 transition-colors"
                                 title="Open the competitor breakdown"
                               >
                                 <Shield className="w-2.5 h-2.5" /> BREAKDOWN
@@ -1404,7 +1418,7 @@ export default function CloneCrush() {
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); routeToProUpsell("squad"); }}
-                                className="text-[7px] font-bold text-muted-foreground bg-secondary/60 border border-border px-1 py-0.5 rounded flex items-center gap-0.5"
+                                className="text-[9px] font-bold text-muted-foreground bg-secondary/60 border border-border px-1 py-0.5 rounded flex items-center gap-0.5"
                                 title="Pro feature: 4-agent Intel Squad dossier"
                               >
                                 <Lock className="w-2.5 h-2.5" /> BREAKDOWN
@@ -1575,7 +1589,7 @@ export default function CloneCrush() {
         <div className="lg:col-span-4 space-y-6">
           {activeRewrite ? (
             <Card className={`glass-strong ${isFreeCooldownActive ? "border-amber-500/40" : "border-primary/40"} shadow-neon-glow animate-fade-in bracket relative overflow-hidden`}>{isFreeCooldownActive && freeCooldownUntil && <FreeCooldownOverlay unlocksAt={freeCooldownUntil} views={selectedVideo?.views} onUpgrade={()=>routeToProUpsell("premium")} variant="result" />}
-              <CardHeader className="pb-3 border-b border-border/40"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[9px] font-mono tracking-widest uppercase">Content package • {activeRewrite.outputLanguage || "English"}</span><CardTitle className="font-display text-base text-foreground mt-2 line-clamp-2">{activeRewrite.rewrittenTitle}</CardTitle><p className="text-[10px] text-muted-foreground truncate mt-1">Based on: {activeRewrite.targetVideoTitle}</p></div><Button variant="outline" size="icon" onClick={handleCopyScript} className="shrink-0 border-border hover:border-primary/40 text-muted-foreground hover:text-primary active:scale-95"><Copy className="w-4 h-4" /></Button></div></CardHeader>
+              <CardHeader className="pb-3 border-b border-border/40"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[9px] font-mono tracking-widest uppercase">Content package • {activeRewrite.outputLanguage || "English"}</span><CardTitle className="font-display text-base text-foreground mt-2 line-clamp-2">{activeRewrite.rewrittenTitle}</CardTitle><p className="text-[10px] text-muted-foreground truncate mt-1">Based on: {activeRewrite.targetVideoTitle}</p></div><Button variant="outline" size="icon" onClick={handleCopyScript} aria-label="Copy generated script" title="Copy generated script" className="shrink-0 border-border hover:border-primary/40 text-muted-foreground hover:text-primary active:scale-95"><Copy className="w-4 h-4" /></Button></div></CardHeader>
               <CardContent className="pt-5 space-y-5">
                 <div className="space-y-3 rounded-xl border border-primary/30 bg-primary/[0.04] p-4">
                   <div className="flex items-start gap-3">
@@ -1586,9 +1600,11 @@ export default function CloneCrush() {
                       <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Send the package to Voiceover Studio, or choose another production action below.</p>
                     </div>
                   </div>
-                  <Button onClick={handleSendToVoiceover} className="cyber-button h-10 w-full gap-2 text-xs font-display">
-                    <Mic className="h-3.5 w-3.5" /> Send to Voiceover
-                  </Button>
+                  <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-30 -mx-1 rounded-xl bg-background/85 p-1 backdrop-blur-md sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+                    <Button onClick={handleSendToVoiceover} className="cyber-button h-10 w-full gap-2 text-xs font-display">
+                      <Mic className="h-3.5 w-3.5" /> Send to Voiceover
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-1 gap-2 border-t border-border/40 pt-3 sm:grid-cols-2">
                     <Button onClick={handleSaveActivePackage} disabled={isActivePackageSaved} size="sm" variant="outline" className="h-9 justify-start gap-1.5 border-border text-xs">
                       {isActivePackageSaved ? <Check className="h-3.5 w-3.5 text-green-400" /> : <FileText className="h-3.5 w-3.5 text-primary" />}
@@ -1635,7 +1651,7 @@ export default function CloneCrush() {
             </Card>
           )}
 
-          <Card className="glass-strong border-border"><CardHeader className="pb-2"><CardTitle className="font-display text-sm font-semibold text-foreground flex items-center gap-2"><History className="w-4 h-4 text-primary" />Saved packages ({rewrites.length})</CardTitle></CardHeader><CardContent className="px-3 pb-3">{rewrites.length>0 ? (<div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">{rewrites.map((r:any)=>{ const isSelected = activeRewrite?.id===r.id; return (<div key={r.id} className={`group relative flex items-center justify-between p-2.5 rounded-lg border text-left cursor-pointer transition-colors ${isSelected?"border-primary bg-primary/10":"border-border/40 hover:border-border bg-secondary/10"}`}><div onClick={()=>setActiveRewrite(r)} className="flex-1 min-w-0 pr-6"><p className="text-[11px] font-bold text-foreground truncate">{r.rewrittenTitle}</p><p className="text-[9px] text-muted-foreground truncate mt-0.5">{r.tier==="premium"?"Pro rewrite":"Standard rewrite"} • {r.outputLanguage || "English"} • {r.glitchIntensity||60}% • {new Date(r.createdAt).toLocaleDateString()}</p></div><button onClick={e=>{ e.stopPropagation(); deleteRewrite(r.id); toast.success("Package removed"); }} className="absolute right-2 opacity-0 group-hover:opacity-100 hover:text-destructive text-muted-foreground transition-all duration-200"><XCircle className="w-3.5 h-3.5" /></button></div>);})}</div>) : (<div className="text-center py-6 text-muted-foreground/60 text-xs">Generated Chain-Loop packages appear here • Ghost cached</div>)}</CardContent></Card>
+          <Card className="glass-strong border-border"><CardHeader className="pb-2"><CardTitle className="font-display text-sm font-semibold text-foreground flex items-center gap-2"><History className="w-4 h-4 text-primary" />Saved packages ({rewrites.length})</CardTitle></CardHeader><CardContent className="px-3 pb-3">{rewrites.length>0 ? (<div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">{rewrites.map((r:any)=>{ const isSelected = activeRewrite?.id===r.id; return (<div key={r.id} className={`group relative flex items-center justify-between p-2.5 rounded-lg border text-left cursor-pointer transition-colors ${isSelected?"border-primary bg-primary/10":"border-border/40 hover:border-border bg-secondary/10"}`}><div onClick={()=>setActiveRewrite(r)} className="flex-1 min-w-0 pr-6"><p className="text-[11px] font-bold text-foreground truncate">{r.rewrittenTitle}</p><p className="text-[9px] text-muted-foreground truncate mt-0.5">{r.tier==="premium"?"Pro rewrite":"Standard rewrite"} • {r.outputLanguage || "English"} • {r.glitchIntensity||60}% • {new Date(r.createdAt).toLocaleDateString()}</p></div><button onClick={e=>{ e.stopPropagation(); deleteRewrite(r.id); toast.success("Package removed"); }} aria-label={`Delete saved package ${r.rewrittenTitle}`} title="Delete saved package" className="absolute right-2 opacity-0 group-hover:opacity-100 hover:text-destructive text-muted-foreground transition-all duration-200"><XCircle className="w-3.5 h-3.5" /></button></div>);})}</div>) : (<div className="text-center py-6 text-muted-foreground/60 text-xs">Generated Chain-Loop packages appear here • Ghost cached</div>)}</CardContent></Card>
         </div>
       </div>
       <GhostInterrogationDrawer />

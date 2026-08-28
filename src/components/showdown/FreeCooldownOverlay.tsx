@@ -111,7 +111,7 @@ export function FreeCooldownOverlay({ unlocksAt, views, onUpgrade, variant = "ti
         onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
         className="relative z-10 m-1.5 cyber-button flex h-7 items-center justify-center gap-1 rounded-md text-[9px] font-display font-bold uppercase tracking-wider"
       >
-        <Sparkles className="h-2.5 w-2.5" /> Skip Wait — Pro
+        <Sparkles className="h-2.5 w-2.5" /> See Pro options
       </button>
     </div>
   );

@@ -19,7 +19,14 @@ export function TopBar() {
     <header className="fixed top-0 left-0 right-0 z-40 flex h-16 items-center justify-between border-b border-primary/10 glass-strong px-6 backdrop-blur-2xl md:left-64 max-md:px-3">
       <div className="absolute inset-0 ghost-scanline opacity-[0.02] pointer-events-none" />
       <div className="flex items-center gap-3 max-sm:gap-1.5 relative z-10">
-        <h1 className="font-display text-xl font-bold cursor-pointer select-none flex items-center gap-2" onClick={handleGhostTrigger}>
+        <h1
+          className="font-display text-xl font-bold cursor-pointer select-none flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={handleGhostTrigger}
+          onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleGhostTrigger(); } }}
+          role="button"
+          tabIndex={0}
+          aria-label="TubeClick Pro"
+        >
           <span className="text-glow-purple text-primary">Tube</span>
           <span className="text-glow-cyan text-accent max-sm:hidden">Click Pro</span>
           <span className="ml-1 text-[10px] font-mono bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded-full hidden md:inline">Creator OS</span>
@@ -43,7 +50,7 @@ export function TopBar() {
         {isAuthenticated ? (
           <UserMenu />
         ) : (
-          <Button variant="outline" size="sm" onClick={() => void requestAuthentication("save your work and unlock Pro rewards")} className="gap-2 border-primary/20 bg-primary/5 hover:bg-primary/10 font-mono text-xs">
+          <Button variant="outline" size="sm" aria-label="Sign in" onClick={() => void requestAuthentication("save your work and unlock Pro rewards")} className="gap-2 border-primary/20 bg-primary/5 hover:bg-primary/10 font-mono text-xs">
             <LogIn className="h-4 w-4" />
             <span className="hidden sm:inline">Sign In</span>
           </Button>
@@ -54,6 +61,7 @@ export function TopBar() {
           size="sm"
           onClick={() => openProUpgrade({ defaultTab: "referral", reason: "topbar" })}
           className="relative gap-2 border-primary/20 bg-primary/5 hover:border-primary/40 hover:bg-primary/10 text-xs"
+          aria-label="See Pro options"
           title="Review paid and referral Pro options"
         >
           <Sparkles className="h-4 w-4 text-primary" />

@@ -169,6 +169,7 @@ export function DawnPatrolCard() {
                 className="h-7 w-7 shrink-0 text-muted-foreground hover:text-amber-300"
                 onClick={fireGenerate}
                 disabled={generating}
+                aria-label="Regenerate today's brief"
                 title="Regenerate today's brief"
               >
                 {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
@@ -211,7 +212,7 @@ export function DawnPatrolCard() {
                     <Check className="w-3 h-3 mr-1" /> mark read
                   </Button>
                 )}
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-amber-300" onClick={() => setShowPrefs((v) => !v)} title="Delivery preferences">
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-amber-300" onClick={() => setShowPrefs((v) => !v)} aria-label="Open daily brief delivery preferences" title="Delivery preferences">
                   <Settings2 className="w-3 h-3" />
                 </Button>
               </div>

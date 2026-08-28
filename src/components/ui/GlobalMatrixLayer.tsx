@@ -15,6 +15,13 @@ export function GlobalMatrixLayer() {
     const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
 
+    // The ambient matrix is decorative. Avoid a perpetual RAF loop on small
+    // screens and for users who request reduced motion; the static background
+    // layers remain available without competing with the creator workflow.
+    const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const isSmallScreen = window.matchMedia?.("(max-width: 767px)").matches ?? false;
+    if (prefersReducedMotion || isSmallScreen) return;
+
     let raf = 0;
     let drops: number[] = [];
     const chars = "01";
@@ -59,7 +66,7 @@ export function GlobalMatrixLayer() {
       {/* Base black */}
       <div className="absolute inset-0 bg-[#020207]" />
       {/* Matrix canvas - 3% opacity illusion */}
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full opacity-[0.04]" />
+      <canvas ref={canvasRef} className="absolute inset-0 hidden h-full w-full opacity-[0.04] md:block" aria-hidden="true" />
       {/* Purple orb */}
       <div className="absolute -top-40 -left-40 w-[800px] h-[800px] rounded-full bg-purple-600/[0.07] blur-[100px]" />
       {/* Cyan orb */}

@@ -214,7 +214,7 @@ export function GhostInterrogationDrawer() {
             <span className="text-muted-foreground">•</span>
             <span className="text-fuchsia-400">Ghost Interrogation</span>
           </div>
-          <Button variant="ghost" size="icon" onClick={closeDrawer} className="h-8 w-8">
+          <Button variant="ghost" size="icon" onClick={closeDrawer} aria-label="Close video questions" title="Close video questions" className="h-8 w-8">
             <X className="w-4 h-4" />
           </Button>
         </div>

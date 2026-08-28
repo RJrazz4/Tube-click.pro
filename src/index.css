@@ -259,10 +259,24 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 
   .deferred-module-placeholder {
     animation: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .deferred-module-placeholder {
+    animation: none;
+  }
+
+  /* Keep the sticky result action clear of the mobile navigation rail. */
+  .app-shell {
+    scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom));
   }
 }
 

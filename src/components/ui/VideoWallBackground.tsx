@@ -27,6 +27,10 @@ export function VideoWallBackground({ intensity = "medium" }: { intensity?: "low
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const isSmallScreen = window.matchMedia?.("(max-width: 767px)").matches ?? false;
+    if (prefersReducedMotion || isSmallScreen) return;
+
     let raf = 0;
     let mouseX = 0, mouseY = 0, curX = 0, curY = 0;
 
@@ -61,7 +65,7 @@ export function VideoWallBackground({ intensity = "medium" }: { intensity?: "low
       {/* Thumbnail grid - 12 images, CSS only, lightweight */}
       <div
         ref={containerRef}
-        className={`absolute inset-[-10%] grid grid-cols-4 md:grid-cols-6 gap-[2px] ${blurClass} ${brightness} grayscale-[0.2] saturate-[0.6] will-change-transform`}
+        className={`absolute inset-[-10%] hidden grid-cols-4 gap-[2px] md:grid md:grid-cols-6 ${blurClass} ${brightness} grayscale-[0.2] saturate-[0.6] will-change-transform`}
       >
         {THUMB_POOL.map((src, i) => (
           <div key={i} className="relative aspect-video overflow-hidden bg-black/40">
