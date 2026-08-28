@@ -1,7 +1,7 @@
 import { lazy, memo, Suspense, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
-  Image as ImageIcon, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Loader2, X, Sparkles, RefreshCw, Share2, TrendingUp, Search, Zap, DollarSign, Flame, Gauge, AlertTriangle, Terminal, Cpu, Activity, Gift,
+  Image as ImageIcon, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Loader2, X, Sparkles, RefreshCw, Share2, TrendingUp, Search, Zap, DollarSign, Flame, Gauge, AlertTriangle, Terminal, Cpu, Activity, Gift, PenLine,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,11 +23,12 @@ const CompetitorShowdown = lazy(() => import("@/components/showdown/CompetitorSh
 const TheLab = lazy(() => import("@/components/lab/TheLab").then(m => ({ default: m.TheLab })));
 
 const tools = [
-  { title: "Clone & Crush AI", description: "Analyze winners and generate 5 ready-to-use assets in 1 click", icon: Zap, path: "/clone-crush", gradient: "from-purple-600 via-indigo-600 to-cyan-500", glow: "neon-glow-purple" },
-  { title: "Voiceover Studio", description: "Cinematic AI voiceovers • Neural Engine", icon: Mic, path: "/voice", gradient: "from-orange-400 to-red-500", glow: "" },
-  { title: "Multi-Platform Repurposer", description: "Convert scripts to X, IG, LinkedIn & YouTube", icon: Share2, path: "/repurposer", gradient: "from-pink-500 to-rose-600", glow: "" },
-  { title: "Channel Analytics & ROI", description: "Simulate growth, AdSense & brand deals", icon: TrendingUp, path: "/analytics", gradient: "from-blue-500 to-indigo-600", glow: "" },
-  { title: "SEO Tag & Competitor AI", description: "High-CTR tags & search volume audit", icon: Search, path: "/seo", gradient: "from-emerald-500 to-teal-600", glow: "" },
+  { title: "Clone & Crush AI", description: "Analyze a winning video and create an original content package", icon: Zap, path: "/clone-crush", gradient: "from-purple-600 via-indigo-600 to-cyan-500", glow: "neon-glow-purple" },
+  { title: "Create from a topic", description: "Generate titles, hooks, scripts, and a strategy brief", icon: PenLine, path: "/create", gradient: "from-violet-500 to-fuchsia-600", glow: "" },
+  { title: "Voiceover Studio", description: "Turn your script into narration", icon: Mic, path: "/voice", gradient: "from-orange-400 to-red-500", glow: "" },
+  { title: "Multi-Platform Repurposer", description: "Turn one script into posts for four platforms", icon: Share2, path: "/repurposer", gradient: "from-pink-500 to-rose-600", glow: "" },
+  { title: "Channel Analytics & ROI", description: "Estimate growth, reach, and revenue", icon: TrendingUp, path: "/analytics", gradient: "from-blue-500 to-indigo-600", glow: "" },
+  { title: "SEO Tag & Competitor AI", description: "Improve titles and search tags", icon: Search, path: "/seo", gradient: "from-emerald-500 to-teal-600", glow: "" },
 ];
 
 const StatCard = memo(function StatCard({ label, value, icon: Icon, color }: { label: string; value: number; icon: any; color: string }) {

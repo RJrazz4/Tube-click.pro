@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { BarChart3, Gift, LayoutDashboard, Mic, Search, Settings, Share2, Zap } from "lucide-react";
+import { BarChart3, Gift, LayoutDashboard, Mic, PenLine, Search, Settings, Share2, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 /**
@@ -22,6 +22,7 @@ const COMMAND_GROUPS = [
   {
     heading: "Create & grow",
     commands: [
+      { id: "create", label: "Create from a topic", description: "Generate titles, hooks, and scripts", icon: PenLine, path: "/create" },
       { id: "voiceover", label: "Generate a voiceover", description: "Turn a script into narration", icon: Mic, path: "/voice" },
       { id: "repurpose", label: "Repurpose content", description: "Format content for other platforms", icon: Share2, path: "/repurposer" },
       { id: "seo", label: "Improve titles and tags", description: "Open the SEO optimizer", icon: Search, path: "/seo" },

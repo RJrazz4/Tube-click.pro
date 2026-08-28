@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Menu,
   Mic,
+  PenLine,
   Search,
   Settings,
   Share2,
@@ -27,6 +28,7 @@ const navGroups = [
   {
     label: "Create & grow",
     items: [
+      { icon: PenLine, label: "Create from a topic", description: "Generate titles, hooks, and scripts", path: "/create" },
       { icon: Mic, label: "Voiceover", description: "Turn scripts into narration", path: "/voice" },
       { icon: Share2, label: "Repurpose", description: "Format content for other platforms", path: "/repurposer" },
       { icon: Search, label: "SEO", description: "Improve titles and tags", path: "/seo" },
@@ -43,6 +45,7 @@ const mobilePrimaryItems = [
 ];
 
 const mobileMoreItems = [
+  { icon: PenLine, label: "Create from topic", description: "Generate titles, hooks, and scripts", path: "/create" },
   { icon: Search, label: "SEO", description: "Improve titles and tags", path: "/seo" },
   { icon: BarChart3, label: "Growth estimator", description: "Plan reach and revenue", path: "/analytics" },
   { icon: Gift, label: "Referral rewards", description: "Earn Pro with qualified referrals", path: "/rewards" },

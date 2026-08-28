@@ -391,10 +391,10 @@ ${generatedContent.description || 'N/A'}
       <div className="mb-4 md:mb-6">
         <h1 className="font-display text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
           <Bot className="w-6 h-6 md:w-7 md:h-7 text-primary" />
-          TubeBot AI Agent
+          Create from a topic <span className="ml-1 text-sm font-mono font-semibold tracking-wide text-primary/80 md:text-base">TubeBot AI</span>
         </h1>
         <p className="text-sm md:text-base text-muted-foreground mt-1">
-          Generate viral titles, hooks, clean scripts, hashtags & descriptions
+          Start with a topic and get titles, hooks, a clean script, hashtags, and a strategy brief.
         </p>
       </div>
 
@@ -404,7 +404,7 @@ ${generatedContent.description || 'N/A'}
           <CardHeader className="border-b border-border pb-3 md:pb-4">
             <CardTitle className="font-display text-base md:text-lg text-foreground flex items-center gap-2">
               <Sparkles className="w-4 h-4 md:w-5 md:h-5 text-primary" />
-              Content Generator
+              Topic-based content
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col p-3 md:p-4 overflow-hidden">

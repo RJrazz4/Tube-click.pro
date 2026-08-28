@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
-  Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio, Database, PlusCircle, Shield, Languages,
+  Zap, Sparkles, Copy, Check, FileText, Youtube, Loader2, Lock, Download, RefreshCw, CheckCircle2, AlertTriangle, ArrowRight, ShieldAlert, Compass, History, TrendingUp, ChevronRight, XCircle, Mic, Image, Search, DollarSign, Flame, Gauge, Share2, Terminal, Cpu, Activity, Radio, Database, PlusCircle, Shield, Languages,
 } from "lucide-react";
 import { GhostInterrogationDrawer } from "@/components/ghost/GhostInterrogationDrawer";
 import { GhostSquadDossier } from "@/components/ghost/GhostSquadDossier";
@@ -228,6 +228,7 @@ export default function CloneCrush() {
   const lastChannelUrl = freeLockedChannelUrl || profile?.url || activeSavedChannel?.url || null;
 
   const saveContent = useContentStore((s) => s.saveContent);
+  const savedContents = useContentStore((s) => s.contents);
   const incrementStat = useContentStore((s) => s.incrementStat);
   const license = useAuthStore((s) => s.license);
   // Never grant Premium behavior from a persisted snapshot until the active
@@ -306,6 +307,16 @@ export default function CloneCrush() {
   const [xpTrigger, setXpTrigger] = useState(0);
   const [workflowNonce, setWorkflowNonce] = useState(0);
   const [dailyLimitActive, setDailyLimitActive] = useState(false);
+
+  const activePackageLibraryTitle = activeRewrite
+    ? `Chain-Loop: ${activeRewrite.rewrittenTitle.substring(0, 35)}...`
+    : "";
+  const isActivePackageSaved = Boolean(
+    activePackageLibraryTitle && savedContents.some((item) => item.title === activePackageLibraryTitle),
+  );
+  const activePackageText = activeRewrite
+    ? `TITLE: ${activeRewrite.rewrittenTitle}\nHOOK: ${activeRewrite.glitchHook}\nSCRIPT:\n${activeRewrite.fullScript}\n\nTHUMBNAIL PROMPT: ${activeRewrite.thumbnailPrompt}\nSEO TAGS: ${(activeRewrite.seoTags || []).join(", ")}\nEDITING GUIDE: ${activeRewrite.editingGuide}`
+    : "";
 
   const transcriptMutation = useTranscriptExtraction();
   const cloneCrushMutation = useCloneCrushMutation();
@@ -936,8 +947,25 @@ export default function CloneCrush() {
   const handleSendToRepurposer = () => { if (!activeRewrite) return; startWorkflowHandoff("repurposer"); toast.success("Script loaded into Repurposer!"); navigate("/repurposer"); };
   const handleCopyFullPackage = async () => {
     if (!activeRewrite) return;
-    const txt = `TITLE: ${activeRewrite.rewrittenTitle}\nHOOK: ${activeRewrite.glitchHook}\nSCRIPT:\n${activeRewrite.fullScript}\n\nTHUMBNAIL PROMPT: ${activeRewrite.thumbnailPrompt}\nSEO TAGS: ${(activeRewrite.seoTags || []).join(", ")}\nEDITING GUIDE: ${activeRewrite.editingGuide}`;
-    try { await navigator.clipboard.writeText(txt); toast.success("Full Chain-Loop package copied to clipboard"); } catch { toast.error("Copy failed"); }
+    try { await navigator.clipboard.writeText(activePackageText); toast.success("Content package copied to clipboard"); } catch { toast.error("Copy failed"); }
+  };
+  const handleSaveActivePackage = () => {
+    if (!activeRewrite || isActivePackageSaved) return;
+    saveContent({
+      type: "script",
+      title: activePackageLibraryTitle,
+      content: activePackageText,
+      metadata: { platform: "YouTube", style: activeRewrite.tier === "premium" ? "Pro rewrite" : "Standard rewrite" },
+    });
+    toast.success("Content package saved to your library");
+  };
+  const handleDownloadPackage = async () => {
+    if (!activeRewrite) return;
+    try {
+      const { downloadAsText } = await import("@/lib/export");
+      downloadAsText(activePackageText, `tubeclick-package-${activeRewrite.rewrittenTitle.slice(0, 40).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "content"}.txt`);
+      toast.success("Content package downloaded");
+    } catch { toast.error("Download failed"); }
   };
   // THE SINGLE ENTRY POINT for the big blue Execute button. Clone & Crush
   // rewrites require a real Supabase session, so unlike lightweight preview
@@ -1547,14 +1575,45 @@ export default function CloneCrush() {
         <div className="lg:col-span-4 space-y-6">
           {activeRewrite ? (
             <Card className={`glass-strong ${isFreeCooldownActive ? "border-amber-500/40" : "border-primary/40"} shadow-neon-glow animate-fade-in bracket relative overflow-hidden`}>{isFreeCooldownActive && freeCooldownUntil && <FreeCooldownOverlay unlocksAt={freeCooldownUntil} views={selectedVideo?.views} onUpgrade={()=>routeToProUpsell("premium")} variant="result" />}
-              <CardHeader className="pb-3 border-b border-border/40"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[9px] font-mono tracking-widest uppercase">Master output • {activeRewrite.outputLanguage || "English"}</span><CardTitle className="font-display text-base text-foreground mt-2 line-clamp-2">{activeRewrite.rewrittenTitle}</CardTitle><p className="text-[10px] text-muted-foreground truncate mt-1">Based on: {activeRewrite.targetVideoTitle}</p></div><Button variant="outline" size="icon" onClick={handleCopyScript} className="shrink-0 border-border hover:border-primary/40 text-muted-foreground hover:text-primary active:scale-95"><Copy className="w-4 h-4" /></Button></div></CardHeader>
+              <CardHeader className="pb-3 border-b border-border/40"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[9px] font-mono tracking-widest uppercase">Content package • {activeRewrite.outputLanguage || "English"}</span><CardTitle className="font-display text-base text-foreground mt-2 line-clamp-2">{activeRewrite.rewrittenTitle}</CardTitle><p className="text-[10px] text-muted-foreground truncate mt-1">Based on: {activeRewrite.targetVideoTitle}</p></div><Button variant="outline" size="icon" onClick={handleCopyScript} className="shrink-0 border-border hover:border-primary/40 text-muted-foreground hover:text-primary active:scale-95"><Copy className="w-4 h-4" /></Button></div></CardHeader>
               <CardContent className="pt-5 space-y-5">
-                <div className="p-4 rounded-xl glass-ghost border-primary/30 space-y-3"><div className="flex items-center justify-between"><p className="text-xs font-display font-bold text-foreground flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-primary animate-pulse" />Content package ready</p><span className="text-[10px] bg-primary text-primary-foreground font-mono font-bold px-2 py-0.5 rounded-full uppercase">Next steps</span></div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><Button onClick={handleSendToVoiceover} size="sm" className="cyber-button text-xs h-9 font-display gap-1.5 justify-start px-3"><Mic className="w-3.5 h-3.5 shrink-0" /><span>Send to Voiceover</span></Button><Button onClick={handleCopyFullPackage} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Copy className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy Full Package</span></Button><Button onClick={handleSendToRepurposer} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Share2 className="w-3.5 h-3.5 text-primary shrink-0" /><span>Repurpose</span></Button><Button onClick={handleCopyThumbnailPrompt} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Image className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy Thumb Prompt</span></Button><Button onClick={handleCopySeoTags} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Search className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy SEO</span></Button></div>
+                <div className="space-y-3 rounded-xl border border-primary/30 bg-primary/[0.04] p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15"><Sparkles className="h-4 w-4 text-primary" aria-hidden="true" /></div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-primary">Recommended next step</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">Turn this script into narration</p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">Send the package to Voiceover Studio, or choose another production action below.</p>
+                    </div>
+                  </div>
+                  <Button onClick={handleSendToVoiceover} className="cyber-button h-10 w-full gap-2 text-xs font-display">
+                    <Mic className="h-3.5 w-3.5" /> Send to Voiceover
+                  </Button>
+                  <div className="grid grid-cols-1 gap-2 border-t border-border/40 pt-3 sm:grid-cols-2">
+                    <Button onClick={handleSaveActivePackage} disabled={isActivePackageSaved} size="sm" variant="outline" className="h-9 justify-start gap-1.5 border-border text-xs">
+                      {isActivePackageSaved ? <Check className="h-3.5 w-3.5 text-green-400" /> : <FileText className="h-3.5 w-3.5 text-primary" />}
+                      {isActivePackageSaved ? "Saved to Library" : "Save to Library"}
+                    </Button>
+                    <Button onClick={handleDownloadPackage} size="sm" variant="outline" className="h-9 justify-start gap-1.5 border-border text-xs">
+                      <Download className="h-3.5 w-3.5 text-primary" /> Download package
+                    </Button>
+                    <Button onClick={handleCopyFullPackage} size="sm" variant="outline" className="h-9 justify-start gap-1.5 border-border text-xs">
+                      <Copy className="h-3.5 w-3.5 text-primary" /> Copy package
+                    </Button>
+                    <Button onClick={handleSendToRepurposer} size="sm" variant="outline" className="h-9 justify-start gap-1.5 border-border text-xs">
+                      <Share2 className="h-3.5 w-3.5 text-primary" /> Repurpose content
+                    </Button>
+                    <Button onClick={handleCopyThumbnailPrompt} size="sm" variant="outline" className="h-9 justify-start gap-1.5 border-border text-xs">
+                      <Image className="h-3.5 w-3.5 text-primary" /> Copy thumbnail prompt
+                    </Button>
+                    <Button onClick={handleCopySeoTags} size="sm" variant="outline" className="h-9 justify-start gap-1.5 border-border text-xs">
+                      <Search className="h-3.5 w-3.5 text-primary" /> Copy SEO tags
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3"><div className="flex-1"><div className="flex items-center justify-between mb-1"><span className="text-[10px] font-display font-bold text-foreground uppercase tracking-wider">Glitch Intensity</span><span className={`text-xs font-mono font-bold ${(activeRewrite.glitchIntensity||60)>=90?'text-red-400':'text-yellow-400'}`}>{activeRewrite.glitchIntensity||60}%</span></div><div className="h-2 bg-secondary rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-1000 ${(activeRewrite.glitchIntensity||60)>=90?'bg-gradient-to-r from-red-600 via-red-400 to-orange-400':'bg-gradient-to-r from-yellow-600 via-yellow-400 to-green-400'}`} style={{width:`${activeRewrite.glitchIntensity||60}%`}} /></div></div>{activeRewrite.glitchTechniques && <div className="flex flex-wrap gap-1">{activeRewrite.glitchTechniques.map((tech:any,i:number)=><span key={i} className="text-[8px] font-mono bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded">{tech}</span>)}</div>}</div>
-                <div className="relative rounded-xl border border-destructive/30 bg-destructive/5 p-4 overflow-hidden shadow-sm"><div className="absolute top-0 right-0 w-20 h-20 bg-destructive/10 rounded-full blur-xl" /><div className="flex items-start gap-3 relative z-10"><ShieldAlert className="w-5 h-5 text-destructive shrink-0 mt-0.5" /><div><p className="text-xs font-bold text-destructive font-display uppercase tracking-wider">15s Glitch Hook ({(activeRewrite.glitchIntensity||60)>=90?'EXTREME':'Standard'})</p><p className="text-xs text-foreground mt-1.5 leading-relaxed font-medium italic">"{activeRewrite.glitchHook}"</p></div></div></div>
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full"><TabsList className="grid grid-cols-4 bg-secondary/60 border border-border h-9 rounded-lg"><TabsTrigger value="script" className="text-[11px] font-semibold rounded-md">Script</TabsTrigger><TabsTrigger value="thumbnail" className="text-[11px] font-semibold rounded-md">Thumb</TabsTrigger><TabsTrigger value="tags" className="text-[11px] font-semibold rounded-md">Tags</TabsTrigger><TabsTrigger value="guide" className="text-[11px] font-semibold rounded-md">Guide</TabsTrigger></TabsList>
+                <div className="relative rounded-xl border border-destructive/30 bg-destructive/5 p-4 overflow-hidden shadow-sm"><div className="absolute top-0 right-0 w-20 h-20 bg-destructive/10 rounded-full blur-xl" /><div className="flex items-start gap-3 relative z-10"><ShieldAlert className="w-5 h-5 text-destructive shrink-0 mt-0.5" /><div><p className="text-xs font-bold text-destructive font-display uppercase tracking-wider">Opening hook • {(activeRewrite.glitchIntensity||60)>=90?'Pro':'Standard'} rewrite</p><p className="text-xs text-foreground mt-1.5 leading-relaxed font-medium italic">"{activeRewrite.glitchHook}"</p></div></div></div>
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full"><TabsList className="grid grid-cols-2 gap-1 bg-secondary/60 border border-border rounded-lg sm:grid-cols-4"><TabsTrigger value="script" className="text-[11px] font-semibold rounded-md">Script</TabsTrigger><TabsTrigger value="thumbnail" className="text-[11px] font-semibold rounded-md">Thumbnail</TabsTrigger><TabsTrigger value="tags" className="text-[11px] font-semibold rounded-md">SEO tags</TabsTrigger><TabsTrigger value="guide" className="text-[11px] font-semibold rounded-md">Editing guide</TabsTrigger></TabsList>
                   <TabsContent value="script" className="pt-3"><div className="rounded-xl border border-border/80 bg-secondary/30 p-4 h-[300px] overflow-y-auto font-sans text-xs md:text-sm text-foreground leading-relaxed whitespace-pre-wrap select-text">{activeRewrite.fullScript}</div></TabsContent>
                   <TabsContent value="thumbnail" className="pt-3 space-y-3">
                     {activeRewrite.reverseEngineeredPrompts && activeRewrite.reverseEngineeredPrompts.length>0 ? <>
