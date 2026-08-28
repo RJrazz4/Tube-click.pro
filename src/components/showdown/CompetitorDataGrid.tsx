@@ -40,8 +40,8 @@ export function CompetitorDataGrid({ competitors }: { competitors: CompetitorVid
     <Card className="cyber-card border-border/70">
       <CardHeader className="gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <CardTitle className="font-display text-base">Competitor Data Grid</CardTitle>
-          <CardDescription>Filter channels and rank opportunities by momentum or revenue</CardDescription>
+          <CardTitle className="font-display text-base">Competitor videos</CardTitle>
+          <CardDescription>Filter and sort the public signals behind your opportunity list. Revenue is estimated.</CardDescription>
         </div>
         <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
           <div className="relative sm:w-64">
@@ -62,8 +62,8 @@ export function CompetitorDataGrid({ competitors }: { competitors: CompetitorVid
               aria-label="Sort competitors"
               className="h-10 w-full rounded-md border border-input bg-secondary/40 pl-9 pr-3 text-sm text-foreground sm:w-48"
             >
-              <option value="velocity-desc">Velocity: high to low</option>
-              <option value="velocity-asc">Velocity: low to high</option>
+              <option value="velocity-desc">Momentum: high to low</option>
+              <option value="velocity-asc">Momentum: low to high</option>
               <option value="revenue-desc">Revenue: high to low</option>
               <option value="revenue-asc">Revenue: low to high</option>
             </select>
@@ -77,10 +77,10 @@ export function CompetitorDataGrid({ competitors }: { competitors: CompetitorVid
               <TableHead className="min-w-[260px]">Video Title</TableHead>
               <TableHead className="min-w-[150px]">Channel</TableHead>
               <TableHead>Views</TableHead>
-              <TableHead>Velocity</TableHead>
-              <TableHead>Est. Revenue</TableHead>
-              <TableHead>Upload Frequency</TableHead>
-              <TableHead>Published At</TableHead>
+              <TableHead>Momentum estimate</TableHead>
+              <TableHead>Estimated revenue</TableHead>
+              <TableHead>Upload frequency</TableHead>
+              <TableHead>Published</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

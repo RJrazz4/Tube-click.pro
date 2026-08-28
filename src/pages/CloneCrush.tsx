@@ -650,7 +650,7 @@ export default function CloneCrush() {
     if (!saveResult.ok) {
       setIsProfiling(false);
       if (saveResult.reason === "URL_LOCKED") routeToProUpsell("channel");
-      else toast.error("Ghost Cache is full — unlock Pro for 5 saved channels", { id: "ghost-cache-limit" });
+      else toast.error("Saved channel limit reached — Pro supports up to 5 saved channels", { id: "ghost-cache-limit" });
       return;
     }
     toast.loading("Establishing ghost tunnel to YouTube veil layer...", { id: "profile-scrape" });
@@ -1030,9 +1030,9 @@ export default function CloneCrush() {
         <div>
           <h1 className="font-display text-2xl md:text-3xl font-bold text-foreground flex items-center gap-2 text-glitch">
             <Zap className="w-7 h-7 md:w-8 md:h-8 text-primary animate-pulse" />
-            Clone &amp; Crush AI
+            Analyze &amp; Create <span className="ml-1 text-sm font-mono font-semibold tracking-wide text-primary/80 md:text-base">Clone &amp; Crush AI</span>
           </h1>
-          <p className="text-sm md:text-base text-muted-foreground mt-1 max-w-3xl">Profile any channel, audit what's working right now, and generate your next hit — automatically.</p>
+          <p className="text-sm md:text-base text-muted-foreground mt-1 max-w-3xl">Analyze a public YouTube channel, find what is gaining momentum, and turn one opportunity into an original content package.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="p-3 bg-card border border-border rounded-xl flex items-center gap-3">
@@ -1051,15 +1051,16 @@ export default function CloneCrush() {
             <CardHeader className="pb-3">
               <CardTitle className="font-display text-sm flex items-center gap-2">
                 <Database className="w-4 h-4 text-primary" />
-                Ghost Cache
+                Saved channels
+                <span className="ml-1 text-[10px] font-mono font-normal tracking-wide text-muted-foreground">Ghost Cache</span>
                 {isPro && (
                   <span className="ml-1 px-1.5 py-0.5 rounded bg-cyan-400/15 text-cyan-300 border border-cyan-400/30 text-[9px] font-mono font-black tracking-widest">
-                    ⚡ BLACK-OP LANE
+                    5 SLOTS
                   </span>
                 )}
               </CardTitle>
               <CardDescription className="text-[11px]">
-                Persistent channel memory. {isPro ? "5 active slots" : "1 active slot • Unlock Pro for 5 concurrent channels"}.
+                Keep channels ready for repeat analysis. {isPro ? "Up to 5 saved channels" : "1 saved channel on Free • Pro unlocks 5"}.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1137,8 +1138,8 @@ export default function CloneCrush() {
 
           <Card className="glass-strong bracket border-primary/20">
             <CardHeader className="pb-3">
-              <CardTitle className="font-display text-base flex items-center gap-2"><Terminal className="w-5 h-5 text-primary" />1. Profile a channel (just paste a URL)</CardTitle>
-              <CardDescription className="text-xs">Paste a YouTube URL or handle — we pull the channel's data automatically, with smart fallbacks if the API is busy.</CardDescription>
+              <CardTitle className="font-display text-base flex items-center gap-2"><Terminal className="w-5 h-5 text-primary" />1. Analyze a channel</CardTitle>
+              <CardDescription className="text-xs">Paste a public YouTube channel URL or @handle. We use public channel data only; no upload access is required.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-col sm:flex-row gap-3">
@@ -1207,16 +1208,16 @@ export default function CloneCrush() {
                   </Select>
                 </div>
                 <Button onClick={handleProfileChannel} disabled={isProfiling || !isTierReady} className="cyber-button px-5 h-11 shrink-0 font-display text-sm flex gap-2">
-                  {isProfiling ? <><Loader2 className="w-4 h-4 animate-spin" />Ghost Scraping...</>
-                    : !isTierReady ? <><Loader2 className="w-4 h-4 animate-spin" />Verifying...</>
-                    : isFreeConveyorActive ? <><Lock className="w-4 h-4" />Slot 1 Active</>
-                    : <><Cpu className="w-4 h-4" />Launch Ghost Showdown</>}
+                  {isProfiling ? <><Loader2 className="w-4 h-4 animate-spin" />Analyzing...</>
+                    : !isTierReady ? <><Loader2 className="w-4 h-4 animate-spin" />Checking access...</>
+                    : isFreeConveyorActive ? <><Lock className="w-4 h-4" />Current analysis active</>
+                    : <><Cpu className="w-4 h-4" />Find opportunities</>}
                 </Button>
               </div>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono text-muted-foreground">
-                <Radio className="w-3 h-3 text-green-400 animate-pulse" />
-                <span>Ghost Relay Mesh: 6 Piped nodes • 3 Invidious • Synthetic fallback active</span>
-                <span className="text-cyan-400/80">• {outputLanguage} titles, insights & scripts</span>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                <Radio className="w-3 h-3 text-green-400" />
+                <span>Public YouTube signals • fallback estimates are labeled</span>
+                <span className="text-cyan-400/80">• Output: {outputLanguage}</span>
               </div>
             </CardContent>
           </Card>
@@ -1243,16 +1244,16 @@ export default function CloneCrush() {
             <div className="grid lg:grid-cols-12 gap-4 items-center p-4 rounded-2xl bg-secondary/20 border border-border/60 backdrop-blur-md">
               <div className="lg:col-span-5 h-full">
                 <Card className="glass-strong border-primary/40 p-5 h-full flex flex-col justify-between shadow-neon-glow bracket">
-                  <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-primary/20 text-primary px-2.5 py-0.5 rounded-full font-bold">Your Channel • Ghost Verified</span><span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" /></div>
-                  <div className="flex items-center gap-3.5 mt-2"><img src={profile.avatar} alt={profile.name} className="w-14 h-14 rounded-full border-2 border-primary/50 object-cover bg-card shadow-md shrink-0" /><div className="min-w-0"><p className="text-base font-bold text-foreground truncate">{profile.name}</p><p className="text-xs text-primary font-medium mt-0.5">{profile.handle} {(profile as any).isGhostReconstructed && <span className="text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded-full ml-1">GHOST RECON</span>}</p></div></div>
+                  <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-primary/20 text-primary px-2.5 py-0.5 rounded-full font-bold">Your channel • Analysis ready</span><span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" /></div>
+                  <div className="flex items-center gap-3.5 mt-2"><img src={profile.avatar} alt={profile.name} className="w-14 h-14 rounded-full border-2 border-primary/50 object-cover bg-card shadow-md shrink-0" /><div className="min-w-0"><p className="text-base font-bold text-foreground truncate">{profile.name}</p><p className="text-xs text-primary font-medium mt-0.5">{profile.handle} {(profile as any).isGhostReconstructed && <span className="text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded-full ml-1">ESTIMATED PROFILE</span>}</p></div></div>
                   <p className="text-xs text-muted-foreground mt-3 line-clamp-3 leading-relaxed">{profile.description}</p></div>
                   <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between text-[11px] text-muted-foreground"><span>Niche: <strong className="text-foreground">{nicheInput||"Auto"}</strong></span><span className="text-green-400 font-semibold flex items-center gap-1"><Activity className="w-3 h-3" />Active</span></div>
                 </Card>
               </div>
-              <div className="lg:col-span-2 flex flex-col items-center justify-center py-2 lg:py-0"><div className="relative flex items-center justify-center"><div className="absolute inset-0 bg-red-500/30 rounded-full blur-xl animate-pulse" /><div className="w-14 h-14 rounded-full bg-gradient-to-br from-red-600 to-rose-950 border-2 border-red-500 flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.9)] relative z-10 animate-pulse"><Zap className="w-7 h-7 text-white fill-white animate-bounce" /></div></div><span className="text-[11px] font-display font-extrabold text-red-500 tracking-widest mt-2 uppercase drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">VS SHOWDOWN</span></div>
+              <div className="lg:col-span-2 flex flex-col items-center justify-center py-2 lg:py-0"><div className="relative flex items-center justify-center"><div className="absolute inset-0 bg-red-500/30 rounded-full blur-xl animate-pulse" /><div className="w-14 h-14 rounded-full bg-gradient-to-br from-red-600 to-rose-950 border-2 border-red-500 flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.9)] relative z-10 animate-pulse"><Zap className="w-7 h-7 text-white fill-white animate-bounce" /></div></div><span className="text-[11px] font-display font-extrabold text-red-500 tracking-widest mt-2 uppercase drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">COMPETITOR COMPARISON</span></div>
               <div className="lg:col-span-5 h-full">
                 <Card className="glass-strong border-border/80 p-5 h-full flex flex-col justify-between">
-                  <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">Live Velocity Matrix</span><span className="text-xs text-muted-foreground">{competitors.length} Outliers {(competitors[0] as any)?.isGhostReconstructed && <span className="text-amber-300">• Ghost</span>}</span></div>
+                  <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">Competitor opportunities</span><span className="text-xs text-muted-foreground">{competitors.length} videos {(competitors[0] as any)?.isGhostReconstructed && <span className="text-amber-300">• Estimated</span>}</span></div>
                   {isSearchingCompetitors ? (<div className="py-10 text-center space-y-2"><Loader2 className="w-7 h-7 animate-spin text-primary mx-auto" /><p className="text-xs text-muted-foreground">Auditing what's working…</p><div className="flex justify-center gap-1 mt-2">{[0,1,2,3].map(i=><span key={i} className="w-1 h-1 rounded-full bg-primary/60 animate-pulse" style={{animationDelay:`${i*150}ms`}} />)}</div></div>) : competitors.length>0 ? (
                     <div key={workflowNonce} className="grid grid-cols-3 gap-2 mt-2">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400';
                       // Conveyor semantics: slot0 (idx===0) is the
@@ -1316,7 +1317,7 @@ export default function CloneCrush() {
                                   onClick={(e) => { e.stopPropagation(); routeToProUpsell("locked"); }}
                                   className="m-1.5 cyber-button flex h-7 items-center justify-center gap-1 rounded-md text-[9px] font-display font-bold uppercase tracking-wider"
                                 >
-                                  <Sparkles className="h-2.5 w-2.5" /> Unlock Early — Pro
+                                  <Sparkles className="h-2.5 w-2.5" /> View Pro access
                                 </button>
                               </div>
                             )
@@ -1337,9 +1338,9 @@ export default function CloneCrush() {
                                   });
                                 }}
                                 className="text-[7px] font-bold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 px-1 py-0.5 rounded flex items-center gap-0.5 transition-colors"
-                                title="Ghost Interrogation — chat with this competitor's transcript"
+                                title="Ask about this competitor video"
                               >
-                                <Search className="w-2.5 h-2.5" /> INTERROGATE
+                                <Search className="w-2.5 h-2.5" /> ASK
                               </button>
                             ) : (
                               <button
@@ -1348,7 +1349,7 @@ export default function CloneCrush() {
                                 className="text-[7px] font-bold text-muted-foreground bg-secondary/60 border border-border px-1 py-0.5 rounded flex items-center gap-0.5"
                                 title="Pro feature: chat with competitor video"
                               >
-                                <Lock className="w-2.5 h-2.5" /> INTERROGATE
+                                <Lock className="w-2.5 h-2.5" /> ASK
                               </button>
                             )
                           )}
@@ -1369,9 +1370,9 @@ export default function CloneCrush() {
                                   }, 250);
                                 }}
                                 className="text-[7px] font-bold text-fuchsia-300 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 border border-fuchsia-500/30 px-1 py-0.5 rounded flex items-center gap-0.5 transition-colors"
-                                title="Ghost Intel Squad — 4-agent competitor dossier"
+                                title="Open the competitor breakdown"
                               >
-                                <Shield className="w-2.5 h-2.5" /> SQUAD
+                                <Shield className="w-2.5 h-2.5" /> BREAKDOWN
                               </button>
                             ) : (
                               <button
@@ -1380,12 +1381,13 @@ export default function CloneCrush() {
                                 className="text-[7px] font-bold text-muted-foreground bg-secondary/60 border border-border px-1 py-0.5 rounded flex items-center gap-0.5"
                                 title="Pro feature: 4-agent Intel Squad dossier"
                               >
-                                <Lock className="w-2.5 h-2.5" /> SQUAD
+                                <Lock className="w-2.5 h-2.5" /> BREAKDOWN
                               </button>
                             )
                           )}</div></div>
-                      </div>);})}</div>) : (<div className="py-8 text-center text-xs text-muted-foreground">Profile your channel to launch ghost showdown matrix.</div>)}</div>
-                  {!isPro && (<div className="mt-3 p-2.5 rounded-lg bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex items-center justify-between gap-2"><div className="flex items-center gap-2 min-w-0"><Lock className="w-4 h-4 text-primary shrink-0" /><p className="text-[10px] font-bold text-foreground truncate">Conveyor Belt: 1 Chain-Loop per 24h • Unlock Pro to skip the queue</p></div><Button onClick={openReferralRewards} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">Unlock Pro ₹0</Button></div>)}
+                      </div>);})}</div>) : (<div className="py-8 text-center text-xs text-muted-foreground">Analyze a channel to see three high-momentum opportunities here.</div>)}</div>
+                  {!isPro && (<div className="mt-3 p-2.5 rounded-lg bg-gradient-to-r from-primary/10 via-secondary/40 to-accent/10 border border-primary/20 flex items-center justify-between gap-2"><div className="flex items-center gap-2 min-w-0"><Lock className="w-4 h-4 text-primary shrink-0" /><p className="text-[10px] font-bold text-foreground truncate">Free includes 1 content package every 24h • Pro removes the wait</p></div><Button onClick={openReferralRewards} size="sm" className="cyber-button text-[10px] shrink-0 font-display h-7 px-2.5">See Pro options</Button></div>)}
+                  <p className="mt-3 border-t border-border/40 pt-2 text-[10px] leading-relaxed text-muted-foreground"><span className="font-semibold text-foreground">How to read this:</span> views and recency come from public YouTube signals when available. Velocity and revenue are estimates; fallback results are marked as estimated.</p>
                 </Card>
               </div>
             </div>
@@ -1399,14 +1401,23 @@ export default function CloneCrush() {
 
           {envyMetrics && competitors.length>0 && (
             <div className="grid grid-cols-3 gap-3 animate-fade-in">
-              <div className="p-3 rounded-xl glass-strong border-green-500/20"><p className="text-[10px] text-green-400 font-mono uppercase tracking-wider font-bold flex items-center gap-1"><DollarSign className="w-3 h-3" /> Competitor Revenue</p><p className="text-lg font-display font-bold text-green-400 mt-1">{envyMetrics.totalCompetitorMonthlyRevenue}</p><p className="text-[9px] text-muted-foreground mt-0.5">Est combined/mo • Ghost calc</p></div>
-              <div className="p-3 rounded-xl glass-strong border-red-500/20"><p className="text-[10px] text-red-400 font-mono uppercase tracking-wider font-bold flex items-center gap-1"><Flame className="w-3 h-3" /> Viral Velocity</p><p className="text-lg font-display font-bold text-red-400 mt-1">{envyMetrics.averageViralVelocity}/100</p><p className="text-[9px] text-muted-foreground mt-0.5">Avg score • Live</p></div>
+              <div className="p-3 rounded-xl glass-strong border-green-500/20"><p className="text-[10px] text-green-400 font-mono uppercase tracking-wider font-bold flex items-center gap-1"><DollarSign className="w-3 h-3" /> Estimated competitor revenue</p><p className="text-lg font-display font-bold text-green-400 mt-1">{envyMetrics.totalCompetitorMonthlyRevenue}</p><p className="text-[9px] text-muted-foreground mt-0.5">Combined estimate/mo • public signals</p></div>
+              <div className="p-3 rounded-xl glass-strong border-red-500/20"><p className="text-[10px] text-red-400 font-mono uppercase tracking-wider font-bold flex items-center gap-1"><Flame className="w-3 h-3" /> Momentum estimate</p><p className="text-lg font-display font-bold text-red-400 mt-1">{envyMetrics.averageViralVelocity}/100</p><p className="text-[9px] text-muted-foreground mt-0.5">Calculated from views and recency</p></div>
               <div className="p-3 rounded-xl glass-strong border-primary/20"><p className="text-[10px] text-primary font-mono uppercase tracking-wider font-bold flex items-center gap-1"><Gauge className="w-3 h-3" /> Niche CPM</p><p className="text-lg font-display font-bold text-primary mt-1">{envyMetrics.nicheCpm}</p><p className="text-[9px] text-muted-foreground mt-0.5">{envyMetrics.niche}</p></div>
             </div>
           )}
 
-          {/* Dawn Patrol sunrise brief (MP6) — always visible to authed users so unread count pings */}
           {profile && (
+            <section aria-labelledby="advanced-intelligence-heading" className="space-y-4">
+              <div>
+                <h2 id="advanced-intelligence-heading" className="flex items-center gap-2 font-display text-lg font-semibold text-foreground md:text-xl">
+                  <Compass className="h-5 w-5 text-cyan-300" /> Advanced intelligence
+                </h2>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Optional deeper analysis for the competitor you selected. Use these tools when you want more evidence before creating your package.</p>
+              </div>
+
+              {/* Dawn Patrol sunrise brief (MP6) — always visible to authed users so unread count pings */}
+              {profile && (
             <div id="ghost-dawn-patrol" className="animate-fade-in">
               <DawnPatrolCard />
             </div>
@@ -1454,15 +1465,17 @@ export default function CloneCrush() {
               />
             </div>
           )}
+            </section>
+          )}
 
           {selectedVideo && (
             <Card key={workflowNonce} className="glass-strong border-border bracket">
-              <CardHeader className="pb-3"><CardTitle className="font-display text-base flex items-center gap-2"><Zap className="w-5 h-5 text-primary" />3. Generate your assets (1 click = 5 outputs)</CardTitle><CardDescription className="text-xs">One click produces 5 ready-to-use assets: script, thumbnail prompts, guide, and more — with automatic fallbacks so it just works.</CardDescription></CardHeader>
+              <CardHeader className="pb-3"><CardTitle className="font-display text-base flex items-center gap-2"><Zap className="w-5 h-5 text-primary" />3. Create your content package</CardTitle><CardDescription className="text-xs">Build an original package with a title, hook, script, thumbnail direction, SEO tags, and an editing guide.</CardDescription></CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div onClick={()=>setSelectedVideoTier("free")} className={`rounded-xl border p-4 cursor-pointer transition-all ${selectedTier==="free"?"border-primary bg-primary/5 ring-1 ring-primary/30":"border-border/60 hover:border-border bg-secondary/10"}`}>
-                    <div className="flex items-center gap-2 mb-1"><input type="radio" checked={selectedTier==="free"} onChange={()=>{}} className="accent-primary" /><p className="text-sm font-bold text-foreground">60% Loophole (Vibe-Extract)</p></div>
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">Extracts core points, writes entirely new narrative flow, fresh pacing. Ghost cached.</p>
+                    <div className="flex items-center gap-2 mb-1"><input type="radio" checked={selectedTier==="free"} onChange={()=>{}} className="accent-primary" /><p className="text-sm font-bold text-foreground">Standard rewrite <span className="ml-1 text-[10px] font-mono font-normal text-yellow-300">60%</span></p></div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">Pulls out the core idea and rebuilds it with a fresh narrative, pacing, and examples. Included with Free.</p>
                   </div>
                   <div onClick={()=>{
                     // Free users clicking the 99% Glitch tier card → instant upsell
@@ -1470,8 +1483,8 @@ export default function CloneCrush() {
                     if (!canUsePremium()) { routeToProUpsell("premium"); return; }
                     setSelectedVideoTier("premium");
                   }} className={`rounded-xl border p-4 cursor-pointer transition-all ${!isPro?"opacity-60":""} ${selectedTier==="premium"?"border-primary bg-primary/5 ring-1 ring-primary/30":"border-border/60 hover:border-border bg-secondary/10"}`}>
-                    <div className="flex items-center justify-between gap-2 mb-1"><div className="flex items-center gap-2"><input type="radio" checked={selectedTier==="premium"} onChange={()=>{}} disabled={!isPro} className="accent-primary" /><p className="text-sm font-bold text-foreground">99% Glitch (Maximum Aggression)</p></div>{!isPro && <Lock className="w-3.5 h-3.5 text-primary" />}</div>
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">Extreme Curiosity Glitches, time-jumps, hidden secrets. Reverse-engineers thumbnails ruthlessly.</p>
+                    <div className="flex items-center justify-between gap-2 mb-1"><div className="flex items-center gap-2"><input type="radio" checked={selectedTier==="premium"} onChange={()=>{}} disabled={!isPro} className="accent-primary" /><p className="text-sm font-bold text-foreground">Pro rewrite <span className="ml-1 text-[10px] font-mono font-normal text-red-300">99% Glitch</span></p></div>{!isPro && <Lock className="w-3.5 h-3.5 text-primary" />}</div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">Adds deeper curiosity, pacing, and thumbnail pattern analysis for a more aggressive Pro package.</p>
                   </div>
                 </div>
                 <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex gap-3 items-start"><ShieldAlert className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" /><div><p className="text-xs font-bold text-yellow-500">Originality guard active</p><p className="text-[10px] text-muted-foreground leading-relaxed">Every output is rewritten to be genuinely yours — examples swapped, wording rebuilt. Never a raw copy.</p></div></div>
@@ -1484,10 +1497,10 @@ export default function CloneCrush() {
                         <Button onClick={handleCloneAndCrush} disabled={buttonDisabled} className="w-full h-12 bg-gradient-to-r from-primary to-accent text-primary-foreground font-display font-bold uppercase tracking-wider text-sm flex gap-2">
                           {isRewriting ? <><Loader2 className="w-4 h-4 animate-spin" />Generating your assets…</>
                             : !isTierReady ? <><Loader2 className="w-4 h-4 animate-spin" />Verifying clearance...</>
-                            : isFreeCooldownActive ? <><Lock className="w-4 h-4" />24h Cooldown — Skip Wait with Pro</>
-                            : !isPro && dailyLimitActive ? <><Lock className="w-4 h-4" />Daily Limit Reached — Unlock Premium</>
-                            : !isPro && selectedTier==="premium" ? <><Lock className="w-4 h-4" />99% Glitch — Unlock Pro</>
-                            : <><Zap className="w-4 h-4 fill-primary-foreground" />Generate assets (1 click = 5)</>}
+                            : isFreeCooldownActive ? <><Lock className="w-4 h-4" />24h wait — Unlock Pro</>
+                            : !isPro && dailyLimitActive ? <><Lock className="w-4 h-4" />Daily limit — See Pro options</>
+                            : !isPro && selectedTier==="premium" ? <><Lock className="w-4 h-4" />Pro rewrite — See options</>
+                            : <><Zap className="w-4 h-4 fill-primary-foreground" />Create content package</>}
                         </Button>
                         {!isPro && dailyLimitActive && <div className="absolute inset-0 pointer-events-none" aria-hidden="true" />}
                         {!isPro && dailyLimitActive && <div className="mt-3"><DailyLimitOverlay variant="hero" /></div>}
@@ -1538,7 +1551,7 @@ export default function CloneCrush() {
             <Card className={`glass-strong ${isFreeCooldownActive ? "border-amber-500/40" : "border-primary/40"} shadow-neon-glow animate-fade-in bracket relative overflow-hidden`}>{isFreeCooldownActive && freeCooldownUntil && <FreeCooldownOverlay unlocksAt={freeCooldownUntil} views={selectedVideo?.views} onUpgrade={()=>routeToProUpsell("premium")} variant="result" />}
               <CardHeader className="pb-3 border-b border-border/40"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[9px] font-mono tracking-widest uppercase">Master output • {activeRewrite.outputLanguage || "English"}</span><CardTitle className="font-display text-base text-foreground mt-2 line-clamp-2">{activeRewrite.rewrittenTitle}</CardTitle><p className="text-[10px] text-muted-foreground truncate mt-1">Based on: {activeRewrite.targetVideoTitle}</p></div><Button variant="outline" size="icon" onClick={handleCopyScript} className="shrink-0 border-border hover:border-primary/40 text-muted-foreground hover:text-primary active:scale-95"><Copy className="w-4 h-4" /></Button></div></CardHeader>
               <CardContent className="pt-5 space-y-5">
-                <div className="p-4 rounded-xl glass-ghost border-primary/30 space-y-3"><div className="flex items-center justify-between"><p className="text-xs font-display font-bold text-foreground flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-primary animate-pulse" />Chain-Loop Complete: 5 Assets</p><span className="text-[10px] bg-primary text-primary-foreground font-mono font-bold px-2 py-0.5 rounded-full uppercase">No-Click Handoff</span></div>
+                <div className="p-4 rounded-xl glass-ghost border-primary/30 space-y-3"><div className="flex items-center justify-between"><p className="text-xs font-display font-bold text-foreground flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-primary animate-pulse" />Content package ready</p><span className="text-[10px] bg-primary text-primary-foreground font-mono font-bold px-2 py-0.5 rounded-full uppercase">Next steps</span></div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><Button onClick={handleSendToVoiceover} size="sm" className="cyber-button text-xs h-9 font-display gap-1.5 justify-start px-3"><Mic className="w-3.5 h-3.5 shrink-0" /><span>Send to Voiceover</span></Button><Button onClick={handleCopyFullPackage} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Copy className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy Full Package</span></Button><Button onClick={handleSendToRepurposer} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Share2 className="w-3.5 h-3.5 text-primary shrink-0" /><span>Repurpose</span></Button><Button onClick={handleCopyThumbnailPrompt} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Image className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy Thumb Prompt</span></Button><Button onClick={handleCopySeoTags} size="sm" variant="outline" className="border-border hover:border-primary/50 text-xs h-9 font-display gap-1.5 justify-start px-3"><Search className="w-3.5 h-3.5 text-primary shrink-0" /><span>Copy SEO</span></Button></div>
                 </div>
                 <div className="flex items-center gap-3"><div className="flex-1"><div className="flex items-center justify-between mb-1"><span className="text-[10px] font-display font-bold text-foreground uppercase tracking-wider">Glitch Intensity</span><span className={`text-xs font-mono font-bold ${(activeRewrite.glitchIntensity||60)>=90?'text-red-400':'text-yellow-400'}`}>{activeRewrite.glitchIntensity||60}%</span></div><div className="h-2 bg-secondary rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-1000 ${(activeRewrite.glitchIntensity||60)>=90?'bg-gradient-to-r from-red-600 via-red-400 to-orange-400':'bg-gradient-to-r from-yellow-600 via-yellow-400 to-green-400'}`} style={{width:`${activeRewrite.glitchIntensity||60}%`}} /></div></div>{activeRewrite.glitchTechniques && <div className="flex flex-wrap gap-1">{activeRewrite.glitchTechniques.map((tech:any,i:number)=><span key={i} className="text-[8px] font-mono bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded">{tech}</span>)}</div>}</div>
@@ -1560,12 +1573,12 @@ export default function CloneCrush() {
             <Card className="glass-strong border-border p-6 text-center h-[420px] flex flex-col justify-center items-center bracket">
               <div className="w-16 h-16 rounded-2xl bg-secondary/60 flex items-center justify-center mb-4 border border-border"><FileText className="w-8 h-8 text-muted-foreground" /></div>
               <p className="text-base text-foreground font-bold">No Active Chain-Loop Package</p>
-              <p className="text-xs text-muted-foreground max-w-[250px] mt-2 leading-relaxed">Profile your channel, select video from Showdown Matrix, hit <strong className="text-foreground">Generate assets</strong>.</p>
+              <p className="text-xs text-muted-foreground max-w-[250px] mt-2 leading-relaxed">Analyze a channel, choose an opportunity, and create your first content package.</p>
               <div className="mt-4 flex items-center gap-2 text-[9px] font-mono text-muted-foreground"><Cpu className="w-3 h-3" />Automatic fallbacks • runs even when the API is busy</div>
             </Card>
           )}
 
-          <Card className="glass-strong border-border"><CardHeader className="pb-2"><CardTitle className="font-display text-sm font-semibold text-foreground flex items-center gap-2"><History className="w-4 h-4 text-primary" />Historic Packages ({rewrites.length}) • Ghost Cache</CardTitle></CardHeader><CardContent className="px-3 pb-3">{rewrites.length>0 ? (<div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">{rewrites.map((r:any)=>{ const isSelected = activeRewrite?.id===r.id; return (<div key={r.id} className={`group relative flex items-center justify-between p-2.5 rounded-lg border text-left cursor-pointer transition-colors ${isSelected?"border-primary bg-primary/10":"border-border/40 hover:border-border bg-secondary/10"}`}><div onClick={()=>setActiveRewrite(r)} className="flex-1 min-w-0 pr-6"><p className="text-[11px] font-bold text-foreground truncate">{r.rewrittenTitle}</p><p className="text-[9px] text-muted-foreground truncate mt-0.5">{r.tier==="premium"?"99% Glitch":"60% Standard"} • {r.outputLanguage || "English"} • {r.glitchIntensity||60}% • {new Date(r.createdAt).toLocaleDateString()}</p></div><button onClick={e=>{ e.stopPropagation(); deleteRewrite(r.id); toast.success("Package removed"); }} className="absolute right-2 opacity-0 group-hover:opacity-100 hover:text-destructive text-muted-foreground transition-all duration-200"><XCircle className="w-3.5 h-3.5" /></button></div>);})}</div>) : (<div className="text-center py-6 text-muted-foreground/60 text-xs">Generated Chain-Loop packages appear here • Ghost cached</div>)}</CardContent></Card>
+          <Card className="glass-strong border-border"><CardHeader className="pb-2"><CardTitle className="font-display text-sm font-semibold text-foreground flex items-center gap-2"><History className="w-4 h-4 text-primary" />Saved packages ({rewrites.length})</CardTitle></CardHeader><CardContent className="px-3 pb-3">{rewrites.length>0 ? (<div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">{rewrites.map((r:any)=>{ const isSelected = activeRewrite?.id===r.id; return (<div key={r.id} className={`group relative flex items-center justify-between p-2.5 rounded-lg border text-left cursor-pointer transition-colors ${isSelected?"border-primary bg-primary/10":"border-border/40 hover:border-border bg-secondary/10"}`}><div onClick={()=>setActiveRewrite(r)} className="flex-1 min-w-0 pr-6"><p className="text-[11px] font-bold text-foreground truncate">{r.rewrittenTitle}</p><p className="text-[9px] text-muted-foreground truncate mt-0.5">{r.tier==="premium"?"Pro rewrite":"Standard rewrite"} • {r.outputLanguage || "English"} • {r.glitchIntensity||60}% • {new Date(r.createdAt).toLocaleDateString()}</p></div><button onClick={e=>{ e.stopPropagation(); deleteRewrite(r.id); toast.success("Package removed"); }} className="absolute right-2 opacity-0 group-hover:opacity-100 hover:text-destructive text-muted-foreground transition-all duration-200"><XCircle className="w-3.5 h-3.5" /></button></div>);})}</div>) : (<div className="text-center py-6 text-muted-foreground/60 text-xs">Generated Chain-Loop packages appear here • Ghost cached</div>)}</CardContent></Card>
         </div>
       </div>
       <GhostInterrogationDrawer />

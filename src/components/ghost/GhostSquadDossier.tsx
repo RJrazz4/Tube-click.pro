@@ -137,7 +137,7 @@ export function GhostSquadDossier({ video, savedNiche, onUpgrade, slotId = 0 }: 
         throw new Error(res.error || "Squad failed to compile dossier");
       }
       setBrief(video.videoId, res.brief);
-      toast.success("INTEL DOSSIER compiled — 4 agents online", { id: "squad-ok" });
+      toast.success("Competitor breakdown ready", { id: "squad-ok" });
       void refreshCredits(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Squad uplink failed";
@@ -157,13 +157,13 @@ export function GhostSquadDossier({ video, savedNiche, onUpgrade, slotId = 0 }: 
           <div className="min-w-0">
             <CardTitle className="font-display text-sm flex items-center gap-2">
               <Shield className="w-4 h-4 text-fuchsia-400" />
-              INTEL DOSSIER
+              Competitor breakdown
               <span className="ml-1 px-1.5 py-0.5 rounded bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30 text-[9px] font-mono font-black tracking-widest">
-                4 AGENTS · SQUAD
+                INTEL DOSSIER · 4 AGENTS
               </span>
             </CardTitle>
             <CardDescription className="text-[11px] mt-1">
-              Forensic Scout/Crawler/Analyst/Comparator audit of the active competitor. One squad credit per dossier.
+              See the selected competitor&apos;s hook structure, retention patterns, monetization signals, and attack angles. One Pro credit per breakdown.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -184,12 +184,12 @@ export function GhostSquadDossier({ video, savedNiche, onUpgrade, slotId = 0 }: 
                 className="cyber-button text-[10px] px-3 h-8 font-display"
               >
                 {isLoading ? <><Loader2 className="w-3 h-3 animate-spin mr-1" />compiling dossier…</>
-                  : brief?.scout ? <><CheckCircle2 className="w-3 h-3 mr-1" />dossier locked</>
-                  : <><Zap className="w-3 h-3 mr-1" />Run Intel Squad</>}
+                  : brief?.scout ? <><CheckCircle2 className="w-3 h-3 mr-1" />breakdown saved</>
+                  : <><Zap className="w-3 h-3 mr-1" />Run breakdown</>}
               </Button>
             ) : (
               <Button size="sm" onClick={onUpgrade} className="cyber-button text-[10px] px-3 h-8 font-display">
-                <Lock className="w-3 h-3 mr-1" />Unlock Squad
+                <Lock className="w-3 h-3 mr-1" />Unlock breakdown
               </Button>
             )}
           </div>
@@ -204,16 +204,16 @@ export function GhostSquadDossier({ video, savedNiche, onUpgrade, slotId = 0 }: 
           <div className="p-3 rounded border border-red-500/30 bg-red-500/5 text-red-400 text-xs flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <div>
-              <p className="font-bold">// SQUAD UPLINK FAILED</p>
+              <p className="font-bold">// BREAKDOWN FAILED</p>
               <p className="text-red-300/80 mt-1">{error}</p>
             </div>
           </div>
         ) : !brief ? (
           <div className="rounded border border-dashed border-fuchsia-500/20 bg-fuchsia-500/5 p-5 text-center space-y-2">
             <Radio className="w-6 h-6 text-fuchsia-400 mx-auto animate-pulse" />
-            <p className="text-xs font-mono text-fuchsia-300">// SQUAD STANDBY</p>
+            <p className="text-xs font-mono text-fuchsia-300">// BREAKDOWN STANDBY</p>
             <p className="text-[11px] text-muted-foreground max-w-md mx-auto">
-              Run the 4-agent squad on <span className="text-foreground font-semibold">"{video.title.slice(0, 60)}{video.title.length > 60 ? "…" : ""}"</span> to extract hook architecture, retention loops, monetization signals, and 3 concrete attack vectors.
+              Review <span className="text-foreground font-semibold">"{video.title.slice(0, 60)}{video.title.length > 60 ? "…" : ""}"</span> to see its hook structure, retention patterns, monetization signals, and three concrete ways to differentiate your version.
             </p>
           </div>
         ) : (

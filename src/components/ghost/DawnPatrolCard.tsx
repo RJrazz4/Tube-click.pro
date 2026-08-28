@@ -50,7 +50,7 @@ export function DawnPatrolCard() {
   async function fireGenerate() {
     if (generating) return;
     if (!allowed) {
-      toast.error("Dawn Patrol is a Pro+ feature");
+      toast.error("The daily competitive brief is a Pro feature");
       return;
     }
     const comps = (competitors || []).slice(0, 6).map((c) => ({
@@ -88,9 +88,9 @@ export function DawnPatrolCard() {
           <div className="min-w-0">
             <CardTitle className="font-display text-sm flex items-center gap-2">
               <Sunrise className="w-4 h-4 text-amber-300" />
-              DAWN PATROL
+              Daily competitive brief
               <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 border border-amber-400/30 text-[9px] font-mono font-black tracking-widest">
-                ⚡ PRO+
+                DAWN PATROL · PRO
               </span>
               {unread > 0 && (
                 <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-400 text-black text-[9px] font-black">
@@ -99,7 +99,7 @@ export function DawnPatrolCard() {
               )}
             </CardTitle>
             <CardDescription className="text-[11px] mt-1">
-              Always-on sunrise brief — competitive deltas and one play to execute today.
+              A short daily summary of competitor movement and one action to take today.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -121,12 +121,12 @@ export function DawnPatrolCard() {
             <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-400/30 flex items-center justify-center">
               <Sunrise className="w-6 h-6 text-amber-300" />
             </div>
-            <p className="font-mono text-xs tracking-widest text-amber-300">// SUNRISE BRIEF LOCKED</p>
+            <p className="font-mono text-xs tracking-widest text-amber-300">// DAILY BRIEF LOCKED</p>
             <p className="text-[11px] text-muted-foreground max-w-xs leading-relaxed">
-              Get a 3-bullet competitive intel brief delivered to your dashboard before your first upload.
+              Get a short competitor summary and one recommended action each day.
             </p>
             <Button asChild size="sm" className="cyber-button text-[10px] font-display mt-1">
-              <a href="/rewards?upsell=dawn-patrol&tier=pro">Unlock Dawn Patrol</a>
+              <a href="/rewards?upsell=dawn-patrol&tier=pro">See Pro options</a>
             </Button>
           </div>
         ) : !latest ? (
@@ -136,8 +136,7 @@ export function DawnPatrolCard() {
               <p className="text-xs font-mono text-amber-300">// NO BRIEF YET TODAY</p>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Run your first Dawn Patrol now — scans your current conveyor and delivers a tight
-              sunrise brief in ~15s.
+              Run today&apos;s brief now — scans your current competitor list and returns a short summary in about 15 seconds.
             </p>
             <Button
               size="sm"
@@ -148,7 +147,7 @@ export function DawnPatrolCard() {
               {generating ? (
                 <><Loader2 className="w-3 h-3 animate-spin mr-1" /> compiling sunrise brief…</>
               ) : (
-                <><Zap className="w-3 h-3 mr-1" /> Run Dawn Patrol (1 credit)</>
+                <><Zap className="w-3 h-3 mr-1" /> Run today&apos;s brief (1 credit)</>
               )}
             </Button>
           </div>

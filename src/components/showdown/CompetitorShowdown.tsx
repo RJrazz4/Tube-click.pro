@@ -21,7 +21,7 @@ export function CompetitorShowdown() {
           <div>
             <h3 className="font-display text-lg font-semibold">No competitors profiled yet</h3>
             <p className="mt-1 max-w-md text-sm text-muted-foreground">
-              Profile a YouTube channel in Clone &amp; Crush to unlock market-share and velocity analytics.
+              Analyze a YouTube channel in Clone &amp; Crush to compare public signals and find content opportunities.
             </p>
           </div>
         </CardContent>
@@ -35,14 +35,14 @@ export function CompetitorShowdown() {
         <div>
           <h2 id="showdown-heading" className="flex items-center gap-2 font-display text-lg font-semibold md:text-xl">
             <BarChart3 className="h-5 w-5 text-cyan-400" />
-            Competitor Showdown Analytics
+            Competitor comparison <span className="text-xs font-mono font-normal tracking-wide text-cyan-300/70">VS Showdown</span>
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {envyMetrics?.niche || "Your niche"} · {competitors.length} tracked competitor{competitors.length === 1 ? "" : "s"}
+            Compare {competitors.length} public-signal opportunit{competitors.length === 1 ? "y" : "ies"} in {envyMetrics?.niche || "your niche"}. Velocity and revenue are estimates.
           </p>
         </div>
         <div className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-cyan-400">
-          Live intelligence
+          Public signals
         </div>
       </div>
 

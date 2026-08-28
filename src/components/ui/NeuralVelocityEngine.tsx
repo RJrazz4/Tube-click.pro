@@ -48,16 +48,16 @@ export function NeuralVelocityEngine({ title, niche = "", views = 0, compact = f
     return (
       <div className="flex items-center gap-2 font-mono text-[10px]">
         <span className={`px-1.5 py-0.5 rounded border font-bold ${metrics.grade === "S" ? "bg-amber-500/15 text-amber-300 border-amber-500/30" : metrics.grade === "A" ? "bg-green-500/10 text-green-300 border-green-500/20" : "bg-primary/10 text-primary border-primary/20"}`}>GRADE {metrics.grade} • {metrics.viralVelocity}</span>
-        <span className="text-muted-foreground">RET {metrics.retentionProb}% • CTR {metrics.clickbaitIndex}% • GHOST CALC</span>
+        <span className="text-muted-foreground">Retention {metrics.retentionProb}% • Click appeal {metrics.clickbaitIndex}% • Local heuristic</span>
       </div>
     );
   }
 
   const bars = [
-    { label: "Retention Prob", value: metrics.retentionProb, color: "from-green-400 to-emerald-500" },
-    { label: "Clickbait Index", value: metrics.clickbaitIndex, color: "from-amber-400 to-orange-500" },
-    { label: "Curiosity Gap", value: metrics.curiosityGap, color: "from-purple-400 to-pink-500" },
-    { label: "Viral Velocity", value: metrics.viralVelocity, color: "from-cyan-400 to-blue-500" },
+    { label: "Retention signal", value: metrics.retentionProb, color: "from-green-400 to-emerald-500" },
+    { label: "Click appeal", value: metrics.clickbaitIndex, color: "from-amber-400 to-orange-500" },
+    { label: "Curiosity gap", value: metrics.curiosityGap, color: "from-purple-400 to-pink-500" },
+    { label: "Momentum signal", value: metrics.viralVelocity, color: "from-cyan-400 to-blue-500" },
   ];
 
   return (
@@ -65,7 +65,7 @@ export function NeuralVelocityEngine({ title, niche = "", views = 0, compact = f
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-mono font-bold uppercase tracking-widest text-primary flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-          Neural Velocity Engine • Ghost Calc • Zero API
+          Title &amp; Hook Health <span className="text-primary/60">• Neural Velocity</span>
         </p>
         <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${metrics.grade === "S" ? "bg-amber-500/15 text-amber-300 border-amber-500/30 animate-pulse" : "bg-primary/10 text-primary border-primary/20"}`}>GRADE {metrics.grade} • {metrics.viralVelocity}/100</span>
       </div>
@@ -87,8 +87,8 @@ export function NeuralVelocityEngine({ title, niche = "", views = 0, compact = f
       <div className="flex items-center gap-2 text-[9px] font-mono text-muted-foreground/60 pt-1 border-t border-border/20">
         <span>Power words: {metrics.powerCount}</span>
         <span className="text-border">•</span>
-        <span>Heuristic • Client-side • MUM-01 • 0ms • No LLM cost</span>
-        <span className="ml-auto text-primary/50">Ghost • Encrypted</span>
+        <span>Local heuristic • Based on title wording, length, and selected video signals</span>
+        <span className="ml-auto text-primary/50">No LLM call</span>
       </div>
     </div>
   );
