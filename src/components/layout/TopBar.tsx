@@ -16,7 +16,7 @@ export function TopBar() {
   const { openProUpgrade } = useProUpgrade();
 
   return (
-    <header className="fixed top-0 left-20 right-0 z-40 flex h-16 items-center justify-between border-b border-primary/10 glass-strong px-6 backdrop-blur-2xl max-md:left-0 max-md:px-3">
+    <header className="fixed top-0 left-0 right-0 z-40 flex h-16 items-center justify-between border-b border-primary/10 glass-strong px-6 backdrop-blur-2xl md:left-64 max-md:px-3">
       <div className="absolute inset-0 ghost-scanline opacity-[0.02] pointer-events-none" />
       <div className="flex items-center gap-3 max-sm:gap-1.5 relative z-10">
         <h1 className="font-display text-xl font-bold cursor-pointer select-none flex items-center gap-2" onClick={handleGhostTrigger}>

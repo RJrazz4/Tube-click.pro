@@ -1,24 +1,40 @@
 import { useEffect, useState } from "react";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Zap, Terminal, Cpu, Radio, Gift, Search, Flame, Ghost } from "lucide-react";
+import { BarChart3, Gift, LayoutDashboard, Mic, Search, Settings, Share2, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 /**
  * Global command palette (Ctrl/Cmd+K).
  *
- * Raycast/Linear-style quick launcher backed by the `cmdk` library that
- * is already a dependency. Provides keyboard navigation to every major
- * tool surface.
+ * The palette uses creator tasks rather than internal system terminology so it
+ * remains useful to first-time users while preserving the existing shortcuts.
  */
 
-const COMMANDS = [
-  { id: "clone", label: "Deploy Clone & Crush Ghost Protocol", icon: Zap, path: "/clone-crush", mono: "GHOST • CHAIN-LOOP • MUM-01" },
-  { id: "rewards", label: "Open Referral War Room", icon: Gift, path: "/rewards", mono: "ELITE • ₹0 • LEVEL 4" },
-  { id: "nodes", label: "Show Ghost Node Status", icon: Cpu, path: "/clone-crush", mono: "MUM-01 • BLR-02 • DEL-03 • 87ms" },
-  { id: "intel", label: "War Room Ticker • Live Intel", icon: Radio, path: "/", mono: "LIVE • 2,847 GHOST OPS" },
-  { id: "search", label: "SEO & Tag Optimizer", icon: Search, path: "/seo", mono: "HIGH-CTR • GHOST CACHED" },
-  { id: "terminal", label: "Ghost Terminal • Encrypted Uplink", icon: Terminal, path: "/clone-crush", mono: "SECURE • ENCRYPTED • MUM-01" },
+const COMMAND_GROUPS = [
+  {
+    heading: "Workspace",
+    commands: [
+      { id: "dashboard", label: "Open Dashboard", description: "Resume your creator workspace", icon: LayoutDashboard, path: "/" },
+      { id: "analyze", label: "Analyze a YouTube channel", description: "Find winning videos and create a package", icon: Zap, path: "/clone-crush" },
+    ],
+  },
+  {
+    heading: "Create & grow",
+    commands: [
+      { id: "voiceover", label: "Generate a voiceover", description: "Turn a script into narration", icon: Mic, path: "/voice" },
+      { id: "repurpose", label: "Repurpose content", description: "Format content for other platforms", icon: Share2, path: "/repurposer" },
+      { id: "seo", label: "Improve titles and tags", description: "Open the SEO optimizer", icon: Search, path: "/seo" },
+      { id: "analytics", label: "Plan growth and revenue", description: "Open the growth estimator", icon: BarChart3, path: "/analytics" },
+    ],
+  },
+  {
+    heading: "Account",
+    commands: [
+      { id: "rewards", label: "View referral rewards", description: "Track your path to Pro", icon: Gift, path: "/rewards" },
+      { id: "settings", label: "Open settings", description: "Manage your account and data", icon: Settings, path: "/settings" },
+    ],
+  },
 ];
 
 export function CommandPaletteGhost() {
@@ -26,63 +42,76 @@ export function CommandPaletteGhost() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if ((e.key === "k" && (e.metaKey || e.ctrlKey)) || e.key === "/") {
-        if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
-        e.preventDefault();
-        setOpen(o => !o);
+    const down = (event: KeyboardEvent) => {
+      if ((event.key === "k" && (event.metaKey || event.ctrlKey)) || event.key === "/") {
+        const target = event.target as HTMLElement | null;
+        if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+        event.preventDefault();
+        setOpen((current) => !current);
       }
     };
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
   }, []);
 
+  const goTo = (path: string) => {
+    setOpen(false);
+    navigate(path);
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="p-0 max-w-[640px] overflow-hidden glass-strong border-primary/20 bg-[#0a0a0f]/90 backdrop-blur-2xl bracket">
-        <div className="absolute inset-0 ghost-scanline opacity-[0.02] pointer-events-none" />
+      <DialogContent className="max-w-[640px] overflow-hidden border-primary/20 bg-[#0a0a0f]/95 p-0 glass-strong backdrop-blur-2xl bracket">
         <Command className="bg-transparent">
           <div className="flex items-center border-b border-border/40 px-3">
-            <Ghost className="w-4 h-4 text-primary shrink-0 mr-2" />
-            <CommandInput placeholder="Ghost Protocol • Enter command, CTR hack, or node ID... (Ctrl+K)" className="border-0 focus:ring-0 text-sm font-mono" />
-            <span className="text-[9px] font-mono bg-secondary/60 border border-border/40 px-1.5 py-0.5 rounded ml-2">MUM-01</span>
+            <Search className="mr-2 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <CommandInput
+              placeholder="Search creator tools… (Ctrl+K)"
+              className="border-0 text-sm focus:ring-0"
+              aria-label="Search creator tools"
+            />
+            <span className="ml-2 rounded border border-border/40 bg-secondary/60 px-1.5 py-0.5 text-[9px] font-mono text-muted-foreground">ESC</span>
           </div>
-          <CommandList className="max-h-[380px] p-2">
-            <CommandEmpty className="py-6 text-center text-sm text-muted-foreground font-mono">No ghost protocols found • Try 'clone', 'ghost', 'intel'</CommandEmpty>
-            <CommandGroup heading="Ghost Protocols • Level 4 Clearance • MUM-01" className="text-[10px] font-mono">
-              {COMMANDS.map(cmd => (
-                <CommandItem
-                  key={cmd.id}
-                  value={cmd.label}
-                  onSelect={() => { setOpen(false); navigate(cmd.path); }}
-                  className="flex items-center gap-3 px-3 py-3 rounded-xl border border-transparent hover:border-primary/20 hover:bg-primary/5 data-[selected=true]:bg-primary/10 data-[selected=true]:border-primary/20 cursor-pointer"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0"><cmd.icon className="w-4 h-4 text-primary" /></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{cmd.label}</p>
-                    <p className="text-[10px] font-mono text-muted-foreground">{cmd.mono}</p>
-                  </div>
-                  <span className="text-[9px] font-mono text-muted-foreground/50 hidden md:block">↵</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-            <CommandGroup heading="Quick Actions • Ghost Mesh" className="text-[10px] font-mono">
-              <CommandItem onSelect={() => { setOpen(false); navigator.clipboard.writeText("tubeclickpro.in"); }} className="text-xs font-mono">Copy Canonical Domain • tubeclickpro.in</CommandItem>
+          <CommandList className="max-h-[440px] p-2">
+            <CommandEmpty className="py-8 text-center text-sm text-muted-foreground">No creator tools found.</CommandEmpty>
+            {COMMAND_GROUPS.map((group) => (
+              <CommandGroup key={group.heading} heading={group.heading} className="text-[10px] font-mono">
+                {group.commands.map((command) => (
+                  <CommandItem
+                    key={command.id}
+                    value={`${command.label} ${command.description}`}
+                    onSelect={() => goTo(command.path)}
+                    className="flex cursor-pointer items-center gap-3 rounded-xl border border-transparent px-3 py-3 hover:border-primary/20 hover:bg-primary/5 data-[selected=true]:border-primary/20 data-[selected=true]:bg-primary/10"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/10">
+                      <command.icon className="h-4 w-4 text-primary" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">{command.label}</p>
+                      <p className="text-[10px] text-muted-foreground">{command.description}</p>
+                    </div>
+                    <span className="hidden text-[9px] text-muted-foreground/50 md:block">↵</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+            <CommandGroup heading="Quick actions" className="text-[10px] font-mono">
+              <CommandItem onSelect={() => { setOpen(false); void navigator.clipboard.writeText("https://tubeclickpro.in"); }} className="cursor-pointer text-xs">Copy TubeClick Pro link</CommandItem>
               <CommandItem onSelect={() => {
                 setOpen(false);
-                // Only remove Tube Click Pro's own cache entries. Never clear
-                // Supabase's persisted session or unrelated application data.
-                for (let i = localStorage.length - 1; i >= 0; i -= 1) {
-                  const key = localStorage.key(i);
+                // Keep the existing cache action scoped to TubeClick's own
+                // legacy cache prefix. Auth and user workspaces are untouched.
+                for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+                  const key = localStorage.key(index);
                   if (key?.startsWith("tc-cache:")) localStorage.removeItem(key);
                 }
                 window.dispatchEvent(new CustomEvent("tc-cache-purged"));
-              }} className="text-xs font-mono text-amber-300">Purge Local Cache • Keep Session • MUM-01</CommandItem>
+              }} className="cursor-pointer text-xs text-amber-300">Clear temporary cache</CommandItem>
             </CommandGroup>
           </CommandList>
-          <div className="border-t border-border/20 px-3 py-2 flex items-center justify-between text-[9px] font-mono text-muted-foreground">
-            <span className="flex items-center gap-2"><span className="w-1 h-1 rounded-full bg-green-400 animate-pulse" />Ghost Protocol • 3 nodes • 87ms • Encrypted</span>
-            <span>ESC to close • ↑↓ to navigate • Ghost v4.2</span>
+          <div className="flex items-center justify-between border-t border-border/20 px-3 py-2 text-[9px] text-muted-foreground">
+            <span>Search by task, not system name</span>
+            <span>ESC to close • ↑↓ to navigate</span>
           </div>
         </Command>
       </DialogContent>
