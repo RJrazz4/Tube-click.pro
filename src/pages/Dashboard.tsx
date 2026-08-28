@@ -1,7 +1,7 @@
 import { lazy, memo, Suspense, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
-  Image as ImageIcon, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Loader2, X, Sparkles, RefreshCw, Share2, TrendingUp, Search, Zap, DollarSign, Flame, Gauge, AlertTriangle, Terminal, Cpu, Activity,
+  Image as ImageIcon, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Loader2, X, Sparkles, RefreshCw, Share2, TrendingUp, Search, Zap, DollarSign, Flame, Gauge, AlertTriangle, Terminal, Cpu, Activity, Gift,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,11 +124,17 @@ export default function Dashboard() {
           </div>
         )}
 
-        <AudienceIntelligenceSection />
         <WorkflowContinueCard />
-        <Suspense fallback={<div className="h-28 animate-pulse rounded-2xl border border-border bg-card/60" />}><ViralGrowthPass /></Suspense>
+        <AudienceIntelligenceSection />
 
         {competitors.length > 0 && (
+          <section aria-labelledby="opportunities-heading" className="space-y-4">
+            <div>
+              <h2 id="opportunities-heading" className="font-display text-lg md:text-xl font-semibold text-foreground flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-cyan-300" /> Your next opportunities
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">Review what is gaining momentum, then choose one video to turn into your next package.</p>
+            </div>
           <Tabs defaultValue="overview" className="space-y-4">
             <TabsList className="grid h-auto w-full max-w-md grid-cols-2 border border-border/60 bg-card/70 p-1"><TabsTrigger value="overview" className="gap-2 py-2"><TrendingUp className="h-4 w-4" />Overview</TabsTrigger><TabsTrigger value="showdown" className="gap-2 py-2"><Gauge className="h-4 w-4" />Competitors</TabsTrigger></TabsList>
             <TabsContent value="overview" className="mt-0">
@@ -144,23 +150,65 @@ export default function Dashboard() {
             </TabsContent>
             <TabsContent value="showdown" className="mt-0"><Suspense fallback={<Card className="cyber-card flex min-h-[280px] items-center justify-center border-border/70"><Loader2 className="h-6 w-6 animate-spin text-primary" /></Card>}><CompetitorShowdown /></Suspense></TabsContent>
           </Tabs>
+          </section>
         )}
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">{statDefs.map(stat=> <StatCard key={stat.key} label={stat.label} value={stat.value} icon={stat.icon} color={stat.color} />)}</div>
+        <section aria-labelledby="workspace-stats-heading" className="space-y-3">
+          <div>
+            <h2 id="workspace-stats-heading" className="font-display text-lg md:text-xl font-semibold text-foreground">Workspace at a glance</h2>
+            <p className="mt-1 text-xs text-muted-foreground">A quick view of the content you have created in this workspace.</p>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">{statDefs.map(stat=> <StatCard key={stat.key} label={stat.label} value={stat.value} icon={stat.icon} color={stat.color} />)}</div>
+        </section>
 
-        <div className="grid xl:grid-cols-2 gap-5">
-          <LocalInsightPanel />
-          <LocalSignalBoard />
-        </div>
+        <section aria-labelledby="create-tools-heading" className="space-y-4">
+          <h2 id="create-tools-heading" className="font-display text-lg md:text-xl font-semibold text-foreground flex items-center gap-2"><Sparkles className="w-5 h-5 text-primary" />Start creating</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">{tools.map((tool,index)=><ToolCard key={tool.path} tool={tool} index={index} />)}</div>
+        </section>
 
-        <DeferredModule minHeight={220} className="content-auto"><Suspense fallback={<div className="h-[220px] rounded-2xl border border-border/50 bg-card/40" />}><TheLab /></Suspense></DeferredModule>
-
-        <div><h2 className="font-display text-lg md:text-xl font-semibold text-foreground mb-4 flex items-center gap-2"><Sparkles className="w-5 h-5 text-primary" />Start creating</h2><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">{tools.map((tool,index)=><ToolCard key={tool.path} tool={tool} index={index} />)}</div></div>
-
-        <div className="grid lg:grid-cols-2 gap-5 md:gap-6">
+        <section aria-labelledby="library-heading" className="space-y-3">
+          <div>
+            <h2 id="library-heading" className="font-display text-lg md:text-xl font-semibold text-foreground">Recent library</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Your latest saved packages and exports from this browser.</p>
+          </div>
+          <div className="grid lg:grid-cols-2 gap-5 md:gap-6">
           <Card className="glass-strong border-border"><CardHeader className="pb-3"><CardTitle className="font-display text-base flex items-center gap-2"><Terminal className="w-4 h-4 text-primary" />Your Library</CardTitle><CardDescription className="text-sm text-muted-foreground flex items-center gap-1"><Cpu className="w-3 h-3" />{totalContent>0?`${totalContent} saved items • synced`:"Nothing saved yet — pick a tool below to start!"}</CardDescription></CardHeader><CardContent>{recentContent.length>0 ? (<div className="space-y-3">{recentContent.map((content:any)=>{ const Icon = getContentIcon(content.type); return (<div key={content.id} className="group relative flex items-center gap-3 p-3 md:p-4 bg-secondary/50 backdrop-blur-sm rounded-xl border border-border/30 hover:border-primary/30 transition-all"><button onClick={()=>handleDeleteItem(content.id)} className="absolute -top-2 -right-2 z-10 w-7 h-7 rounded-full bg-secondary/90 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-destructive/20 hover:border-destructive/50 transition-all opacity-0 group-hover:opacity-100"><X className="w-3.5 h-3.5" /></button><div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"><Icon className="w-5 h-5 text-primary" /></div><div className="flex-1 min-w-0"><p className="text-sm text-foreground truncate font-medium">{content.title}</p><p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5"><span className="capitalize">{content.type}</span><span>•</span><span>{new Date(content.createdAt).toLocaleDateString()}</span></p></div></div>);})}</div>) : (<div className="text-center py-8"><div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center mb-4"><Sparkles className="w-8 h-8 text-primary animate-pulse" /></div><p className="text-base text-foreground font-medium mb-1">Your library is empty</p><p className="text-sm text-muted-foreground">Run any tool above — everything you save appears here.</p></div>)}</CardContent></Card>
           <Card className="glass-strong border-border"><CardHeader className="pb-3"><CardTitle className="font-display text-base flex items-center gap-2"><Activity className="w-4 h-4 text-green-400" />Export &amp; Clear</CardTitle><CardDescription className="text-xs">Download everything as a ZIP, or clear it all.</CardDescription></CardHeader><CardContent className="space-y-3"><Button onClick={handleExportAll} disabled={isExporting || isClearing || totalContent===0} className="w-full cyber-button h-11">{isExporting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Exporting…</> : <><Download className="w-4 h-4 mr-2" />Export ZIP ({totalContent} items)</>}</Button><Button variant="outline" onClick={handleClearAll} disabled={isExporting || isClearing || totalContent===0} className="w-full border-destructive/50 text-destructive hover:bg-destructive/10 h-10"><Trash2 className="w-4 h-4 mr-2" />Clear library</Button><div className="p-3 rounded-lg bg-secondary/50 border border-border"><p className="text-xs text-muted-foreground"><strong className="text-foreground">ZIP includes:</strong></p><ul className="text-xs text-muted-foreground mt-1 space-y-0.5"><li>✓ Scripts</li><li>✓ Thumbnail prompts</li><li>✓ Guides (markdown)</li><li>✓ Voiceover transcripts</li></ul><p className="text-xs text-muted-foreground/70 mt-2 border-t border-border/50 pt-2 flex items-center gap-1"><Cpu className="w-3 h-3" />Includes voiceover transcripts • Audio available in Voiceover Studio</p></div></CardContent></Card>
-        </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="referral-heading" className="space-y-3">
+          <div>
+            <h2 id="referral-heading" className="font-display text-lg font-semibold text-foreground flex items-center gap-2">
+              <Gift className="w-5 h-5 text-primary" /> Grow with referrals
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">Invite creators and track your path to Pro when you are ready.</p>
+          </div>
+          <Suspense fallback={<div className="h-28 animate-pulse rounded-2xl border border-border bg-card/60" />}><ViralGrowthPass /></Suspense>
+        </section>
+
+        <section aria-labelledby="secondary-tools-heading" className="space-y-4">
+          <div>
+            <h2 id="secondary-tools-heading" className="font-display text-lg md:text-xl font-semibold text-foreground flex items-center gap-2">
+              <Search className="w-5 h-5 text-cyan-300" /> Secondary tools
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">Fast local checks for titles and topics. These do not use live market data.</p>
+          </div>
+          <div className="grid xl:grid-cols-2 gap-5">
+          <LocalInsightPanel />
+          <LocalSignalBoard />
+          </div>
+        </section>
+
+        <section aria-labelledby="roadmap-heading" className="space-y-4">
+          <div>
+            <h2 id="roadmap-heading" className="font-display text-lg md:text-xl font-semibold text-foreground flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-violet-300" /> Roadmap
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">Explore what is being developed next. These projects are not part of today&apos;s workflow.</p>
+          </div>
+          <DeferredModule minHeight={220} className="content-auto"><Suspense fallback={<div className="h-[220px] rounded-2xl border border-border/50 bg-card/40" />}><TheLab /></Suspense></DeferredModule>
+        </section>
       </div>
     </div>
   );
