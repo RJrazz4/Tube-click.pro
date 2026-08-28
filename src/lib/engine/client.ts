@@ -27,7 +27,7 @@ export function engineConfigured(): boolean {
 async function accessToken(): Promise<string> {
   const { data } = await supabase.auth.getSession();
   if (!data.session?.access_token) {
-    throw new EngineError(401, "NOT_AUTHENTICATED", "Sign in to use the intelligence engine");
+    throw new EngineError(401, "NOT_AUTHENTICATED", "Sign in to use the intelligence engine. Your session may have expired.");
   }
   return data.session.access_token;
 }

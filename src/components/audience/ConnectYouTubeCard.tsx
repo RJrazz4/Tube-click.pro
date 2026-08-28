@@ -19,9 +19,20 @@ export function ConnectYouTubeCard() {
       const authUrl = await connectYouTubeUrl();
       window.location.href = authUrl;
     } catch (err) {
-      toast.error(
-        err instanceof EngineError ? err.message : "Could not start YouTube connect. Is the engine configured?",
-      );
+      const errorMessage = err instanceof EngineError 
+        ? err.message 
+        : "Could not start YouTube connect. Please ensure the backend engine is configured with Google OAuth credentials.";
+      
+      // Enhanced error messages for common issues
+      if (errorMessage.includes('ENGINE_NOT_CONFIGURED')) {
+        toast.error("Backend engine URL not configured. Please set VITE_ENGINE_URL and VITE_BACKEND_ENGINE_URL in Vercel.");
+      } else if (errorMessage.includes('NOT_AUTHENTICATED')) {
+        toast.error("Please sign in to connect YouTube.");
+      } else if (errorMessage.includes('YOUTUBE_MODULE_DISABLED')) {
+        toast.error("YouTube module not configured. Please add GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, and YOUTUBE_TOKEN_MASTER_KEY to Render backend.");
+      } else {
+        toast.error(errorMessage);
+      }
       setConnecting(false);
     }
   };

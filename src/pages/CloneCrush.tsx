@@ -286,6 +286,8 @@ export default function CloneCrush() {
   // or silently replace the target URL.
   const [nicheInput, setNicheInput] = useState<string>(() => savedNiche ?? "");
   const [customDescription, setCustomDescription] = useState("");
+  const [channelInputLoading, setChannelInputLoading] = useState(false);
+  const [channelInputError, setChannelInputError] = useState<string | null>(null);
 
   // selectedVideo is derived from conveyorQueue + activeVideoId. The queue
   // is the source of truth so the 24h conveyor shift can change the
@@ -617,12 +619,15 @@ export default function CloneCrush() {
     // the explicitly selected language into the new user's scoped store too.
     const userIsPro = canUsePremium();
     setOutputLanguage(outputLanguage);
+    setChannelInputLoading(true);
+    setChannelInputError(null);
 
     // Atomically persist the exact submitted URL before any reset or network
     // work. The first Free submission becomes immutable; changing it can only
     // proceed after the existing Pro paywall.
     const submission = submitChannelUrl(input, userIsPro ? "pro" : "free");
     if (!submission.ok) {
+      setChannelInputLoading(false);
       if (submission.reason === "URL_LOCKED") routeToProUpsell("channel");
       else toast.error("Please enter a YouTube Channel URL or Handle");
       return;
@@ -631,6 +636,7 @@ export default function CloneCrush() {
     // Free users get one active Slot 1 window. Re-profiling would replace the
     // queue and restart that window, so keep the current result stable.
     if (!userIsPro && isFreeConveyorActive) {
+      setChannelInputLoading(false);
       routeToProUpsell("locked");
       return;
     }
@@ -661,6 +667,7 @@ export default function CloneCrush() {
     );
     if (!saveResult.ok) {
       setIsProfiling(false);
+      setChannelInputLoading(false);
       if (saveResult.reason === "URL_LOCKED") routeToProUpsell("channel");
       else toast.error("Saved channel limit reached — Pro supports up to 5 saved channels", { id: "ghost-cache-limit" });
       return;
@@ -677,10 +684,26 @@ export default function CloneCrush() {
         const isGhost = (res as any).ghostReconstructed;
         toast.success(isGhost ? `Profile loaded: ${profiledChannel.name}` : `Profile loaded: ${profiledChannel.name}`, { id: "profile-scrape" });
         await autoDiscoverCompetitors(profiledChannel);
-      } else throw new Error(res.error || "Channel not found");
+      } else {
+        throw new Error(res.error || "Channel not found");
+      }
     } catch (err: any) {
-      toast.error(err.message || "Ghost scrape - using encrypted reconstruction", { id: "profile-scrape" });
-    } finally { setIsProfiling(false); }
+      const errorMessage = err.message || "Ghost scrape - using encrypted reconstruction";
+      // Check for specific error patterns
+      if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+        setChannelInputError("Backend is waking up. Please wait 30-60 seconds and try again.");
+        toast.error("Backend is waking up. Please wait and try again.", { id: "profile-scrape" });
+      } else if (errorMessage.includes('engine') || errorMessage.includes('Engine')) {
+        setChannelInputError("Intelligence engine not configured. Please check backend settings.");
+        toast.error("Intelligence engine not configured", { id: "profile-scrape" });
+      } else {
+        setChannelInputError("Could not load channel. Please try again.");
+        toast.error(errorMessage, { id: "profile-scrape" });
+      }
+    } finally { 
+      setIsProfiling(false);
+      setChannelInputLoading(false);
+    }
   };
 
   const handleProfileChannel = () => {
@@ -690,6 +713,14 @@ export default function CloneCrush() {
 
   const performCloneAndCrush = async () => {
     if (!selectedVideo) { toast.error("Select a competitor video from matrix"); return; }
+
+    // Check if engine is configured
+    const { engineConfigured } = await import("@/lib/engine/client");
+    if (!engineConfigured()) {
+      isExecutingRef.current = false;
+      toast.error("Backend engine not configured. Please ensure VITE_ENGINE_URL is set in Vercel environment variables.");
+      return;
+    }
 
     // Double-click / StrictMode guard.
     if (isExecutingRef.current) return;
@@ -1184,6 +1215,7 @@ export default function CloneCrush() {
                         setLogSteps([]);
                         setActiveVideoId(null);
                       }
+                      setChannelInputError(null);
                     }}
                     onKeyDown={(event) => {
                       if (!isFreeChannelLocked) return;
@@ -1197,10 +1229,16 @@ export default function CloneCrush() {
                       event.preventDefault();
                       routeToProUpsell("channel");
                     }}
-                    className="pl-10 pr-24 bg-secondary/40 border-border/80 h-11 text-sm placeholder:text-muted-foreground/60"
-                    readOnly={!isTierReady || isFreeChannelLocked}
+                    className={`pl-10 pr-24 bg-secondary/40 border-border/80 h-11 text-sm placeholder:text-muted-foreground/60 ${channelInputError ? 'border-destructive/50' : ''} ${channelInputLoading ? 'opacity-70' : ''}`}
+                    readOnly={!isTierReady || isFreeChannelLocked || channelInputLoading}
                   />
-                  {isFreeChannelLocked && (
+                  {channelInputLoading && (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                      <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider">Loading...</span>
+                    </div>
+                  )}
+                  {isFreeChannelLocked && !channelInputLoading && (
                     <button
                       type="button"
                       onClick={() => routeToProUpsell("channel")}
@@ -1208,6 +1246,9 @@ export default function CloneCrush() {
                     >
                       <Lock className="h-3 w-3" /> Free URL locked
                     </button>
+                  )}
+                  {channelInputError && (
+                    <p className="absolute -bottom-5 left-0 right-0 text-[10px] text-destructive mt-1 truncate">{channelInputError}</p>
                   )}
                 </div>
                 <div className="relative sm:w-[190px] shrink-0 group">
