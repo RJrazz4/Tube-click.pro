@@ -8,9 +8,17 @@ export interface NeuralVoiceRequest {
   outputFormat: "mp3";
 }
 
-const BACKEND_ENGINE_URL = String(
-  import.meta.env.VITE_BACKEND_ENGINE_URL || "",
-).replace(/\/+$/, "");
+import { normalizeBaseUrl } from "@/lib/engine/url";
+
+// Accept either alias so the engine is reachable whichever one is set in Vercel.
+// normalizeBaseUrl also strips stray whitespace/quotes baked into env values.
+const BACKEND_ENGINE_URL = normalizeBaseUrl(
+  String(
+    import.meta.env.VITE_BACKEND_ENGINE_URL ||
+      import.meta.env.VITE_ENGINE_URL ||
+      "",
+  ),
+);
 
 function requestId(): string {
   try {

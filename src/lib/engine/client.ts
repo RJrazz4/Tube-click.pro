@@ -6,7 +6,16 @@ import { supabase } from "@/integrations/supabase/client";
  * session refresh on 401. Mirrors the CryptoCheckout auth pattern.
  */
 
-export const ENGINE_URL = (import.meta.env.VITE_ENGINE_URL as string | undefined ?? "").replace(/\/$/, "");
+import { normalizeBaseUrl } from "./url";
+
+// Accept either alias so the engine is reachable whichever one is set in Vercel.
+// normalizeBaseUrl also strips stray whitespace/quotes (a deployed build once
+// shipped "https://tubeclickpro- backend-engine.onrender.com" with a space).
+export const ENGINE_URL = normalizeBaseUrl(
+  (import.meta.env.VITE_ENGINE_URL as string | undefined) ||
+    (import.meta.env.VITE_BACKEND_ENGINE_URL as string | undefined) ||
+    "",
+);
 
 export class EngineError extends Error {
   constructor(
