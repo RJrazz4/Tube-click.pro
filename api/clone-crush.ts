@@ -63,18 +63,45 @@ function requiredEnv(name: string, fallback?: string): string {
   if (!value) throw new Error(`${name} is not configured`);
   return value.replace(/\/$/, '');
 }
+// Validate the caller's own bearer token against GoTrue.
+//
+// `/auth/v1/user` resolves the *caller* from `Authorization: Bearer <jwt>`; the
+// `apikey` header only selects the project credential. Historically this used
+// only SUPABASE_SERVICE_ROLE_KEY, so a single mis-configured secret on Vercel
+// turned every signed-in request into a 401. Try every project key we have,
+// preferring the service role, so a valid session always validates.
+async function verifyCallerToken(
+  supabaseUrl: string,
+  authorization: string,
+): Promise<AuthenticatedUser | null> {
+  const candidateKeys = [
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    process.env.SUPABASE_ANON_KEY,
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    process.env.VITE_SUPABASE_ANON_KEY,
+  ].filter((k): k is string => Boolean(k));
+
+  for (const apikey of candidateKeys) {
+    try {
+      const result = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        headers: { apikey, Authorization: authorization },
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!result.ok) continue;
+      const user = (await result.json()) as AuthenticatedUser;
+      if (user?.id) return user;
+    } catch {
+      // try the next key
+    }
+  }
+  return null;
+}
+
 async function authenticatedUser(req: Request): Promise<AuthenticatedUser | null> {
   const authorization = req.headers.get('authorization') || '';
   if (!authorization.toLowerCase().startsWith('bearer ')) return null;
   const supabaseUrl = requiredEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
-  const serviceKey = requiredEnv('SUPABASE_SERVICE_ROLE_KEY');
-  const result = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: { apikey: serviceKey, Authorization: authorization },
-    signal: AbortSignal.timeout(5_000),
-  });
-  if (!result.ok) return null;
-  const user = await result.json() as AuthenticatedUser;
-  return user?.id ? user : null;
+  return verifyCallerToken(supabaseUrl, authorization);
 }
 async function hasProEntitlement(userId: string): Promise<boolean> {
   const supabaseUrl = requiredEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
