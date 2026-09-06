@@ -77,10 +77,61 @@ function requiredEnv(name: string, fallback?: string): string {
 // only SUPABASE_SERVICE_ROLE_KEY, so a single mis-configured secret on Vercel
 // turned every signed-in request into a 401. Try every project key we have,
 // preferring the service role, so a valid session always validates.
+/**
+ * Read the Supabase project URL from a caller's JWT `iss` (issuer) claim.
+ *
+ * Supabase GoTrue mints JWTs with `iss` = `https://<project-ref>.supabase.co/auth/v1`.
+ * The token the client sends was minted by the SAME project that the client's
+ * Supabase client points at, so validating against the token's own issuer is
+ * authoritative for that token. This is what makes caller verification robust
+ * even if the server's SUPABASE_URL env differs from the client's VITE_SUPABASE_URL
+ * (a config drift that otherwise turns every signed-in request into a persistent
+ * 403 -> AUTH_REQUIRED 401, which no client-side token refresh can fix).
+ */
+function supabaseProjectUrlFromToken(authorization: string): string | null {
+  try {
+    const bearer = authorization.replace(/^bearer\s+/i, '').trim();
+    if (!bearer) return null;
+    const payloadB64 = bearer.split('.')[1];
+    if (!payloadB64) return null;
+    const payload = JSON.parse(
+      atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')),
+    ) as { iss?: unknown };
+    if (typeof payload.iss !== 'string' || !payload.iss) return null;
+    const match = payload.iss.match(/^(https?:\/\/[^/]+)/);
+    return match ? match[1].replace(/\/$/, '') : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validate the caller's bearer token against GoTrue `/auth/v1/user`.
+ *
+ * Crucially we resolve the project from the token's own issuer FIRST (the
+ * project that minted it), then fall back to the server's configured URL, then
+ * to the known-good fallback. This guarantees a valid signed-in token is
+ * validated against the project it belongs to, regardless of env drift.
+ *
+ * Note on status codes: GoTrue returns 401 when the `apikey` project credential
+ * is missing/invalid for the request, and 403 when a bearer token is present but
+ * rejected (expired, wrong signature, or minted for a different project). The
+ * caller token is what authenticates, so we only need the key to pick the
+ * project; a 200 with a `user.id` is the success signal.
+ */
 async function verifyCallerToken(
-  supabaseUrl: string,
   authorization: string,
 ): Promise<AuthenticatedUser | null> {
+  const fromToken = supabaseProjectUrlFromToken(authorization);
+  const fromEnv = (
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    FALLBACK_SUPABASE_URL
+  ).replace(/\/$/, '');
+  const candidateUrls = Array.from(
+    new Set([fromToken, fromEnv, FALLBACK_SUPABASE_URL].filter((u): u is string => Boolean(u))),
+  );
+
   const candidateKeys = [
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     process.env.SUPABASE_ANON_KEY,
@@ -89,17 +140,19 @@ async function verifyCallerToken(
     FALLBACK_PUBLISHABLE_KEY,
   ].filter((k): k is string => Boolean(k));
 
-  for (const apikey of candidateKeys) {
-    try {
-      const result = await fetch(`${supabaseUrl}/auth/v1/user`, {
-        headers: { apikey, Authorization: authorization },
-        signal: AbortSignal.timeout(5_000),
-      });
-      if (!result.ok) continue;
-      const user = (await result.json()) as AuthenticatedUser;
-      if (user?.id) return user;
-    } catch {
-      // try the next key
+  for (const supabaseUrl of candidateUrls) {
+    for (const apikey of candidateKeys) {
+      try {
+        const result = await fetch(`${supabaseUrl}/auth/v1/user`, {
+          headers: { apikey, Authorization: authorization },
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (!result.ok) continue;
+        const user = (await result.json()) as AuthenticatedUser;
+        if (user?.id) return user;
+      } catch {
+        // try the next key / URL
+      }
     }
   }
   return null;
@@ -108,12 +161,31 @@ async function verifyCallerToken(
 async function authenticatedUser(req: Request): Promise<AuthenticatedUser | null> {
   const authorization = req.headers.get('authorization') || '';
   if (!authorization.toLowerCase().startsWith('bearer ')) return null;
-  const supabaseUrl = (
+  return verifyCallerToken(authorization);
+}
+
+/**
+ * Lightweight, always-on diagnostic attached to any AUTH_REQUIRED 401 so the
+ * failure is self-describing in the response body (no log access needed).
+ * Reports whether the caller actually sent a bearer, which project the token
+ * claims, and whether that matches the server's configured project — which
+ * isolates a client-no-token bug from a server project-mismatch config bug.
+ */
+function callerAuthDiagnostic(req: Request): Record<string, unknown> {
+  const authorization = req.headers.get('authorization') || '';
+  const hasBearer = authorization.toLowerCase().startsWith('bearer ');
+  const tokenProject = supabaseProjectUrlFromToken(authorization);
+  const envProject = (
     process.env.SUPABASE_URL ||
     process.env.VITE_SUPABASE_URL ||
     FALLBACK_SUPABASE_URL
   ).replace(/\/$/, '');
-  return verifyCallerToken(supabaseUrl, authorization);
+  return {
+    authHeader: hasBearer ? 'present' : 'missing',
+    authProject: tokenProject,
+    envProject,
+    projectMatch: tokenProject ? tokenProject === envProject : null,
+  };
 }
 async function hasProEntitlement(userId: string): Promise<boolean> {
   const supabaseUrl = requiredEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
@@ -825,7 +897,7 @@ export default async function handler(req: Request) {
         const isEnt = message.startsWith('An active Pro');
         const status = isAuth ? 401 : isEnt ? 403 : 503;
         const code = isAuth ? 'AUTH_REQUIRED' : isEnt ? 'PRO_REQUIRED' : 'ENTITLEMENT_UNAVAILABLE';
-        return jsonResponse({ error: message, code }, status);
+        return jsonResponse({ error: message, code, callerAuth: callerAuthDiagnostic(req) }, status);
       }
     }
 
@@ -984,7 +1056,7 @@ export default async function handler(req: Request) {
       if (!isPremium) {
         const quota = await consumeDailyQuota(req);
         if (quota.code === 'AUTH_REQUIRED') {
-          return jsonResponse({ error: 'Sign in to execute a Chain-Loop', code: 'AUTH_REQUIRED' }, 401);
+          return jsonResponse({ error: 'Sign in to execute a Chain-Loop', code: 'AUTH_REQUIRED', callerAuth: callerAuthDiagnostic(req) }, 401);
         }
         if (!quota.allowed) {
           return jsonResponse({
