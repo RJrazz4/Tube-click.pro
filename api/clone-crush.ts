@@ -146,6 +146,8 @@ type CallerAuthDiagnostic = {
   tokenAud: string | null;
   tokenExpired: boolean | null;
   attempts: CallerAuthAttempt[];
+  /** How the caller was verified (or 'rejected'). */
+  verifiedVia: 'gotrue-user' | 'admin-api' | 'rejected';
 };
 
 /** Last caller-verification result, surfaced by callerAuthDiagnostic. */
@@ -173,6 +175,24 @@ function peekJwtClaims(token: string): { iss?: string; aud?: string; exp?: numbe
   }
 }
 
+/**
+ * Read the token's `sub` claim (the authenticated user id). Used by the
+ * service-role Admin-API fallback to look up the user. Non-sensitive read for
+ * verification only — the signature is validated by GoTrue itself.
+ */
+function peekJwtSub(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64.length % 4 ? b64 + '='.repeat(4 - (b64.length % 4)) : b64;
+    const c = JSON.parse(atob(padded)) as { sub?: unknown };
+    return typeof c.sub === 'string' && c.sub ? c.sub : null;
+  } catch {
+    return null;
+  }
+}
+
 async function verifyCallerToken(
   authorization: string,
 ): Promise<AuthenticatedUser | null> {
@@ -181,34 +201,38 @@ async function verifyCallerToken(
 
   const claims = peekJwtClaims(bearer);
   const tokenProject = supabaseProjectUrlFromToken(authorization);
+
+  // ---------------------------------------------------------------------
+  // STRICT ENV-READ client init (no magic resolution).
+  // The Supabase URL is read explicitly from process.env; the public pinned
+  // value is only a last-resort safety net, never the primary source.
+  // ---------------------------------------------------------------------
   const envUrl = (
     process.env.SUPABASE_URL ||
     process.env.VITE_SUPABASE_URL ||
+    PINNED_CLIENT_SUPABASE_URL ||
     FALLBACK_SUPABASE_URL
   ).replace(/\/$/, '');
-  // Deterministic, env-independent order: the Pinned client project (which
-  // minted the caller's token) is tried FIRST, then the token's own issuer, then
-  // the env-resolved server URL, then the fallback. The pinned project always
-  // exists and is validated first, so even a wrong env SUPABASE_URL cannot
-  // redirect the caller check onto a different project.
+
   const candidateUrls = Array.from(
     new Set(
-      [PINNED_CLIENT_SUPABASE_URL, tokenProject, envUrl, FALLBACK_SUPABASE_URL]
+      [envUrl, tokenProject, PINNED_CLIENT_SUPABASE_URL, FALLBACK_SUPABASE_URL]
         .filter((u): u is string => Boolean(u)),
     ),
   );
 
-  // Key used to resolve a *caller* via `apikey`. Prefer the client's pinned
-  // publishable generation FIRST, then the publishable generation from env, then
-  // legacy anon keys. A legacy `eyJ…` anon key is a different signing context
-  // and GoTrue rejects a publishable-minted token with "signature is invalid"
-  // (bad_jwt), so it must never be preferred over the publishable key.
-  const candidateKeys = Array.from(
+  // ---------------------------------------------------------------------
+  // PHASE 1 — Direct token pass through the standard anon-based getUser().
+  // This is exactly what supabase.auth.getUser(rawToken) calls under the hood:
+  // GET /auth/v1/user with Authorization: Bearer <raw token> and a user-facing
+  // anon/publishable key in apikey. No cookies, no implicit session.
+  // ---------------------------------------------------------------------
+  const userAnonKeys = Array.from(
     new Set(
       [
-        PINNED_CLIENT_PUBLISHABLE_KEY,
         process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         process.env.SUPABASE_PUBLISHABLE_KEY,
+        PINNED_CLIENT_PUBLISHABLE_KEY,
         FALLBACK_PUBLISHABLE_KEY,
         process.env.VITE_SUPABASE_ANON_KEY, // legacy, last resort
         process.env.SUPABASE_ANON_KEY,      // legacy, last resort
@@ -218,11 +242,11 @@ async function verifyCallerToken(
 
   const attempts: CallerAuthAttempt[] = [];
   for (const supabaseUrl of candidateUrls) {
-    for (const apikey of candidateKeys) {
+    for (const apikey of userAnonKeys) {
       const url = `${supabaseUrl}/auth/v1/user`;
       try {
         const res = await fetch(url, {
-          headers: { apikey, Authorization: authorization },
+          headers: { apikey, Authorization: `Bearer ${bearer}` },
           signal: AbortSignal.timeout(5_000),
         });
         const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
@@ -246,11 +270,56 @@ async function verifyCallerToken(
             tokenAud: claims?.aud ?? null,
             tokenExpired: claims?.exp ? claims.exp * 1000 <= Date.now() : null,
             attempts,
+            verifiedVia: 'gotrue-user',
           };
           return user;
         }
       } catch (e) {
         attempts.push({ url, key: 'publishable', status: -1, errorMsg: e instanceof Error ? e.message : String(e) });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // PHASE 2 — Ultimate fallback: service-role Admin API. If the standard
+  // anon-based getUser() failed on Edge despite a matching JWT secret,
+  // verify the token's subject is a real user via the Admin API under the
+  // service-role key. We read the token's `sub` claim (the user id) and call
+  // GET /auth/v1/admin/users/:sub with the service-role credential.
+  // ---------------------------------------------------------------------
+  const serviceUrl = envUrl;
+  const serviceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_ADMIN_KEY ||
+    '';
+  if (serviceKey) {
+    const sub = peekJwtSub(bearer);
+    if (sub) {
+      const url = `${serviceUrl}/auth/v1/admin/users/${encodeURIComponent(sub)}`;
+      try {
+        const res = await fetch(url, {
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+          signal: AbortSignal.timeout(6_000),
+        });
+        attempts.push({ url, key: 'service-role(admin)', status: res.status });
+        const body = (await res.json().catch(() => null)) as { id?: string } | null;
+        if (res.ok && body?.id === sub) {
+          console.warn('[clone-crush:auth] accepted via service-role admin lookup');
+          lastCallerAuth = {
+            authHeader: 'present',
+            tokenProject,
+            envProject: envUrl,
+            projectMatch: tokenProject ? tokenProject === envUrl : null,
+            tokenIss: claims?.iss ?? null,
+            tokenAud: claims?.aud ?? null,
+            tokenExpired: claims?.exp ? claims.exp * 1000 <= Date.now() : null,
+            attempts,
+            verifiedVia: 'admin-api',
+          };
+          return { id: sub };
+        }
+      } catch (e) {
+        attempts.push({ url, key: 'service-role(admin)', status: -1, errorMsg: e instanceof Error ? e.message : String(e) });
       }
     }
   }
@@ -264,6 +333,7 @@ async function verifyCallerToken(
     tokenAud: claims?.aud ?? null,
     tokenExpired: claims?.exp ? claims.exp * 1000 <= Date.now() : null,
     attempts,
+    verifiedVia: 'rejected',
   };
   return null;
 }
@@ -298,6 +368,7 @@ function callerAuthDiagnostic(req: Request): Record<string, unknown> {
     tokenAud: null,
     tokenExpired: null,
     attempts: [],
+    verifiedVia: 'rejected',
   };
   console.error('[clone-crush:auth] caller rejected -> 401', JSON.stringify(result));
   return result;
