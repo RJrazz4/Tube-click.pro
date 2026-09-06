@@ -58,6 +58,13 @@ function enforceTier(rawTier: unknown): 'free' | 'premium' | 'enterprise' {
   return 'free';
 }
 type AuthenticatedUser = { id: string };
+
+// Last-resort, public-by-design project credentials so a valid caller session
+// still validates even if the Vercel env is missing/misconfigured. The
+// publishable key is already shipped in the client bundle and grants no
+// privileged access; the caller's own bearer token is what authenticates.
+const FALLBACK_SUPABASE_URL = "https://tiglslhkmamrjtpkskkd.supabase.co";
+const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_gIMHtg48cnHmLLodvKDM6g_fuMIB6hI";
 function requiredEnv(name: string, fallback?: string): string {
   const value = process.env[name] || (fallback ? process.env[fallback] : '') || '';
   if (!value) throw new Error(`${name} is not configured`);
@@ -79,6 +86,7 @@ async function verifyCallerToken(
     process.env.SUPABASE_ANON_KEY,
     process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
     process.env.VITE_SUPABASE_ANON_KEY,
+    FALLBACK_PUBLISHABLE_KEY,
   ].filter((k): k is string => Boolean(k));
 
   for (const apikey of candidateKeys) {
@@ -100,7 +108,11 @@ async function verifyCallerToken(
 async function authenticatedUser(req: Request): Promise<AuthenticatedUser | null> {
   const authorization = req.headers.get('authorization') || '';
   if (!authorization.toLowerCase().startsWith('bearer ')) return null;
-  const supabaseUrl = requiredEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
+  const supabaseUrl = (
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    FALLBACK_SUPABASE_URL
+  ).replace(/\/$/, '');
   return verifyCallerToken(supabaseUrl, authorization);
 }
 async function hasProEntitlement(userId: string): Promise<boolean> {
