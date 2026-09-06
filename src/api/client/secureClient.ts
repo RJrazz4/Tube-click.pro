@@ -280,6 +280,34 @@ export async function fetchCloneCrushQuota(signal?: AbortSignal): Promise<any> {
   return res.json();
 }
 
+// Resolve a Supabase access token that the backend will accept, refreshing the
+// session when the cached token is missing or already expired. `getSession()`
+// can run before auth has hydrated (yielding no token) or hand back an expired
+// access token; in either case the edge function rejects the request with a 401
+// and, without this refresh, there is no recovery path.
+async function resolveCallerToken(forceRefresh: boolean): Promise<string | null> {
+  try {
+    if (forceRefresh) {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error) return null;
+      return data.session?.access_token ?? null;
+    }
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data.session) return null;
+    const token = data.session.access_token;
+    const expiredSoon =
+      typeof data.session.expires_at === "number" &&
+      data.session.expires_at * 1000 - Date.now() < 90_000;
+    if (token && !expiredSoon) return token;
+    // Missing or within ~90s of expiry: refresh once so we never send a token
+    // the backend is already rejecting.
+    const { data: fresh } = await supabase.auth.refreshSession();
+    return fresh.session?.access_token ?? token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchEdgeFunctionJson<T>(functionName: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const cacheKey = qcKey(functionName, body);
   const cached = qcGet<T>(cacheKey);
@@ -295,16 +323,24 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
   lastCall.set(functionName, Date.now());
 
   const { url, headers: baseHeaders, isVercel } = getApiEndpoint(functionName);
-  const headers: Record<string, string> = { ...baseHeaders, "x-request-id": makeRequestId() };
-  if (isVercel) {
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
-    } catch { /* ignore */ }
+
+  // Build the request headers for a single attempt. The token is resolved fresh
+  // on every attempt (and force-refreshed once after an auth rejection) so a
+  // stale or missing token is never reused across retries.
+  async function buildHeaders(forceRefresh: boolean): Promise<Record<string, string>> {
+    const headers: Record<string, string> = { ...baseHeaders, "x-request-id": makeRequestId() };
+    if (isVercel) {
+      const token = await resolveCallerToken(forceRefresh);
+      if (token) headers.Authorization = `Bearer ${token}`;
+      else delete headers.Authorization;
+    }
+    return headers;
   }
 
   let lastErr: EdgeFunctionError | null = null;
   let pendingDelayMs: number | null = null;
+  // Set once, after a 401, to mint a fresh token before the single recovery retry.
+  let refreshedOnce = false;
 
   // Long-running LLM mutations (rewrite, generate-content) already have
   // server-side fallback + gateway-level model failover. Don't layer client
@@ -324,6 +360,7 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
 
     const timeout = withTimeoutSignal(signal, requestTimeoutMs(functionName, body));
     try {
+      const headers = await buildHeaders(refreshedOnce);
       const res = await fetch(url, {
         method: "POST",
         headers,
@@ -344,11 +381,18 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
       const msg = extractMessage(parsed, res.status);
       lastErr = new EdgeFunctionError(msg, res.status, errorMeta(parsed));
 
-      // Never retry on these - they're fatal
-      if (res.status === 401 || res.status === 403) {
-        if (cached && !cached.isStale) {
-          // If we have fresh cache, prefer it for auth walls? No - auth must fail fast
+      // Auth wall. On 401 (the caller's token was missing or expired) mint a
+      // fresh Supabase token and retry once before giving up; 403 is an
+      // entitlement rejection, which a refresh cannot fix, so fail fast.
+      if (res.status === 401) {
+        if (isVercel && !refreshedOnce && attempt < maxAttempts) {
+          refreshedOnce = true;
+          pendingDelayMs = 400;
+          continue;
         }
+        throw lastErr;
+      }
+      if (res.status === 403) {
         throw lastErr;
       }
 
