@@ -119,6 +119,21 @@ function supabaseProjectUrlFromToken(authorization: string): string | null {
  * caller token is what authenticates, so we only need the key to pick the
  * project; a 200 with a `user.id` is the success signal.
  */
+// Trace of the last caller-verification probe (per-request). Populated by
+// verifyCallerToken and surfaced by callerAuthDiagnostic so a failed 401
+// self-reports exactly which GoTrue URL/key was tried and with what status.
+let lastVerificationTrace: { url: string; key: string; status: number }[] = [];
+
+function verificationKeyLabel(key: string | undefined): string {
+  if (!key) return '(none)';
+  if (key === process.env.SUPABASE_SERVICE_ROLE_KEY) return 'SUPABASE_SERVICE_ROLE_KEY';
+  if (key === process.env.SUPABASE_ANON_KEY) return 'SUPABASE_ANON_KEY';
+  if (key === process.env.VITE_SUPABASE_PUBLISHABLE_KEY) return 'VITE_SUPABASE_PUBLISHABLE_KEY';
+  if (key === process.env.VITE_SUPABASE_ANON_KEY) return 'VITE_SUPABASE_ANON_KEY';
+  if (key === FALLBACK_PUBLISHABLE_KEY) return 'FALLBACK_PUBLISHABLE_KEY';
+  return '(unknown)';
+}
+
 async function verifyCallerToken(
   authorization: string,
 ): Promise<AuthenticatedUser | null> {
@@ -140,21 +155,29 @@ async function verifyCallerToken(
     FALLBACK_PUBLISHABLE_KEY,
   ].filter((k): k is string => Boolean(k));
 
+  const trace: { url: string; key: string; status: number }[] = [];
   for (const supabaseUrl of candidateUrls) {
     for (const apikey of candidateKeys) {
       try {
-        const result = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        const url = `${supabaseUrl}/auth/v1/user`;
+        const result = await fetch(url, {
           headers: { apikey, Authorization: authorization },
           signal: AbortSignal.timeout(5_000),
         });
+        trace.push({ url, key: verificationKeyLabel(apikey), status: result.status });
         if (!result.ok) continue;
         const user = (await result.json()) as AuthenticatedUser;
-        if (user?.id) return user;
-      } catch {
+        if (user?.id) {
+          lastVerificationTrace = trace;
+          return user;
+        }
+      } catch (e) {
+        trace.push({ url: `${supabaseUrl}/auth/v1/user`, key: verificationKeyLabel(apikey), status: -1 });
         // try the next key / URL
       }
     }
   }
+  lastVerificationTrace = trace;
   return null;
 }
 
@@ -168,8 +191,9 @@ async function authenticatedUser(req: Request): Promise<AuthenticatedUser | null
  * Lightweight, always-on diagnostic attached to any AUTH_REQUIRED 401 so the
  * failure is self-describing in the response body (no log access needed).
  * Reports whether the caller actually sent a bearer, which project the token
- * claims, and whether that matches the server's configured project — which
- * isolates a client-no-token bug from a server project-mismatch config bug.
+ * claims, whether that matches the server's configured project, and the exact
+ * URL/key/status of every GoTrue validation attempt — the failing network call
+ * is exposed without digging through logs.
  */
 function callerAuthDiagnostic(req: Request): Record<string, unknown> {
   const authorization = req.headers.get('authorization') || '';
@@ -180,12 +204,15 @@ function callerAuthDiagnostic(req: Request): Record<string, unknown> {
     process.env.VITE_SUPABASE_URL ||
     FALLBACK_SUPABASE_URL
   ).replace(/\/$/, '');
-  return {
+  const result = {
     authHeader: hasBearer ? 'present' : 'missing',
     authProject: tokenProject,
     envProject,
     projectMatch: tokenProject ? tokenProject === envProject : null,
+    attempts: lastVerificationTrace,
   };
+  console.error('[clone-crush:auth] caller rejected -> 401', JSON.stringify(result));
+  return result;
 }
 async function hasProEntitlement(userId: string): Promise<boolean> {
   const supabaseUrl = requiredEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
