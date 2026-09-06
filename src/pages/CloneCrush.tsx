@@ -841,6 +841,10 @@ export default function CloneCrush() {
         try { const s = JSON.parse(localStorage.getItem("ghost_streak_v2") || "{}"); const xp = (s.xp || 0) + 30; const streak = s.streak || 1; localStorage.setItem("ghost_streak_v2", JSON.stringify({ ...s, xp, streak, lastDate: new Date().toDateString() })); } catch {
           // Streak telemetry must never block a successful generation.
         }
+        // A valid 200 now received: clear any lingering sign-in/auth error
+        // toast so the UI cannot stay stuck on the Chain-Loop error overlay.
+        toast.dismiss("clone-crush-auth");
+        toast.dismiss("clone-crush-forbidden");
         toast.success(`🚀 ${achievedTier==="premium"?"99% GLITCH":"60% Standard"} Chain-Loop Secured via Ghost Node • ${promptCount} prompts • +30 XP`);
 
         // --- SLIDING CONVEYOR ADVANCE ----------------------------------

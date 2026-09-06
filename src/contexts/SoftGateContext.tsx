@@ -188,6 +188,20 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
     }
   }, [finishPending, resetClientStateForUser, setAppTier, setLicense, setUser]);
 
+  // Safety net: a sign-in dialog opened via requestAuthentication must never
+  // stay blocking once the user is genuinely authenticated. syncSession()
+  // resolves a pending request in its `finally`, but that only runs when it is
+  // still the latest sync generation; if a later or interrupted sync superseded
+  // it, `finishPending(true)` is skipped and the dialog can stay open even
+  // though the session is valid and every request returns 200. The moment auth
+  // AND entitlement are confirmed, force-close and resolve any open request so
+  // the UI can never remain stuck behind the overlay.
+  useEffect(() => {
+    if (isAuthenticated && isEntitlementVerified && pendingRef.current) {
+      finishPending(true);
+    }
+  }, [isAuthenticated, isEntitlementVerified, finishPending]);
+
   useEffect(() => {
     let active = true;
 
