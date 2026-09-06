@@ -833,7 +833,7 @@ export default function CloneCrush() {
         niche: nicheInput,
         tier: requestedTier,
         language: outputLanguage,
-      }), 55_000);
+      }), 58_000);
       steps[4].status = "success"; steps[5].status = "processing"; setLogSteps([...steps]);
 
       if (rewriteRes.success && rewriteRes.rewrite) {
@@ -982,16 +982,32 @@ export default function CloneCrush() {
         isExecutingRef.current = false;
         return;
       }
-      // Genuine transport failure — mark remaining steps as recovered so
-      // the UI doesn't hang on a spinner, but do NOT claim success on a
-      // paywall/auth failure (those cases are handled above).
-      const recovered = steps.map((s) =>
+      // Genuine transport failure — the generation did NOT succeed, so never
+      // pretend it did (a fake-green "RECOVERED" silently hid these failures
+      // and left the button reverting with no result and no message). Mark the
+      // stuck step as failed so the UI is honest, and surface the real reason
+      // to the user so a failure is never silent. Already-handled paywall /
+      // auth / daily-limit cases return above, so reaching here is a real error.
+      const failed = steps.map((s) =>
         s.status === "processing" || s.status === "pending"
-          ? { ...s, status: "success" as const, meta: s.meta || "RECOVERED" }
+          ? { ...s, status: "error" as const, meta: s.meta || "FAILED" }
           : s,
       );
-      setLogSteps(recovered);
-      console.warn("[clone-crush] Chain-Loop transport error:", err instanceof Error ? err.message : String(err));
+      setLogSteps(failed);
+      const message = err instanceof Error ? err.message : String(err);
+      const code = (err as any)?.code;
+      const status = (err as any)?.status;
+      console.warn("[clone-crush] Chain-Loop transport error:", message, { code, status });
+      toast.error(
+        code === "TIMEOUT"
+          ? "Generation timed out — the AI engine took too long. Please try again."
+          : code === "NETWORK"
+            ? "Network connection lost during generation. Check your connection and try again."
+            : code === "INTERNAL"
+              ? "The generation engine hit a snag. Please try again."
+              : `Generation failed: ${message || "unknown error"}`,
+        { id: "clone-crush-generation" },
+      );
     } finally {
       setIsRewriting(false);
       isExecutingRef.current = false;
@@ -1645,7 +1661,7 @@ export default function CloneCrush() {
                           {step.status==="processing" && <span className="text-cyan-400 animate-pulse text-[9px] flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-cyan-400 animate-ping" />EXEC</span>}
                           {step.status==="success" && <span className="text-green-400 text-[9px] font-bold">SECURED ✓</span>}
                           {step.status==="rerouting" && <span className="text-amber-300 text-[9px] font-bold flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" />RE-ROUTING VIA GHOST</span>}
-                          {step.status==="error" && <span className="text-amber-300 font-bold text-[9px]">RE-ROUTING</span>}
+                          {step.status==="error" && <span className="text-red-400 font-bold text-[9px]">FAILED ⚠</span>}
                         </span>
                       </div>
                     ))}
