@@ -65,6 +65,15 @@ type AuthenticatedUser = { id: string };
 // privileged access; the caller's own bearer token is what authenticates.
 const FALLBACK_SUPABASE_URL = "https://tiglslhkmamrjtpkskkd.supabase.co";
 const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_gIMHtg48cnHmLLodvKDM6g_fuMIB6hI";
+
+// The client's OWN project, pinned directly from the client bundle (public,
+// non-secret values). Using these as the FIRST choice makes caller validation
+// deterministic and independent of Vercel env resolution, so a stale or
+// mis-set SUPABASE_URL/ANON_KEY on the platform can never pull the GoTrue check
+// onto a different signing context. The caller's session token is minted by
+// THIS project+key, so validating against it always uses the matching context.
+const PINNED_CLIENT_SUPABASE_URL = "https://tiglslhkmamrjtpkskkd.supabase.co";
+const PINNED_CLIENT_PUBLISHABLE_KEY = "sb_publishable_gIMHtg48cnHmLLodvKDM6g_fuMIB6hI";
 function requiredEnv(name: string, fallback?: string): string {
   const value = process.env[name] || (fallback ? process.env[fallback] : '') || '';
   if (!value) throw new Error(`${name} is not configured`);
@@ -177,26 +186,34 @@ async function verifyCallerToken(
     process.env.VITE_SUPABASE_URL ||
     FALLBACK_SUPABASE_URL
   ).replace(/\/$/, '');
+  // Deterministic, env-independent order: the Pinned client project (which
+  // minted the caller's token) is tried FIRST, then the token's own issuer, then
+  // the env-resolved server URL, then the fallback. The pinned project always
+  // exists and is validated first, so even a wrong env SUPABASE_URL cannot
+  // redirect the caller check onto a different project.
   const candidateUrls = Array.from(
-    new Set([tokenProject, envUrl, FALLBACK_SUPABASE_URL].filter((u): u is string => Boolean(u))),
+    new Set(
+      [PINNED_CLIENT_SUPABASE_URL, tokenProject, envUrl, FALLBACK_SUPABASE_URL]
+        .filter((u): u is string => Boolean(u)),
+    ),
   );
 
-  // The project credential used to resolve a *caller*. The client mints the
-  // session token with the NEW publishable key generation (sb_publishable_*),
-  // so we must present a key from the SAME generation — a legacy `eyJ…` anon
-  // key uses a different signing context and GoTrue rejects the caller's token
-  // with "signature is invalid" (bad_jwt). Therefore the publishable generation
-  // is tried FIRST, and the legacy anon key is only a last-resort fallback.
-  // De-duplicated, order = publishable generation, then legacy anon, then the
-  // known-good fallback (the publishable key already shipped in the bundle).
+  // Key used to resolve a *caller* via `apikey`. Prefer the client's pinned
+  // publishable generation FIRST, then the publishable generation from env, then
+  // legacy anon keys. A legacy `eyJ…` anon key is a different signing context
+  // and GoTrue rejects a publishable-minted token with "signature is invalid"
+  // (bad_jwt), so it must never be preferred over the publishable key.
   const candidateKeys = Array.from(
-    new Set([
-      process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      process.env.SUPABASE_PUBLISHABLE_KEY,
-      FALLBACK_PUBLISHABLE_KEY,
-      process.env.VITE_SUPABASE_ANON_KEY, // legacy, fallback only
-      process.env.SUPABASE_ANON_KEY,      // legacy, fallback only
-    ].filter((k): k is string => Boolean(k))),
+    new Set(
+      [
+        PINNED_CLIENT_PUBLISHABLE_KEY,
+        process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        process.env.SUPABASE_PUBLISHABLE_KEY,
+        FALLBACK_PUBLISHABLE_KEY,
+        process.env.VITE_SUPABASE_ANON_KEY, // legacy, last resort
+        process.env.SUPABASE_ANON_KEY,      // legacy, last resort
+      ].filter((k): k is string => Boolean(k)),
+    ),
   );
 
   const attempts: CallerAuthAttempt[] = [];
