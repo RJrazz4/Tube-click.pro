@@ -957,7 +957,7 @@ export default function CloneCrush() {
           isExecutingRef.current = false;
           toast.error("Your session was interrupted. Please sign in again and retry.", { id: "clone-crush-auth" });
           window.setTimeout(() => toast.dismiss("clone-crush-auth"), 8000);
-          void requestAuthentication("re-authenticate to complete your Chain-Loop", { force: true });
+          void requestAuthentication("re-authenticate to complete your Chain-Loop");
           return;
         }
         if (code === "PRO_REQUIRED" || (status === 403 && requestedTier === "premium")) {
@@ -987,7 +987,7 @@ export default function CloneCrush() {
         isExecutingRef.current = false;
         toast.error("Your session was interrupted. Please sign in again and retry.", { id: "clone-crush-auth" });
         window.setTimeout(() => toast.dismiss("clone-crush-auth"), 8000);
-        void requestAuthentication("re-authenticate to complete your Chain-Loop", { force: true });
+        void requestAuthentication("re-authenticate to complete your Chain-Loop");
         return;
       }
       if (errCode === "PRO_REQUIRED" || (errStatus === 403 && requestedTier === "premium")) {

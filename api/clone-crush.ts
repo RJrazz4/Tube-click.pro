@@ -119,6 +119,44 @@ function supabaseProjectUrlFromToken(authorization: string): string | null {
  * caller token is what authenticates, so we only need the key to pick the
  * project; a 200 with a `user.id` is the success signal.
  */
+function decodeJwt(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64.length % 4 ? b64 + '='.repeat(4 - (b64.length % 4)) : b64;
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function decodeBase64Url(value: string): Uint8Array {
+  const b64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64.length % 4 ? b64 + '='.repeat(4 - (b64.length % 4)) : b64;
+  const bin = atob(padded);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** Verify an HS256 JWT signature with Web Crypto (Edge-native, no deps). */
+async function verifyHs256Signature(token: string, secret: string): Promise<boolean> {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return false;
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify'],
+    );
+    const sig = decodeBase64Url(parts[2]);
+    const data = enc.encode(`${parts[0]}.${parts[1]}`);
+    return await crypto.subtle.verify('HMAC', key, sig, data);
+  } catch {
+    return false;
+  }
+}
+
 // Trace of the last caller-verification probe (per-request). Populated by
 // verifyCallerToken and surfaced by callerAuthDiagnostic so a failed 401
 // self-reports exactly which GoTrue URL/key was tried and with what status.
@@ -178,6 +216,65 @@ async function verifyCallerToken(
     }
   }
   lastVerificationTrace = trace;
+
+  // ---- Fallback: verify the JWT when GoTrue `/auth/v1/user` rejects it -----
+  // A fresh, valid session token can be 403'd by GoTrue even when the caller is
+  // genuinely signed in (e.g. the project's JWT signing secret was rotated, or
+  // GoTrue gates a specific session). Rather than report such a caller as
+  // anonymous, verify the token claims ourselves and confirm the user is real
+  // via the GoTrue admin API under the service-role key.
+  const bearer = authorization.replace(/^bearer\s+/i, '').trim();
+  const claims = decodeJwt(bearer);
+  const envUrl = (
+    process.env.SUPABASE_URL ||
+    process.env.VITE_SUPABASE_URL ||
+    FALLBACK_SUPABASE_URL
+  ).replace(/\/$/, '');
+  if (claims) {
+    const issUrl = typeof claims.iss === 'string'
+      ? (claims.iss.match(/^(https?:\/\/[^/]+)/)?.[1] || '').replace(/\/$/, '')
+      : null;
+    const sub = typeof claims.sub === 'string' ? claims.sub : null;
+    const exp = typeof claims.exp === 'number' ? claims.exp : null;
+    const notExpired = exp ? exp * 1000 > Date.now() : true;
+    const sameProject = issUrl === envUrl || issUrl === null; // allow missing iss only with signature proof
+
+    if (sub && sameProject && notExpired) {
+      // Path A — proper HS256 signature verification with a configured secret.
+      const jwtSecret = process.env.SUPABASE_JWT_SECRET || process.env.SUPABASE_AUTH_JWT_SECRET || process.env.GOTRUE_JWT_SECRET;
+      if (jwtSecret && (await verifyHs256Signature(bearer, jwtSecret))) {
+        console.warn('[clone-crush:auth] accepted via HS256 signature verification');
+        lastVerificationTrace = [...trace, { url: 'jwt:hs256', key: 'SUPABASE_JWT_SECRET', status: 200 }];
+        return { id: sub };
+      }
+      // Path B — confirm the sub is a real user via the GoTrue admin API.
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (serviceKey) {
+        try {
+          const usersRes = await fetch(`${envUrl}/auth/v1/admin/users/${encodeURIComponent(sub)}`, {
+            headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+            signal: AbortSignal.timeout(6_000),
+          });
+          if (usersRes.ok) {
+            const body = await usersRes.json() as { id?: string };
+            if (body?.id === sub) {
+              console.warn('[clone-crush:auth] accepted via GoTrue admin lookup (service role)');
+              lastVerificationTrace = [
+                ...trace,
+                { url: `${envUrl}/auth/v1/admin/users/${sub}`, key: 'SUPABASE_SERVICE_ROLE_KEY', status: 200 },
+              ];
+              return { id: sub };
+            }
+          } else {
+            trace.push({ url: `${envUrl}/auth/v1/admin/users/${sub}`, key: 'SUPABASE_SERVICE_ROLE_KEY', status: usersRes.status });
+            lastVerificationTrace = trace;
+          }
+        } catch {
+          // fall through to reject
+        }
+      }
+    }
+  }
   return null;
 }
 

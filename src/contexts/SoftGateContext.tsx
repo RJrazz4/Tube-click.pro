@@ -39,12 +39,11 @@ interface SoftGateContextValue {
   authReady: boolean;
   runGuarded: <T>(actionLabel: string, action: () => Promise<T> | T) => Promise<T | undefined>;
   /**
-   * Ensure the user is authenticated, opening the sign-in dialog if needed.
-   * When `force` is true, a freshly-rejected (stale) session is signed out
-   * first so a genuinely fresh token is minted instead of trusting an expired
-   * session object (which otherwise makes this a silent no-op).
+   * Ensure the user is authenticated, opening the sign-in dialog only when
+   * there is no session to reuse. Non-destructive: it never signs the user
+   * out, because a server-side 401 does not mean the browser session is dead.
    */
-  requestAuthentication: (actionLabel?: string, opts?: { force?: boolean }) => Promise<boolean>;
+  requestAuthentication: (actionLabel?: string) => Promise<boolean>;
   /** Resolves true once auth is fully hydrated; bounded, never hangs. */
   waitForAuthReady: () => Promise<boolean>;
 }
@@ -373,23 +372,16 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("message", receiveAuth);
   }, [syncSession]);
 
-  const requestAuthentication = useCallback(async (actionLabel = "continue", opts?: { force?: boolean }) => {
-    if (!opts?.force) {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) return true;
-    } else {
-      // A prior server-authenticated call was rejected with 401 even though a
-      // session object exists: the stored session is stale/dead (access token
-      // rejected by GoTrue and the refresh token expired, so refreshSession()
-      // cannot renew it). Clearing it forces a fresh sign-in so a valid token
-      // is actually minted — otherwise getSession() would keep returning the
-      // same dead session and this path would silently no-op forever.
-      try {
-        await supabase.auth.signOut({ scope: "local" });
-      } catch {
-        // Fall through: the dialog may still open and mint a fresh session.
-      }
-    }
+  const requestAuthentication = useCallback(async (actionLabel = "continue") => {
+    // Never sign the user out here. A server 401 on the rewrite is a server-side
+    // token-validation problem, not proof the session is dead — a fresh session
+    // can be rejected by the edge function while being perfectly valid in this
+    // browser (see the GoTrue 403 investigation). Destroying the session on 401
+    // caused an infinite sign-in -> 401 -> forced-logout -> modal loop, so the
+    // recovery path is non-destructive: only open the dialog when there is
+    // genuinely no session to reuse.
+    const { data } = await supabase.auth.getSession();
+    if (data.session) return true;
     if (pendingPromiseRef.current) return pendingPromiseRef.current;
     setAuthError("");
     const authPromise = new Promise<boolean>((resolve) => {
