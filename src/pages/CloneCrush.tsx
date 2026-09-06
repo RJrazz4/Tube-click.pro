@@ -30,6 +30,7 @@ import { useContentStore } from "@/stores/useContentStore";
 import { useAuthStore, isProTier } from "@/stores/useAuthStore";
 import { useTranscriptExtraction, useCloneCrushMutation } from "@/hooks/useSecureQuery";
 import { useSoftGate } from "@/contexts/SoftGateContext";
+import { getValidAccessToken } from "@/lib/auth/accessToken";
 import { useProUpgrade } from "@/contexts/ProUpgradeContext";
 import { useWorkflowStore } from "@/stores/useWorkflowStore";
 import { DailyLimitOverlay } from "@/components/showdown/DailyLimitOverlay";
@@ -189,11 +190,32 @@ export default function CloneCrush() {
   const {
     runGuarded,
     requestAuthentication,
+    waitForAuthReady,
     isAuthLoading,
     isEntitlementLoading,
     isEntitlementVerified,
     isAuthenticated,
   } = useSoftGate();
+
+  /**
+   * Handle an AUTH_REQUIRED / 401 from the engine. If a real Supabase session
+   * exists (the user is signed in), a transient 401 is an auth-sync hiccup, not
+   * a sign-in prompt: clear the stale toast rather than re-gating a signed-in
+   * user behind a "sign in" toast (the stuck-toast bug). Only when there is
+   * genuinely no session do we prompt to sign in. The toast is also auto-dismissed
+   * after a bounded window so it can never stay stuck.
+   */
+  const handleAuthWall = useCallback(async () => {
+    const token = await getValidAccessToken();
+    if (token) {
+      toast.dismiss("clone-crush-auth");
+      toast.dismiss("clone-crush-forbidden");
+      return;
+    }
+    toast.error("Sign in to complete your Free Chain-Loop", { id: "clone-crush-auth" });
+    window.setTimeout(() => toast.dismiss("clone-crush-auth"), 8000);
+    void requestAuthentication("complete your Free Chain-Loop");
+  }, [requestAuthentication]);
   const { openProUpgrade } = useProUpgrade();
 
   // Synchronous cold-start hygiene: if the user reopens the page AFTER
@@ -914,8 +936,7 @@ export default function CloneCrush() {
           setLogSteps([]);
           setIsRewriting(false);
           isExecutingRef.current = false;
-          toast.error("Sign in to complete your Free Chain-Loop", { id: "clone-crush-auth" });
-          void requestAuthentication("complete your Free Chain-Loop");
+          void handleAuthWall();
           return;
         }
         if (code === "PRO_REQUIRED" || (status === 403 && requestedTier === "premium")) {
@@ -936,8 +957,7 @@ export default function CloneCrush() {
         setLogSteps([]);
         setIsRewriting(false);
         isExecutingRef.current = false;
-        toast.error("Sign in to complete your Free Chain-Loop", { id: "clone-crush-auth" });
-        void requestAuthentication("complete your Free Chain-Loop");
+        void handleAuthWall();
         return;
       }
       if (errCode === "PRO_REQUIRED" || (errStatus === 403 && requestedTier === "premium")) {
@@ -1024,6 +1044,19 @@ export default function CloneCrush() {
       persistPendingAuthWorkflow(inMemoryPending);
       const authenticated = await requestAuthentication("complete your Free Chain-Loop");
       if (!authenticated) {
+        consumePendingAuthWorkflow();
+        return;
+      }
+
+      // The dialog resolved, but the gated action must only resume once auth is
+      // FULLY hydrated (session + entitlement reconciled). A dialog can resolve
+      // before the session is usable, which would make performCloneAndCrush hit
+      // a 401 and fire a stuck "Sign in..." toast. Wait for the same gate
+      // runGuarded uses, and clear any stale auth toast before resuming.
+      const ready = await waitForAuthReady();
+      toast.dismiss("clone-crush-auth");
+      toast.dismiss("clone-crush-forbidden");
+      if (!ready) {
         consumePendingAuthWorkflow();
         return;
       }

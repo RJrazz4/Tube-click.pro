@@ -39,6 +39,8 @@ interface SoftGateContextValue {
   authReady: boolean;
   runGuarded: <T>(actionLabel: string, action: () => Promise<T> | T) => Promise<T | undefined>;
   requestAuthentication: (actionLabel?: string) => Promise<boolean>;
+  /** Resolves true once auth is fully hydrated; bounded, never hangs. */
+  waitForAuthReady: () => Promise<boolean>;
 }
 
 const SoftGateContext = createContext<SoftGateContextValue | null>(null);
@@ -508,6 +510,7 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       authReady,
       runGuarded,
       requestAuthentication,
+      waitForAuthReady,
     }),
     [
       isAuthLoading,
@@ -517,6 +520,7 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       authReady,
       requestAuthentication,
       runGuarded,
+      waitForAuthReady,
     ],
   );
 
