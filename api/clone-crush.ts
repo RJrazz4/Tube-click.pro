@@ -181,49 +181,60 @@ async function verifyCallerToken(
     new Set([tokenProject, envUrl, FALLBACK_SUPABASE_URL].filter((u): u is string => Boolean(u))),
   );
 
-  // The authoritative project credential for resolving a *caller*. Prefer the
-  // legacy anon key, then the modern publishable key, then the known-good
-  // fallback (the same publishable key shipped in the client bundle).
-  const anonKey =
-    process.env.SUPABASE_ANON_KEY ||
-    process.env.VITE_SUPABASE_ANON_KEY ||
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    FALLBACK_PUBLISHABLE_KEY;
+  // The project credential used to resolve a *caller*. The client mints the
+  // session token with the NEW publishable key generation (sb_publishable_*),
+  // so we must present a key from the SAME generation — a legacy `eyJ…` anon
+  // key uses a different signing context and GoTrue rejects the caller's token
+  // with "signature is invalid" (bad_jwt). Therefore the publishable generation
+  // is tried FIRST, and the legacy anon key is only a last-resort fallback.
+  // De-duplicated, order = publishable generation, then legacy anon, then the
+  // known-good fallback (the publishable key already shipped in the bundle).
+  const candidateKeys = Array.from(
+    new Set([
+      process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      process.env.SUPABASE_PUBLISHABLE_KEY,
+      FALLBACK_PUBLISHABLE_KEY,
+      process.env.VITE_SUPABASE_ANON_KEY, // legacy, fallback only
+      process.env.SUPABASE_ANON_KEY,      // legacy, fallback only
+    ].filter((k): k is string => Boolean(k))),
+  );
 
   const attempts: CallerAuthAttempt[] = [];
   for (const supabaseUrl of candidateUrls) {
-    const url = `${supabaseUrl}/auth/v1/user`;
-    try {
-      const res = await fetch(url, {
-        headers: { apikey: anonKey, Authorization: authorization },
-        signal: AbortSignal.timeout(5_000),
-      });
-      const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-      attempts.push({
-        url,
-        key: 'anon/publishable',
-        status: res.status,
-        errorCode: typeof body?.error_code === 'string' ? body.error_code : typeof body?.code === 'string' ? body.code : undefined,
-        errorMsg: typeof body?.msg === 'string' ? body.msg : typeof body?.message === 'string' ? body.message : undefined,
-      });
-      if (!res.ok) continue;
-      const user = (body ?? {}) as unknown as AuthenticatedUser;
-      if (user?.id) {
-        lastCallerAuth = {
-          authHeader: 'present',
-          tokenProject,
-          envProject: envUrl,
-          projectMatch: tokenProject ? tokenProject === envUrl : null,
-          tokenIss: claims?.iss ?? null,
-          tokenAud: claims?.aud ?? null,
-          tokenExpired: claims?.exp ? claims.exp * 1000 <= Date.now() : null,
-          attempts,
-        };
-        return user;
+    for (const apikey of candidateKeys) {
+      const url = `${supabaseUrl}/auth/v1/user`;
+      try {
+        const res = await fetch(url, {
+          headers: { apikey, Authorization: authorization },
+          signal: AbortSignal.timeout(5_000),
+        });
+        const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+        const keyLabel = apikey.startsWith('sb_publishable_') ? 'publishable' : 'anon(legacy)';
+        attempts.push({
+          url,
+          key: keyLabel,
+          status: res.status,
+          errorCode: typeof body?.error_code === 'string' ? body.error_code : typeof body?.code === 'string' ? body.code : undefined,
+          errorMsg: typeof body?.msg === 'string' ? body.msg : typeof body?.message === 'string' ? body.message : undefined,
+        });
+        if (!res.ok) continue;
+        const user = (body ?? {}) as unknown as AuthenticatedUser;
+        if (user?.id) {
+          lastCallerAuth = {
+            authHeader: 'present',
+            tokenProject,
+            envProject: envUrl,
+            projectMatch: tokenProject ? tokenProject === envUrl : null,
+            tokenIss: claims?.iss ?? null,
+            tokenAud: claims?.aud ?? null,
+            tokenExpired: claims?.exp ? claims.exp * 1000 <= Date.now() : null,
+            attempts,
+          };
+          return user;
+        }
+      } catch (e) {
+        attempts.push({ url, key: 'publishable', status: -1, errorMsg: e instanceof Error ? e.message : String(e) });
       }
-    } catch (e) {
-      attempts.push({ url, key: 'anon/publishable', status: -1, errorMsg: e instanceof Error ? e.message : String(e) });
     }
   }
 
