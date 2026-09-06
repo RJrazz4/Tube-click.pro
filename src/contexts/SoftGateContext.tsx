@@ -13,6 +13,7 @@ import { getCanonicalRoot } from "@/lib/domain/canonical";
 import { consumeGuestPreview, loadProEntitlement, RegistrationRequiredError } from "@/lib/auth/guestAccess";
 import { loadTrialEntitlement } from "@/lib/auth/trialAccess";
 import { rememberAuthReturnTo, safeAuthReturnTo } from "@/lib/auth/pendingAuth";
+import { shouldForceResolvePendingAuth } from "@/contexts/softGateAuthDecision";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
@@ -195,9 +196,16 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   // it, `finishPending(true)` is skipped and the dialog can stay open even
   // though the session is valid and every request returns 200. The moment auth
   // AND entitlement are confirmed, force-close and resolve any open request so
-  // the UI can never remain stuck behind the overlay.
+  // the UI can never remain stuck behind the overlay. (Predicate is extracted
+  // to softGateAuthDecision so the contract is regression-tested.)
   useEffect(() => {
-    if (isAuthenticated && isEntitlementVerified && pendingRef.current) {
+    if (
+      shouldForceResolvePendingAuth({
+        isAuthenticated,
+        isEntitlementVerified,
+        hasPendingAuthRequest: Boolean(pendingRef.current),
+      })
+    ) {
       finishPending(true);
     }
   }, [isAuthenticated, isEntitlementVerified, finishPending]);
