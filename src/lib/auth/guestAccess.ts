@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getValidAccessToken } from "@/lib/auth/accessToken";
 
 const LOCAL_PREVIEW_KEY = "tc_guest_preview_consumed_v1";
 
@@ -21,9 +22,9 @@ export class RegistrationRequiredError extends Error {
 }
 
 async function request(action: "status" | "consume" | "entitlement"): Promise<GuestAccessResponse> {
-  const { data } = await supabase.auth.getSession();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+  const token = await getValidAccessToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
 
   const response = await fetch("/api/guest-access", {
     method: "POST",

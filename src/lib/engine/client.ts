@@ -1,9 +1,10 @@
-import { supabase } from "@/integrations/supabase/client";
+import { getValidAccessToken } from "@/lib/auth/accessToken";
 
 /**
  * Engine API client (tubeclickpro-backend-engine on Render).
- * Bearer = the user's Supabase access token; one automatic retry after a
- * session refresh on 401. Mirrors the CryptoCheckout auth pattern.
+ * Bearer = the user's Supabase access token. Tokens are resolved through
+ * getValidAccessToken() (which auto-refreshes a missing/near-expiry session)
+ * and one automatic retry happens after a session refresh on 401.
  */
 
 import { normalizeBaseUrl } from "./url";
@@ -33,12 +34,12 @@ export function engineConfigured(): boolean {
   return ENGINE_URL.length > 0;
 }
 
-async function accessToken(): Promise<string> {
-  const { data } = await supabase.auth.getSession();
-  if (!data.session?.access_token) {
+async function accessToken(forceRefresh = false): Promise<string> {
+  const token = await getValidAccessToken({ forceRefresh });
+  if (!token) {
     throw new EngineError(401, "NOT_AUTHENTICATED", "Sign in to use the intelligence engine. Your session may have expired.");
   }
-  return data.session.access_token;
+  return token;
 }
 
 interface EngineFetchOptions {
@@ -56,20 +57,23 @@ export async function engineFetch<T>(path: string, options: EngineFetchOptions =
   }
   const token = options.anonymous ? null : await accessToken();
 
-  const doFetch = async (): Promise<Response> =>
-    fetch(`${ENGINE_URL}${path}`, {
+  const doFetch = async (forceRefresh: boolean): Promise<Response> => {
+    const bearer = options.anonymous ? null : await accessToken(forceRefresh);
+    return fetch(`${ENGINE_URL}${path}`, {
       method: options.method ?? "GET",
       headers: {
         ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
       },
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
+  };
 
-  let response = await doFetch();
+  let response = await doFetch(false);
   if (response.status === 401 && !options.anonymous) {
-    await supabase.auth.refreshSession();
-    response = await doFetch();
+    // Mint a fresh token (getValidAccessToken({forceRefresh}) already refreshes
+    // the session) and retry once before giving up.
+    response = await doFetch(true);
   }
 
   if (options.raw) {

@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Check, ChevronDown, Copy, Loader2, ShieldCheck, TriangleAlert, Wallet } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { getValidAccessToken } from "@/lib/auth/accessToken";
 import { toast } from "sonner";
 import { UsdtLogo, USDT_LOGO_DATA_URI } from "./UsdtLogo";
 import "./checkout.css";
@@ -79,8 +79,7 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!API_BASE_URL) {
     throw new Error("VITE_PAYMENT_API_URL is not configured.");
   }
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  const token = await getValidAccessToken();
   if (!token) throw new Error("Not signed in.");
 
   const res = await fetch(`${API_BASE_URL}${path}`, {

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Check, Loader2, TicketPercent } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { supabase } from "@/integrations/supabase/client";
+import { getValidAccessToken } from "@/lib/auth/accessToken";
 import { toast } from "sonner";
 
 /**
@@ -30,8 +30,7 @@ export function ReferralApplyForm({ onApplied }: { onApplied?: () => void } = {}
       return;
     }
 
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
+    const token = await getValidAccessToken();
     if (!token) {
       toast.error("You need to be signed in to apply a referral code.");
       return;

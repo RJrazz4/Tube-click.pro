@@ -19,6 +19,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { getValidAccessToken } from "@/lib/auth/accessToken";
 
 export class EdgeFunctionError extends Error {
   status: number;
@@ -262,10 +263,11 @@ async function sleepWithJitter(baseMs: number): Promise<void> {
 export async function fetchCloneCrushQuota(signal?: AbortSignal): Promise<any> {
   const { url, headers, isVercel } = getApiEndpoint("clone-crush");
   if (isVercel) {
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
-    } catch { /* ignore */ }
+    // Resolve a valid (auto-refreshing) token so a stale/near-expiry session
+    // can never turn the quota peek into a spurious 401.
+    const token = await getValidAccessToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    else delete headers.Authorization;
   }
   const res = await fetch(url, {
     method: "POST",
@@ -278,34 +280,6 @@ export async function fetchCloneCrushQuota(signal?: AbortSignal): Promise<any> {
     throw new EdgeFunctionError(text || `Quota check failed (${res.status})`, res.status);
   }
   return res.json();
-}
-
-// Resolve a Supabase access token that the backend will accept, refreshing the
-// session when the cached token is missing or already expired. `getSession()`
-// can run before auth has hydrated (yielding no token) or hand back an expired
-// access token; in either case the edge function rejects the request with a 401
-// and, without this refresh, there is no recovery path.
-async function resolveCallerToken(forceRefresh: boolean): Promise<string | null> {
-  try {
-    if (forceRefresh) {
-      const { data, error } = await supabase.auth.refreshSession();
-      if (error) return null;
-      return data.session?.access_token ?? null;
-    }
-    const { data, error } = await supabase.auth.getSession();
-    if (error || !data.session) return null;
-    const token = data.session.access_token;
-    const expiredSoon =
-      typeof data.session.expires_at === "number" &&
-      data.session.expires_at * 1000 - Date.now() < 90_000;
-    if (token && !expiredSoon) return token;
-    // Missing or within ~90s of expiry: refresh once so we never send a token
-    // the backend is already rejecting.
-    const { data: fresh } = await supabase.auth.refreshSession();
-    return fresh.session?.access_token ?? token ?? null;
-  } catch {
-    return null;
-  }
 }
 
 export async function fetchEdgeFunctionJson<T>(functionName: string, body: unknown, signal?: AbortSignal): Promise<T> {
@@ -330,7 +304,7 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
   async function buildHeaders(forceRefresh: boolean): Promise<Record<string, string>> {
     const headers: Record<string, string> = { ...baseHeaders, "x-request-id": makeRequestId() };
     if (isVercel) {
-      const token = await resolveCallerToken(forceRefresh);
+      const token = await getValidAccessToken({ forceRefresh });
       if (token) headers.Authorization = `Bearer ${token}`;
       else delete headers.Authorization;
     }
@@ -477,13 +451,21 @@ export async function fetchEdgeFunctionBlob(functionName: string, body: unknown,
   lastCall.set(functionName, Date.now());
 
   const { url, headers: baseHeaders, isVercel } = getApiEndpoint(functionName);
-  const headers: Record<string, string> = { ...baseHeaders, "x-request-id": makeRequestId() };
-  if (isVercel) {
-    const { data } = await supabase.auth.getSession();
-    if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+
+  // Resolve a valid (auto-refreshing) token once up front; a stale/near-expiry
+  // session should never produce a spurious 401 on the first byte request.
+  async function buildHeaders(forceRefresh: boolean): Promise<Record<string, string>> {
+    const headers: Record<string, string> = { ...baseHeaders, "x-request-id": makeRequestId() };
+    if (isVercel) {
+      const token = await getValidAccessToken({ forceRefresh });
+      if (token) headers.Authorization = `Bearer ${token}`;
+      else delete headers.Authorization;
+    }
+    return headers;
   }
 
   let lastErr: EdgeFunctionError | null = null;
+  let refreshedOnce = false;
   for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
     if (attempt > 0) await sleepWithJitter(RETRY_DELAYS[attempt - 1]);
     const controller = new AbortController();
@@ -491,8 +473,16 @@ export async function fetchEdgeFunctionBlob(functionName: string, body: unknown,
     const abortFromCaller = () => controller.abort(signal?.reason);
     if (signal) signal.addEventListener("abort", abortFromCaller, { once: true });
     try {
+      const headers = await buildHeaders(refreshedOnce);
       const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal: controller.signal });
       if (!res.ok) {
+        // Token rejected: refresh once and retry before failing. 403 is an
+        // entitlement rejection, not a bearer problem, so fail fast there.
+        if (res.status === 401 && isVercel && !refreshedOnce && attempt < RETRY_DELAYS.length) {
+          refreshedOnce = true;
+          continue;
+        }
+
         const parsed = await readResponseBody(res);
         const msg = extractMessage(parsed, res.status);
         throw new EdgeFunctionError(msg, res.status, errorMeta(parsed));

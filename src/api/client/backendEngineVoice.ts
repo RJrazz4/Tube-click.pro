@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { getValidAccessToken } from "@/lib/auth/accessToken";
 
 export interface NeuralVoiceRequest {
   text: string;
@@ -35,11 +35,8 @@ export async function generateNeuralVoice(
     throw new Error("TubeClick backend engine URL is not configured");
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session?.access_token) {
+  const accessToken = await getValidAccessToken();
+  if (!accessToken) {
     throw new Error("Please sign in before generating a neural voiceover");
   }
 
@@ -53,7 +50,7 @@ export async function generateNeuralVoice(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${accessToken}`,
         "X-Request-Id": requestId(),
         "Idempotency-Key": requestId(),
       },

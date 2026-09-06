@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getValidAccessToken, getCurrentUserId } from "@/lib/auth/accessToken";
 
 /**
  * 2-Node referral profile.
@@ -41,8 +42,7 @@ async function referralRequest(
 ): Promise<ReferralResponse> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (authenticated) {
-    const { data } = await supabase.auth.getSession();
-    const accessToken = data.session?.access_token;
+    const accessToken = await getValidAccessToken();
     if (!accessToken) throw new Error("Authentication required");
     headers.Authorization = `Bearer ${accessToken}`;
   }
@@ -87,8 +87,7 @@ function parseReferralProfile(value: unknown): ReferralProfile {
 }
 
 export async function loadReferralProfile(): Promise<ReferralProfile> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const userId = sessionData.session?.user.id;
+  const userId = await getCurrentUserId();
   if (!userId) throw new Error("Authentication required");
 
   // Query the self-only RPC directly. This removes the dashboard's dependency

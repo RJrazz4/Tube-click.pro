@@ -30,7 +30,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { UsdtLogo } from "./UsdtLogo";
 import { useSoftGate } from "@/contexts/SoftGateContext";
-import { supabase } from "@/integrations/supabase/client";
+import { getValidAccessToken } from "@/lib/auth/accessToken";
 import {
   PLANS,
   USDT_WALLET_ADDRESS,
@@ -95,8 +95,7 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
     setSubmitting(true);
     try {
       if (PAYMENT_VERIFY_URL) {
-        const { data } = await supabase.auth.getSession();
-        const token = data.session?.access_token;
+        const token = await getValidAccessToken();
         await fetch(PAYMENT_VERIFY_URL, {
           method: "POST",
           headers: {
