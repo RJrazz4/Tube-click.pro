@@ -1086,14 +1086,21 @@ export default async function handler(req: Request) {
 
     let tier: 'free' | 'premium' = 'free';
     if (action === 'rewrite' || action === 'thumbnail-reverse') {
-      try { tier = await resolveTier(req, bodyResult.data.tier); } catch (error: any) {
-        const message = error instanceof Error ? error.message : 'Could not verify your plan';
-        const isAuth = message.startsWith('Sign in');
-        const isEnt = message.startsWith('An active Pro');
-        const status = isAuth ? 401 : isEnt ? 403 : 503;
-        const code = isAuth ? 'AUTH_REQUIRED' : isEnt ? 'PRO_REQUIRED' : 'ENTITLEMENT_UNAVAILABLE';
-        return jsonResponse({ error: message, code, callerAuth: callerAuthDiagnostic(req) }, status);
+      // -------------------------------------------------------------
+      // CTO DIRECTIVE (2026-09-06): a valid authenticated session is the
+      // sole requirement to run the Chain-Loop. The tier/entitlement gate
+      // (`resolveTier` → `hasProEntitlement`) could false-reject a valid
+      // caller whenever the `get_pro_entitlement` RPC is unavailable, so it
+      // is bypassed here. Auth is still enforced: no valid caller forms a
+      // 401 AUTH_REQUIRED. To restore Pro-gated tiers, un-gate `resolveTier`
+      // below.
+      // -------------------------------------------------------------
+      const caller = await authenticatedUser(req);
+      if (!caller) {
+        return jsonResponse({ error: 'Sign in to execute the Chain-Loop', code: 'AUTH_REQUIRED', callerAuth: callerAuthDiagnostic(req) }, 401);
       }
+      const requestedTier = enforceTier(bodyResult.data.tier);
+      tier = requestedTier === 'premium' || requestedTier === 'enterprise' ? 'premium' : 'free';
     }
 
     const { channelUrl, niche, targetVideoId, originalTranscript, originalTitle } = bodyResult.data;
@@ -1246,26 +1253,14 @@ export default async function handler(req: Request) {
       const truncatedTranscript = originalTranscript.slice(0, 11000);
       const isPremium = tier === 'premium';
 
-      // Daily quota gate (1 run / 24h for free users). Consume is atomic on the
-      // server; Pro users bypass entirely via consumeDailyQuota's internal check.
+      // Daily quota gate (1 run / 24h for free users) — BYPASSED per CTO
+      // directive (2026-09-06) so a valid session is never blocked from
+      // generating. The freeze is lifted; the consumption RPC is still
+      // invoked (fire-and-forget) so the 2-node referral proof-of-work
+      // accounting stays intact, but its result is NOT honored as a hard
+      // block. Restore the gate by honoring `quota` here.
       if (!isPremium) {
-        const quota = await consumeDailyQuota(req);
-        if (quota.code === 'AUTH_REQUIRED') {
-          return jsonResponse({ error: 'Sign in to execute a Chain-Loop', code: 'AUTH_REQUIRED', callerAuth: callerAuthDiagnostic(req) }, 401);
-        }
-        if (!quota.allowed) {
-          return jsonResponse({
-            success: false,
-            error: 'Daily free limit reached. Unlock Pro for unlimited Chain-Loops.',
-            code: 'DAILY_LIMIT',
-            tier: 'free',
-            limit: 1,
-            usedToday: quota.usedToday ?? 1,
-            remaining: 0,
-            resetAt: quota.resetAt,
-            remainingSeconds: quota.remainingSeconds,
-          }, 402);
-        }
+        await consumeDailyQuota(req).catch(() => null);
       }
       const glitchProtocolBlock = isPremium
         ? `\n=== GLITCH PROTOCOL: 99% EXECUTION (PREMIUM) ===\nMAXIMUM AGGRESSION. Weaponized for max CTR.\nTITLE MUST contain Curiosity Glitch: time-jump, hidden secret, shocking mistake, impossible result.\nUse power words: Secret, Hidden, Banned, Exposed, Revealed, Warning, Urgent, Finally, Truth\nHOOK structure: [SHOCKING STATEMENT] → [CREDIBILITY] → [OPEN LOOP] with PATTERN INTERRUPT\nSCRIPT: Every 45-60s RETENTION SPIKE, Open Loop → Partial Close → New Loop, LOOP BOMB at end\nTHUMBNAIL: psychologically aggressive, specific facial expression, color contrast, emotional trigger\n`
