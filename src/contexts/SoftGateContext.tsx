@@ -144,10 +144,17 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       createdAt: user.created_at,
       lastActive: new Date().toISOString(),
     });
-    // Authentication is complete, but a same-page guarded continuation must
-    // remain paused until this new identity's entitlement is reconciled. If we
-    // resolved here, the callback captured by the anonymous render could run
-    // with the previous identity's tier readiness.
+    // A valid session is now observed — this is the single authoritative signal
+    // that the user is signed in. Resolve any open sign-in dialog IMMEDIATELY
+    // and synchronously, regardless of entitlement status or the session-sync
+    // generation. An out-of-band login (popup, new tab, full-page redirect, or a
+    // session written by another tab) can otherwise leave the dialog permanently
+    // orphaned even though every request then returns 200. Entitlement
+    // reconciliation below continues independently and gates feature entry
+    // points via isEntitlementVerified; the resumed action re-checks
+    // entitlement itself (enforcePremiumPaywall / canUsePremium), so resolving
+    // early is safe.
+    finishPending(true);
 
     try {
       const entitlement = await loadProEntitlement();
@@ -179,12 +186,10 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       // Keep the durable snapshot for offline presentation, but gated tools
       // fail safe to Free while isEntitlementVerified is false.
     } finally {
+      // Dismissal is handled synchronously in the success branch above; only
+      // the loading flags are settled here, guarded against a superseded sync.
       if (generation === sessionSyncGenerationRef.current) {
         setIsEntitlementLoading(false);
-        // Resolve only for the latest authenticated identity. Entitlement
-        // failure still resumes safely: isEntitlementVerified remains false,
-        // so feature entry points fail closed to Free.
-        finishPending(true);
       }
     }
   }, [finishPending, resetClientStateForUser, setAppTier, setLicense, setUser]);
@@ -248,6 +253,37 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
       listener?.subscription?.unsubscribe();
+    };
+  }, [syncSession]);
+
+  // Cross-tab / out-of-band observer. While a sign-in dialog is open, the
+  // session may be completed outside this tab (popup, a new tab, a full-page
+  // redirect, or another tab sharing the origin). Supabase's onAuthStateChange
+  // only fires within the client instance that persisted the session, so this
+  // dialog tab would never learn about it. Rather than trust that fragile
+  // signal chain, observe cross-tab writes to this origin's storage and also
+  // re-read the durable session on a short poll while a request is pending; the
+  // moment a real session appears, syncSession() resolves the dialog
+  // synchronously. The poll stops once nothing is pending.
+  useEffect(() => {
+    const refreshIfPending = async () => {
+      if (!pendingRef.current) return;
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.user) {
+        void syncSession(data.session);
+      }
+    };
+    const onStorage = () => {
+      // The Supabase auth client writes the durable pin (tc:last-auth-user-id)
+      // and session tokens to same-origin localStorage; a cross-tab write
+      // surfaces here as a window 'storage' event.
+      void refreshIfPending();
+    };
+    window.addEventListener("storage", onStorage);
+    const poll = window.setInterval(() => void refreshIfPending(), 1500);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.clearInterval(poll);
     };
   }, [syncSession]);
 
