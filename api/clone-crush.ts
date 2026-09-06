@@ -1065,6 +1065,15 @@ export default async function handler(req: Request) {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
+  // Isolate caller-verification diagnostic state per request. The Edge module
+  // scope is reused across requests on a warm instance, so a module-level
+  // `lastCallerAuth` left over from a PREVIOUS request would otherwise leak a
+  // stale verification result into a later request's AUTH_REQUIRED payload
+  // (e.g. reporting `verifiedVia: gotrue-user` on a request that actually
+  // carried no valid caller). Resetting here pins the diagnostic to THIS
+  // request's own verification outcome.
+  lastCallerAuth = null;
+
   try {
     const bodyResult = await safeJsonBody(req);
     if (bodyResult.error) return jsonResponse({ error: bodyResult.error }, 400);
