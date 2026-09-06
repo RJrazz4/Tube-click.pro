@@ -70,13 +70,6 @@ function requiredEnv(name: string, fallback?: string): string {
   if (!value) throw new Error(`${name} is not configured`);
   return value.replace(/\/$/, '');
 }
-// Validate the caller's own bearer token against GoTrue.
-//
-// `/auth/v1/user` resolves the *caller* from `Authorization: Bearer <jwt>`; the
-// `apikey` header only selects the project credential. Historically this used
-// only SUPABASE_SERVICE_ROLE_KEY, so a single mis-configured secret on Vercel
-// turned every signed-in request into a 401. Try every project key we have,
-// preferring the service role, so a valid session always validates.
 /**
  * Read the Supabase project URL from a caller's JWT `iss` (issuer) claim.
  *
@@ -106,175 +99,144 @@ function supabaseProjectUrlFromToken(authorization: string): string | null {
 }
 
 /**
- * Validate the caller's bearer token against GoTrue `/auth/v1/user`.
+ * Validate the caller's bearer token against GoTrue — the server-side
+ * equivalent of Supabase's `auth.getUser()`.
  *
- * Crucially we resolve the project from the token's own issuer FIRST (the
- * project that minted it), then fall back to the server's configured URL, then
- * to the known-good fallback. This guarantees a valid signed-in token is
- * validated against the project it belongs to, regardless of env drift.
+ * Correctness note (mirrors api/_ghostAuth.ts): the CALLER's token goes in
+ * `Authorization: Bearer <jwt>`, and the project's *anon/publishable* key goes
+ * in the `apikey` header. That is the exact combination GoTrue requires to
+ * resolve the caller. We deliberately do NOT use the service-role key here: it
+ * is the service credential, not the caller's, and using it to authenticate a
+ * user token silently defeats the check.
  *
- * Note on status codes: GoTrue returns 401 when the `apikey` project credential
- * is missing/invalid for the request, and 403 when a bearer token is present but
- * rejected (expired, wrong signature, or minted for a different project). The
- * caller token is what authenticates, so we only need the key to pick the
- * project; a 200 with a `user.id` is the success signal.
+ * We resolve the project URL from the token's own `iss` first (the project that
+ * minted it), then the server's configured URL, then the known-good fallback,
+ * so a valid signed-in token is always validated against the project that
+ * minted it regardless of env drift.
+ *
+ * On failure we surface the real GoTrue status + error body (code/msg) and the
+ * token's non-sensitive claims (iss / aud / expiry) so the actual rejection
+ * reason is visible in the callerAuth diagnostic — no log access needed.
  */
-function decodeJwt(token: string): Record<string, unknown> | null {
+
+/** One GoTrue validation attempt, recorded for diagnostics. */
+type CallerAuthAttempt = {
+  url: string;
+  key: string;
+  status: number; // HTTP status of /auth/v1/user; -1 if the fetch threw.
+  errorCode?: string;
+  errorMsg?: string;
+};
+
+type CallerAuthDiagnostic = {
+  authHeader: 'present' | 'missing';
+  tokenProject: string | null;
+  envProject: string;
+  projectMatch: boolean | null;
+  tokenIss: string | null;
+  tokenAud: string | null;
+  tokenExpired: boolean | null;
+  attempts: CallerAuthAttempt[];
+};
+
+/** Last caller-verification result, surfaced by callerAuthDiagnostic. */
+let lastCallerAuth: CallerAuthDiagnostic | null = null;
+
+/**
+ * Read non-sensitive claims for diagnostics only. This does NOT verify the
+ * signature — GoTrue does that. We only surface iss/aud/expiry to pinpoint why
+ * a token was rejected (wrong project, expired, wrong audience).
+ */
+function peekJwtClaims(token: string): { iss?: string; aud?: string; exp?: number } | null {
   try {
     const parts = token.split('.');
     if (parts.length < 2) return null;
     const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const padded = b64.length % 4 ? b64 + '='.repeat(4 - (b64.length % 4)) : b64;
-    return JSON.parse(atob(padded));
+    const c = JSON.parse(atob(padded)) as { iss?: unknown; aud?: unknown; exp?: unknown };
+    return {
+      iss: typeof c.iss === 'string' ? c.iss : undefined,
+      aud: typeof c.aud === 'string' ? c.aud : typeof c.aud === 'object' ? JSON.stringify(c.aud) : undefined,
+      exp: typeof c.exp === 'number' ? c.exp : undefined,
+    };
   } catch {
     return null;
   }
 }
 
-function decodeBase64Url(value: string): Uint8Array {
-  const b64 = value.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = b64.length % 4 ? b64 + '='.repeat(4 - (b64.length % 4)) : b64;
-  const bin = atob(padded);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-/** Verify an HS256 JWT signature with Web Crypto (Edge-native, no deps). */
-async function verifyHs256Signature(token: string, secret: string): Promise<boolean> {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return false;
-    const enc = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify'],
-    );
-    const sig = decodeBase64Url(parts[2]);
-    const data = enc.encode(`${parts[0]}.${parts[1]}`);
-    return await crypto.subtle.verify('HMAC', key, sig, data);
-  } catch {
-    return false;
-  }
-}
-
-// Trace of the last caller-verification probe (per-request). Populated by
-// verifyCallerToken and surfaced by callerAuthDiagnostic so a failed 401
-// self-reports exactly which GoTrue URL/key was tried and with what status.
-let lastVerificationTrace: { url: string; key: string; status: number }[] = [];
-
-function verificationKeyLabel(key: string | undefined): string {
-  if (!key) return '(none)';
-  if (key === process.env.SUPABASE_SERVICE_ROLE_KEY) return 'SUPABASE_SERVICE_ROLE_KEY';
-  if (key === process.env.SUPABASE_ANON_KEY) return 'SUPABASE_ANON_KEY';
-  if (key === process.env.VITE_SUPABASE_PUBLISHABLE_KEY) return 'VITE_SUPABASE_PUBLISHABLE_KEY';
-  if (key === process.env.VITE_SUPABASE_ANON_KEY) return 'VITE_SUPABASE_ANON_KEY';
-  if (key === FALLBACK_PUBLISHABLE_KEY) return 'FALLBACK_PUBLISHABLE_KEY';
-  return '(unknown)';
-}
-
 async function verifyCallerToken(
   authorization: string,
 ): Promise<AuthenticatedUser | null> {
-  const fromToken = supabaseProjectUrlFromToken(authorization);
-  const fromEnv = (
-    process.env.SUPABASE_URL ||
-    process.env.VITE_SUPABASE_URL ||
-    FALLBACK_SUPABASE_URL
-  ).replace(/\/$/, '');
-  const candidateUrls = Array.from(
-    new Set([fromToken, fromEnv, FALLBACK_SUPABASE_URL].filter((u): u is string => Boolean(u))),
-  );
-
-  const candidateKeys = [
-    process.env.SUPABASE_SERVICE_ROLE_KEY,
-    process.env.SUPABASE_ANON_KEY,
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-    process.env.VITE_SUPABASE_ANON_KEY,
-    FALLBACK_PUBLISHABLE_KEY,
-  ].filter((k): k is string => Boolean(k));
-
-  const trace: { url: string; key: string; status: number }[] = [];
-  for (const supabaseUrl of candidateUrls) {
-    for (const apikey of candidateKeys) {
-      try {
-        const url = `${supabaseUrl}/auth/v1/user`;
-        const result = await fetch(url, {
-          headers: { apikey, Authorization: authorization },
-          signal: AbortSignal.timeout(5_000),
-        });
-        trace.push({ url, key: verificationKeyLabel(apikey), status: result.status });
-        if (!result.ok) continue;
-        const user = (await result.json()) as AuthenticatedUser;
-        if (user?.id) {
-          lastVerificationTrace = trace;
-          return user;
-        }
-      } catch (e) {
-        trace.push({ url: `${supabaseUrl}/auth/v1/user`, key: verificationKeyLabel(apikey), status: -1 });
-        // try the next key / URL
-      }
-    }
-  }
-  lastVerificationTrace = trace;
-
-  // ---- Fallback: verify the JWT when GoTrue `/auth/v1/user` rejects it -----
-  // A fresh, valid session token can be 403'd by GoTrue even when the caller is
-  // genuinely signed in (e.g. the project's JWT signing secret was rotated, or
-  // GoTrue gates a specific session). Rather than report such a caller as
-  // anonymous, verify the token claims ourselves and confirm the user is real
-  // via the GoTrue admin API under the service-role key.
   const bearer = authorization.replace(/^bearer\s+/i, '').trim();
-  const claims = decodeJwt(bearer);
+  if (!bearer) return null;
+
+  const claims = peekJwtClaims(bearer);
+  const tokenProject = supabaseProjectUrlFromToken(authorization);
   const envUrl = (
     process.env.SUPABASE_URL ||
     process.env.VITE_SUPABASE_URL ||
     FALLBACK_SUPABASE_URL
   ).replace(/\/$/, '');
-  if (claims) {
-    const issUrl = typeof claims.iss === 'string'
-      ? (claims.iss.match(/^(https?:\/\/[^/]+)/)?.[1] || '').replace(/\/$/, '')
-      : null;
-    const sub = typeof claims.sub === 'string' ? claims.sub : null;
-    const exp = typeof claims.exp === 'number' ? claims.exp : null;
-    const notExpired = exp ? exp * 1000 > Date.now() : true;
-    const sameProject = issUrl === envUrl || issUrl === null; // allow missing iss only with signature proof
+  const candidateUrls = Array.from(
+    new Set([tokenProject, envUrl, FALLBACK_SUPABASE_URL].filter((u): u is string => Boolean(u))),
+  );
 
-    if (sub && sameProject && notExpired) {
-      // Path A — proper HS256 signature verification with a configured secret.
-      const jwtSecret = process.env.SUPABASE_JWT_SECRET || process.env.SUPABASE_AUTH_JWT_SECRET || process.env.GOTRUE_JWT_SECRET;
-      if (jwtSecret && (await verifyHs256Signature(bearer, jwtSecret))) {
-        console.warn('[clone-crush:auth] accepted via HS256 signature verification');
-        lastVerificationTrace = [...trace, { url: 'jwt:hs256', key: 'SUPABASE_JWT_SECRET', status: 200 }];
-        return { id: sub };
+  // The authoritative project credential for resolving a *caller*. Prefer the
+  // legacy anon key, then the modern publishable key, then the known-good
+  // fallback (the same publishable key shipped in the client bundle).
+  const anonKey =
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    FALLBACK_PUBLISHABLE_KEY;
+
+  const attempts: CallerAuthAttempt[] = [];
+  for (const supabaseUrl of candidateUrls) {
+    const url = `${supabaseUrl}/auth/v1/user`;
+    try {
+      const res = await fetch(url, {
+        headers: { apikey: anonKey, Authorization: authorization },
+        signal: AbortSignal.timeout(5_000),
+      });
+      const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+      attempts.push({
+        url,
+        key: 'anon/publishable',
+        status: res.status,
+        errorCode: typeof body?.error_code === 'string' ? body.error_code : typeof body?.code === 'string' ? body.code : undefined,
+        errorMsg: typeof body?.msg === 'string' ? body.msg : typeof body?.message === 'string' ? body.message : undefined,
+      });
+      if (!res.ok) continue;
+      const user = (body ?? {}) as unknown as AuthenticatedUser;
+      if (user?.id) {
+        lastCallerAuth = {
+          authHeader: 'present',
+          tokenProject,
+          envProject: envUrl,
+          projectMatch: tokenProject ? tokenProject === envUrl : null,
+          tokenIss: claims?.iss ?? null,
+          tokenAud: claims?.aud ?? null,
+          tokenExpired: claims?.exp ? claims.exp * 1000 <= Date.now() : null,
+          attempts,
+        };
+        return user;
       }
-      // Path B — confirm the sub is a real user via the GoTrue admin API.
-      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (serviceKey) {
-        try {
-          const usersRes = await fetch(`${envUrl}/auth/v1/admin/users/${encodeURIComponent(sub)}`, {
-            headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
-            signal: AbortSignal.timeout(6_000),
-          });
-          if (usersRes.ok) {
-            const body = await usersRes.json() as { id?: string };
-            if (body?.id === sub) {
-              console.warn('[clone-crush:auth] accepted via GoTrue admin lookup (service role)');
-              lastVerificationTrace = [
-                ...trace,
-                { url: `${envUrl}/auth/v1/admin/users/${sub}`, key: 'SUPABASE_SERVICE_ROLE_KEY', status: 200 },
-              ];
-              return { id: sub };
-            }
-          } else {
-            trace.push({ url: `${envUrl}/auth/v1/admin/users/${sub}`, key: 'SUPABASE_SERVICE_ROLE_KEY', status: usersRes.status });
-            lastVerificationTrace = trace;
-          }
-        } catch {
-          // fall through to reject
-        }
-      }
+    } catch (e) {
+      attempts.push({ url, key: 'anon/publishable', status: -1, errorMsg: e instanceof Error ? e.message : String(e) });
     }
   }
+
+  lastCallerAuth = {
+    authHeader: 'present',
+    tokenProject,
+    envProject: envUrl,
+    projectMatch: tokenProject ? tokenProject === envUrl : null,
+    tokenIss: claims?.iss ?? null,
+    tokenAud: claims?.aud ?? null,
+    tokenExpired: claims?.exp ? claims.exp * 1000 <= Date.now() : null,
+    attempts,
+  };
   return null;
 }
 
@@ -285,28 +247,29 @@ async function authenticatedUser(req: Request): Promise<AuthenticatedUser | null
 }
 
 /**
- * Lightweight, always-on diagnostic attached to any AUTH_REQUIRED 401 so the
- * failure is self-describing in the response body (no log access needed).
- * Reports whether the caller actually sent a bearer, which project the token
- * claims, whether that matches the server's configured project, and the exact
- * URL/key/status of every GoTrue validation attempt — the failing network call
- * is exposed without digging through logs.
+ * Self-describing diagnostic attached to any AUTH_REQUIRED 401 so the failure is
+ * unambiguous in the response body (no log access needed): whether the caller
+ * sent a bearer, which project the token claims vs the server's project, the
+ * token's iss/aud/expiry, and every GoTrue attempt with its HTTP status and
+ * error code/msg. This surfaces the ACTUAL rejection reason.
  */
 function callerAuthDiagnostic(req: Request): Record<string, unknown> {
   const authorization = req.headers.get('authorization') || '';
   const hasBearer = authorization.toLowerCase().startsWith('bearer ');
-  const tokenProject = supabaseProjectUrlFromToken(authorization);
   const envProject = (
     process.env.SUPABASE_URL ||
     process.env.VITE_SUPABASE_URL ||
     FALLBACK_SUPABASE_URL
   ).replace(/\/$/, '');
-  const result = {
+  const result: CallerAuthDiagnostic = lastCallerAuth ?? {
     authHeader: hasBearer ? 'present' : 'missing',
-    authProject: tokenProject,
+    tokenProject: null,
     envProject,
-    projectMatch: tokenProject ? tokenProject === envProject : null,
-    attempts: lastVerificationTrace,
+    projectMatch: null,
+    tokenIss: null,
+    tokenAud: null,
+    tokenExpired: null,
+    attempts: [],
   };
   console.error('[clone-crush:auth] caller rejected -> 401', JSON.stringify(result));
   return result;
