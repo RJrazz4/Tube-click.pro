@@ -21,14 +21,23 @@ export interface ForceResolveAuthStatus {
   isAuthenticated: boolean;
   /** Entitlement reconciliation has finished (Free or Pro resolved). */
   isEntitlementVerified: boolean;
+  /** True while entitlement reconciliation is still in progress. */
+  isEntitlementLoading: boolean;
   /** There is still a pending auth request awaiting resolution. */
   hasPendingAuthRequest: boolean;
 }
 
 export function shouldForceResolvePendingAuth(status: ForceResolveAuthStatus): boolean {
+  // Resolve only when the user is authenticated AND entitlement has fully
+  // settled. Requiring !isEntitlementLoading is critical: the gated action that
+  // resumes after sign-in needs isTierReady (== !isAuthLoading &&
+  // !isEntitlementLoading), so resolving in the window between
+  // isEntitlementVerified=true and isEntitlementLoading=false would let the
+  // action run before its session is ready and silently bail.
   return (
     status.isAuthenticated &&
     status.isEntitlementVerified &&
+    !status.isEntitlementLoading &&
     status.hasPendingAuthRequest
   );
 }

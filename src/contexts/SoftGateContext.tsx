@@ -144,17 +144,14 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       createdAt: user.created_at,
       lastActive: new Date().toISOString(),
     });
-    // A valid session is now observed — this is the single authoritative signal
-    // that the user is signed in. Resolve any open sign-in dialog IMMEDIATELY
-    // and synchronously, regardless of entitlement status or the session-sync
-    // generation. An out-of-band login (popup, new tab, full-page redirect, or a
-    // session written by another tab) can otherwise leave the dialog permanently
-    // orphaned even though every request then returns 200. Entitlement
-    // reconciliation below continues independently and gates feature entry
-    // points via isEntitlementVerified; the resumed action re-checks
-    // entitlement itself (enforcePremiumPaywall / canUsePremium), so resolving
-    // early is safe.
-    finishPending(true);
+    // Authentication confirmed. The sign-in dialog is NOT resolved here: the
+    // gated action it guards (find opportunities / chain-loop) must only resume
+    // once entitlement reconciliation is complete (isTierReady), otherwise it
+    // runs against a still-loading session and bails — "nothing happens" after
+    // login. Resolving in the `finally` below, right after isEntitlementLoading
+    // is cleared, closes the dialog AND lets the resumed action run tier-ready.
+    // Out-of-band logins reach this tab via the cross-tab observer below, so
+    // this finally always runs and the dialog can never be orphaned.
 
     try {
       const entitlement = await loadProEntitlement();
@@ -186,34 +183,39 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       // Keep the durable snapshot for offline presentation, but gated tools
       // fail safe to Free while isEntitlementVerified is false.
     } finally {
-      // Dismissal is handled synchronously in the success branch above; only
-      // the loading flags are settled here, guarded against a superseded sync.
       if (generation === sessionSyncGenerationRef.current) {
+        // Entitlement is now settled (Free or Pro resolved). Clear the loading
+        // flag AND resolve any open sign-in request in the same pass, so the
+        // gated action resumes only when isTierReady is true. The cross-tab
+        // observer guarantees out-of-band logins trigger this finally.
         setIsEntitlementLoading(false);
+        finishPending(true);
       }
     }
   }, [finishPending, resetClientStateForUser, setAppTier, setLicense, setUser]);
 
   // Safety net: a sign-in dialog opened via requestAuthentication must never
-  // stay blocking once the user is genuinely authenticated. syncSession()
-  // resolves a pending request in its `finally`, but that only runs when it is
-  // still the latest sync generation; if a later or interrupted sync superseded
-  // it, `finishPending(true)` is skipped and the dialog can stay open even
-  // though the session is valid and every request returns 200. The moment auth
-  // AND entitlement are confirmed, force-close and resolve any open request so
-  // the UI can never remain stuck behind the overlay. (Predicate is extracted
-  // to softGateAuthDecision so the contract is regression-tested.)
+  // stay blocking once the user is genuinely authenticated AND entitlement has
+  // settled. syncSession() resolves a pending request in its `finally`, but that
+  // only runs when it is still the latest sync generation; if a later or
+  // interrupted sync superseded it, `finishPending(true)` could be skipped and
+  // the dialog stays open even though the session is valid. This effect is the
+  // generation-race fail-safe — it resolves only when auth AND entitlement are
+  // confirmed AND entitlement is no longer loading (so a resumed action always
+  // runs tier-ready). (Predicate is extracted to softGateAuthDecision and
+  // regression-tested.)
   useEffect(() => {
     if (
       shouldForceResolvePendingAuth({
         isAuthenticated,
         isEntitlementVerified,
+        isEntitlementLoading,
         hasPendingAuthRequest: Boolean(pendingRef.current),
       })
     ) {
       finishPending(true);
     }
-  }, [isAuthenticated, isEntitlementVerified, finishPending]);
+  }, [isAuthenticated, isEntitlementVerified, isEntitlementLoading, finishPending]);
 
   useEffect(() => {
     let active = true;
@@ -263,8 +265,9 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   // dialog tab would never learn about it. Rather than trust that fragile
   // signal chain, observe cross-tab writes to this origin's storage and also
   // re-read the durable session on a short poll while a request is pending; the
-  // moment a real session appears, syncSession() resolves the dialog
-  // synchronously. The poll stops once nothing is pending.
+  // moment a real session appears, syncSession() runs to completion and its
+  // entitlement-settled finally closes the dialog AND resumes the action
+  // tier-ready. The poll stops once nothing is pending.
   useEffect(() => {
     const refreshIfPending = async () => {
       if (!pendingRef.current) return;

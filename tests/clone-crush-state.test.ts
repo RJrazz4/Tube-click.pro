@@ -182,25 +182,26 @@ describe("Clone & Crush tier and authentication routing", () => {
       gateSource.indexOf("const syncSession"),
       gateSource.indexOf("useEffect", gateSource.indexOf("const syncSession")),
     );
-    // The sign-in dialog must dismiss the moment a valid session is observed —
-    // synchronously, BEFORE the (correctly deferred) entitlement reconciliation —
-    // so an out-of-band login (popup / new tab / full-page redirect / a session
-    // written by another tab) can never leave the dialog orphaned. Entitlement
-    // readiness still gates feature entry via isEntitlementVerified, and the
-    // resumed action re-checks entitlement itself (enforcePremiumPaywall /
-    // canUsePremium), so resolving early is safe.
+    // The sign-in dialog must be resolved only once entitlement has fully
+    // settled, so the gated action that resumes after login runs tier-ready
+    // (isTierReady == !isAuthLoading && !isEntitlementLoading). Resolving before
+    // the entitlement await was the "dialog closes but action does nothing" bug.
     expect(syncSession.indexOf("finishPending(true)")).toBeGreaterThan(
-      syncSession.indexOf("setUser({"),
-    );
-    expect(syncSession.indexOf("finishPending(true)")).toBeLessThan(
       syncSession.indexOf("await loadTrialEntitlement()"),
     );
     // Cross-tab observer: while a sign-in request is pending, the provider
     // watches same-origin storage writes and re-reads the durable session so an
-    // out-of-band login always unblocks the dialog in this tab too.
+    // out-of-band login (popup / new tab / full-page redirect / another tab)
+    // always reaches this tab and triggers the entitlement-settled finally.
     expect(gateSource).toContain("Cross-tab / out-of-band observer");
     expect(gateSource).toContain('window.addEventListener("storage"');
     expect(gateSource).toContain("window.setInterval");
+    // The safety-net predicate must never resolve while entitlement is loading
+    // (so a resumed action always runs tier-ready). It passes the live loading
+    // flag into shouldForceResolvePendingAuth, whose contract additionally
+    // requires !isEntitlementLoading (pinned in softGateAuthDecision.test.ts).
+    expect(gateSource).toContain("isEntitlementLoading,");
+    expect(gateSource).toContain("shouldForceResolvePendingAuth({");
     expect(pageSource).toMatch(/const isTierReady = !isAuthLoading && !isEntitlementLoading/);
     expect(pageSource).toContain("const userIsPro = canUsePremium();");
     expect(pageSource).toContain("if (!userIsPro && isFreeConveyorActive)");
