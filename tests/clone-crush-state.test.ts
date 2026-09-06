@@ -178,30 +178,35 @@ describe("Clone & Crush tier and authentication routing", () => {
     expect(gateSource).toContain("isEntitlementLoading");
     expect(gateSource).toContain("isEntitlementVerified");
     expect(gateSource).toContain("sessionSyncGenerationRef");
+    // Single authoritative "auth fully hydrated" gate: session + entitlement
+    // reconciled + not loading. This is the only thing the soft-gate UI and
+    // resumed actions wait on (resolving early caused "dialog closes but the
+    // action does nothing").
+    expect(gateSource).toContain("const authReady = isAuthenticated && isEntitlementVerified && !isEntitlementLoading");
+    // syncSession must NOT resolve the dialog synchronously inside itself or its
+    // finally; doing so lets a waiting continuation fire before React re-renders
+    // the settled state. Resolution must live only in the authReady gate effect.
     const syncSession = gateSource.slice(
       gateSource.indexOf("const syncSession"),
-      gateSource.indexOf("useEffect", gateSource.indexOf("const syncSession")),
+      gateSource.indexOf(", [resetClientStateForUser, setAppTier, setLicense, setUser]);"),
     );
-    // The sign-in dialog must be resolved only once entitlement has fully
-    // settled, so the gated action that resumes after login runs tier-ready
-    // (isTierReady == !isAuthLoading && !isEntitlementLoading). Resolving before
-    // the entitlement await was the "dialog closes but action does nothing" bug.
-    expect(syncSession.indexOf("finishPending(true)")).toBeGreaterThan(
-      syncSession.indexOf("await loadTrialEntitlement()"),
-    );
+    expect(syncSession).not.toContain("finishPending(");
+    expect(syncSession).not.toContain("toast.dismiss(");
+    // The authReady gate effect resolves the dialog AND clears the auth toasts.
+    expect(gateSource).toContain("finishPending(true)");
+    expect(gateSource).toContain('toast.dismiss("clone-crush-auth")');
+    expect(gateSource).toContain("shouldForceResolvePendingAuth({");
+    // runGuarded must wait for full hydration before running the gated action,
+    // and re-verify a real session if the dialog was dismissed without auth.
+    expect(gateSource).toContain("waitForAuthReady");
+    expect(gateSource).toContain("const token = await getValidAccessToken();");
     // Cross-tab observer: while a sign-in request is pending, the provider
     // watches same-origin storage writes and re-reads the durable session so an
     // out-of-band login (popup / new tab / full-page redirect / another tab)
-    // always reaches this tab and triggers the entitlement-settled finally.
+    // always reaches this tab and trips the authReady gate.
     expect(gateSource).toContain("Cross-tab / out-of-band observer");
     expect(gateSource).toContain('window.addEventListener("storage"');
     expect(gateSource).toContain("window.setInterval");
-    // The safety-net predicate must never resolve while entitlement is loading
-    // (so a resumed action always runs tier-ready). It passes the live loading
-    // flag into shouldForceResolvePendingAuth, whose contract additionally
-    // requires !isEntitlementLoading (pinned in softGateAuthDecision.test.ts).
-    expect(gateSource).toContain("isEntitlementLoading,");
-    expect(gateSource).toContain("shouldForceResolvePendingAuth({");
     expect(pageSource).toMatch(/const isTierReady = !isAuthLoading && !isEntitlementLoading/);
     expect(pageSource).toContain("const userIsPro = canUsePremium();");
     expect(pageSource).toContain("if (!userIsPro && isFreeConveyorActive)");

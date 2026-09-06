@@ -14,6 +14,7 @@ import { consumeGuestPreview, loadProEntitlement, RegistrationRequiredError } fr
 import { loadTrialEntitlement } from "@/lib/auth/trialAccess";
 import { rememberAuthReturnTo, safeAuthReturnTo } from "@/lib/auth/pendingAuth";
 import { shouldForceResolvePendingAuth } from "@/contexts/softGateAuthDecision";
+import { getValidAccessToken } from "@/lib/auth/accessToken";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
@@ -29,6 +30,13 @@ interface SoftGateContextValue {
   /** False when entitlement reconciliation failed; gated tools must fail safe to Free. */
   isEntitlementVerified: boolean;
   isAuthenticated: boolean;
+  /**
+   * The single authoritative "auth is fully hydrated and usable" flag: a real
+   * session exists AND entitlement reconciliation has completed AND the
+   * reconciliation is no longer in flight. This is the only signal gated
+   * actions and the soft-gate UI (dialog + auth toasts) should wait on.
+   */
+  authReady: boolean;
   runGuarded: <T>(actionLabel: string, action: () => Promise<T> | T) => Promise<T | undefined>;
   requestAuthentication: (actionLabel?: string) => Promise<boolean>;
 }
@@ -67,6 +75,20 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   // very persisted drafts/results we are about to restore.
   const lastUserIdRef = useRef<string | null>(getPinnedUserId());
   const sessionSyncGenerationRef = useRef(0);
+
+  /**
+   * Auth is "fully ready" only when we have a confirmed session, entitlement has
+   * been reconciled (Free or Pro), and that reconciliation is no longer in
+   * flight. This is the single gate for resuming gated actions: an action must
+   * never resume while isEntitlementLoading is still true, otherwise it runs
+   * before the session is usable and silently bails ("nothing happens").
+   */
+  const authReady = isAuthenticated && isEntitlementVerified && !isEntitlementLoading;
+  // Latest-value mirror so runGuarded's async continuation (which may fire
+  // before React has re-rendered after setState) can read the current readiness
+  // instead of a stale closure.
+  const authReadyRef = useRef(authReady);
+  authReadyRef.current = authReady;
 
   /**
    * Wipe zustand-persisted client state whenever the authenticated user
@@ -144,14 +166,14 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       createdAt: user.created_at,
       lastActive: new Date().toISOString(),
     });
-    // Authentication confirmed. The sign-in dialog is NOT resolved here: the
-    // gated action it guards (find opportunities / chain-loop) must only resume
-    // once entitlement reconciliation is complete (isTierReady), otherwise it
-    // runs against a still-loading session and bails — "nothing happens" after
-    // login. Resolving in the `finally` below, right after isEntitlementLoading
-    // is cleared, closes the dialog AND lets the resumed action run tier-ready.
+    // Authentication confirmed. We do NOT resolve the sign-in dialog here or in
+    // the finally below. Resolution happens in the authReady effect, which fires
+    // strictly after React re-renders the settled (isEntitlementLoading=false)
+    // state. That ordering is what lets the gated action (find opportunities /
+    // chain-loop) resume only when its session is fully hydrated (isTierReady),
+    // instead of running early and bailing ("nothing happens" after login).
     // Out-of-band logins reach this tab via the cross-tab observer below, so
-    // this finally always runs and the dialog can never be orphaned.
+    // this sync always runs and authReady always trips.
 
     try {
       const entitlement = await loadProEntitlement();
@@ -183,27 +205,30 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       // Keep the durable snapshot for offline presentation, but gated tools
       // fail safe to Free while isEntitlementVerified is false.
     } finally {
+      // Only settle the loading flag here; the sign-in dialog + auth toasts are
+      // NOT resolved in this finally. Resolving in the same synchronous block as
+      // setState lets a waiting runGuarded continuation fire before React
+      // re-renders (React batching), so the gated action could run before
+      // isEntitlementLoading is actually false and silently bail. Dismissal and
+      // resumption are handled by the authReady effect below, which fires
+      // strictly after the re-render.
       if (generation === sessionSyncGenerationRef.current) {
-        // Entitlement is now settled (Free or Pro resolved). Clear the loading
-        // flag AND resolve any open sign-in request in the same pass, so the
-        // gated action resumes only when isTierReady is true. The cross-tab
-        // observer guarantees out-of-band logins trigger this finally.
         setIsEntitlementLoading(false);
-        finishPending(true);
       }
     }
-  }, [finishPending, resetClientStateForUser, setAppTier, setLicense, setUser]);
+  }, [resetClientStateForUser, setAppTier, setLicense, setUser]);
 
-  // Safety net: a sign-in dialog opened via requestAuthentication must never
-  // stay blocking once the user is genuinely authenticated AND entitlement has
-  // settled. syncSession() resolves a pending request in its `finally`, but that
-  // only runs when it is still the latest sync generation; if a later or
-  // interrupted sync superseded it, `finishPending(true)` could be skipped and
-  // the dialog stays open even though the session is valid. This effect is the
-  // generation-race fail-safe — it resolves only when auth AND entitlement are
-  // confirmed AND entitlement is no longer loading (so a resumed action always
-  // runs tier-ready). (Predicate is extracted to softGateAuthDecision and
-  // regression-tested.)
+  // Single auth lifecycle gate. The moment auth is FULLY hydrated (a real
+  // session + entitlement reconciled + not still loading), settle every piece
+  // of the soft-gate UI and resume traffic in one place, strictly after React
+  // has re-rendered the finished state:
+  //   1. finishPending(true)  -> close the sign-in dialog AND resolve any
+  //      runGuarded waiter (which then re-checks authReady before running).
+  //   2. clear the queued auth toasts so a stale "Sign in..." notification can
+  //      never stay stuck after a successful login.
+  // This is the same predicate that previously lived in the syncSession
+  // finally; pulling it into an effect (fired after commit) is what removes the
+  // "dialog closes but the action doesn't fire" race.
   useEffect(() => {
     if (
       shouldForceResolvePendingAuth({
@@ -214,8 +239,20 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       })
     ) {
       finishPending(true);
+      toast.dismiss("clone-crush-auth");
+      toast.dismiss("clone-crush-forbidden");
     }
   }, [isAuthenticated, isEntitlementVerified, isEntitlementLoading, finishPending]);
+
+  // Independently clear any lingering auth toast the moment a session is usable
+  // (even if there is no pending request to resolve - e.g. a toast left over
+  // from an earlier attempt on a returning user's session).
+  useEffect(() => {
+    if (isAuthenticated && !isEntitlementLoading) {
+      toast.dismiss("clone-crush-auth");
+      toast.dismiss("clone-crush-forbidden");
+    }
+  }, [isAuthenticated, isEntitlementLoading]);
 
   useEffect(() => {
     let active = true;
@@ -265,9 +302,9 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
   // dialog tab would never learn about it. Rather than trust that fragile
   // signal chain, observe cross-tab writes to this origin's storage and also
   // re-read the durable session on a short poll while a request is pending; the
-  // moment a real session appears, syncSession() runs to completion and its
-  // entitlement-settled finally closes the dialog AND resumes the action
-  // tier-ready. The poll stops once nothing is pending.
+  // moment a real session appears, syncSession() runs to completion, which trips
+  // the authReady gate above -> dialog closes, toasts clear, and the gated
+  // action resumes hydrated. The poll stops once nothing is pending.
   useEffect(() => {
     const refreshIfPending = async () => {
       if (!pendingRef.current) return;
@@ -342,16 +379,45 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
     return authPromise;
   }, []);
 
+  // Resolve once auth is fully hydrated (session + entitlement reconciled).
+  // Returns immediately when already ready; otherwise polls the latest-value
+  // ref for a bounded window so it can never hang the guarded action forever.
+  const waitForAuthReady = useCallback(async (): Promise<boolean> => {
+    if (authReadyRef.current) return true;
+    const started = Date.now();
+    return new Promise<boolean>((resolve) => {
+      const timer = window.setInterval(() => {
+        if (authReadyRef.current) {
+          window.clearInterval(timer);
+          resolve(true);
+        } else if (Date.now() - started > 15_000) {
+          window.clearInterval(timer);
+          resolve(false);
+        }
+      }, 150);
+    });
+  }, []);
+
   const runGuarded = useCallback(async <T,>(actionLabel: string, action: () => Promise<T> | T): Promise<T | undefined> => {
     try {
       await consumeGuestPreview();
     } catch (error) {
       if (!(error instanceof RegistrationRequiredError)) throw error;
       const authenticated = await requestAuthentication(actionLabel);
-      if (!authenticated) return undefined;
+      if (!authenticated) {
+        // The dialog can close without a confirmed login (e.g. the user closes
+        // it, or it is dismissed out of band). Only proceed if a real session
+        // now exists; otherwise the user genuinely didn't authenticate.
+        const token = await getValidAccessToken();
+        if (!token) return undefined;
+      }
+      // Guarantee the action only runs once auth is FULLY hydrated, so it never
+      // runs before entitlement settles (the "action does nothing" failure).
+      const ready = await waitForAuthReady();
+      if (!ready) return undefined;
     }
     return action();
-  }, [requestAuthentication]);
+  }, [requestAuthentication, waitForAuthReady]);
 
   const signInWithGoogle = async () => {
     setSubmitting(true);
@@ -439,6 +505,7 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       isEntitlementLoading,
       isEntitlementVerified,
       isAuthenticated,
+      authReady,
       runGuarded,
       requestAuthentication,
     }),
@@ -447,6 +514,7 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
       isEntitlementLoading,
       isEntitlementVerified,
       isAuthenticated,
+      authReady,
       requestAuthentication,
       runGuarded,
     ],
