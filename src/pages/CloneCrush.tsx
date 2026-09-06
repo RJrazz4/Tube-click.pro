@@ -197,25 +197,6 @@ export default function CloneCrush() {
     isAuthenticated,
   } = useSoftGate();
 
-  /**
-   * Handle an AUTH_REQUIRED / 401 from the engine. If a real Supabase session
-   * exists (the user is signed in), a transient 401 is an auth-sync hiccup, not
-   * a sign-in prompt: clear the stale toast rather than re-gating a signed-in
-   * user behind a "sign in" toast (the stuck-toast bug). Only when there is
-   * genuinely no session do we prompt to sign in. The toast is also auto-dismissed
-   * after a bounded window so it can never stay stuck.
-   */
-  const handleAuthWall = useCallback(async () => {
-    const token = await getValidAccessToken();
-    if (token) {
-      toast.dismiss("clone-crush-auth");
-      toast.dismiss("clone-crush-forbidden");
-      return;
-    }
-    toast.error("Sign in to complete your Free Chain-Loop", { id: "clone-crush-auth" });
-    window.setTimeout(() => toast.dismiss("clone-crush-auth"), 8000);
-    void requestAuthentication("complete your Free Chain-Loop");
-  }, [requestAuthentication]);
   const { openProUpgrade } = useProUpgrade();
 
   // Synchronous cold-start hygiene: if the user reopens the page AFTER
@@ -795,11 +776,49 @@ export default function CloneCrush() {
     const requestedTier: "free" | "premium" = userIsPro ? selectedTier : "free";
     setIsRewriting(true);
 
+    // Declared at function scope so the self-healing rewrite runner below can
+    // read the transcript it was built from (assigned in the try block).
+    let transcriptData: any = null;
+
+    // Self-healing rewrite runner. A 401 mid-run is usually a transient
+    // auth-sync hiccup (the session hydrating a beat late, or the access token
+    // rotated by an overlapping quota refresh), NOT a real loss of sign-in.
+    // In that case we force a fresh token and retry the rewrite once so the
+    // generation completes instead of dumping the user back to "No Active
+    // Package". Only a genuinely-absent session falls through to the caller.
+    const submitRewrite = async (): Promise<any> => {
+      const call = () =>
+        withClientTimeout(
+          cloneCrushMutation.mutateAsync({
+            action: "rewrite",
+            targetVideoId: selectedVideo!.videoId,
+            originalTranscript: transcriptData!.transcript,
+            originalTitle: selectedVideo!.title,
+            niche: nicheInput,
+            tier: requestedTier,
+            language: outputLanguage,
+          }),
+          58_000,
+        );
+      try {
+        return await call();
+      } catch (err: any) {
+        const code = err?.code;
+        const status = err?.status;
+        if (code === "AUTH_REQUIRED" || status === 401) {
+          // Refresh the session token and retry once — a fresh token will be
+          // used by fetchEdgeFunctionJson's buildHeaders() on the next attempt.
+          await getValidAccessToken({ forceRefresh: true }).catch(() => null);
+          return await call();
+        }
+        throw err;
+      }
+    };
+
     try {
       // Fire the rewrite. The server will 401/403 if a non-pro user
       // smuggled tier=premium; we treat those as paywall signals, not
       // "recovered" successes.
-      let transcriptData: any;
       try {
         transcriptData = await withClientTimeout((transcriptMutation.mutateAsync as any)({ url: selectedVideo.url, title: selectedVideo.title }), 8_000);
       } catch (err: any) {
@@ -825,15 +844,7 @@ export default function CloneCrush() {
       steps[2].status = "success"; steps[2].meta = transcriptData.source?.includes("ghost") ? "captions • cached" : "captions • live"; steps[3].status = "processing"; setLogSteps([...steps]); await new Promise(r=>setTimeout(r,300));
       steps[3].status = "success"; steps[4].status = "processing"; setLogSteps([...steps]);
 
-      const rewriteRes = await withClientTimeout(cloneCrushMutation.mutateAsync({
-        action: "rewrite",
-        targetVideoId: selectedVideo.videoId,
-        originalTranscript: transcriptData.transcript,
-        originalTitle: selectedVideo.title,
-        niche: nicheInput,
-        tier: requestedTier,
-        language: outputLanguage,
-      }), 58_000);
+      const rewriteRes = await submitRewrite();
       steps[4].status = "success"; steps[5].status = "processing"; setLogSteps([...steps]);
 
       if (rewriteRes.success && rewriteRes.rewrite) {
@@ -932,11 +943,21 @@ export default function CloneCrush() {
         const code = (rewriteRes as any).code;
         const status = (rewriteRes as any).status;
         if (code === "AUTH_REQUIRED" || status === 401) {
-          setActiveRewrite(null);
-          setLogSteps([]);
+          // Even after the self-healing retry the server rejected auth: this is
+          // a genuinely stale/absent session. DO NOT silently wipe the result
+          // (that was the "unmounts the log and resets to No Active Package"
+          // bug). Keep the pipeline visible as failed and re-prompt for auth.
+          const failedAuth = steps.map((s) =>
+            s.status === "processing" || s.status === "pending"
+              ? { ...s, status: "error" as const, meta: "AUTH" }
+              : s,
+          );
+          setLogSteps(failedAuth);
           setIsRewriting(false);
           isExecutingRef.current = false;
-          void handleAuthWall();
+          toast.error("Your session was interrupted. Please sign in again and retry.", { id: "clone-crush-auth" });
+          window.setTimeout(() => toast.dismiss("clone-crush-auth"), 8000);
+          void requestAuthentication("re-authenticate to complete your Chain-Loop");
           return;
         }
         if (code === "PRO_REQUIRED" || (status === 403 && requestedTier === "premium")) {
@@ -953,11 +974,20 @@ export default function CloneCrush() {
       const errCode = (err as any)?.code;
       const errStatus = (err as any)?.status;
       if (errCode === "AUTH_REQUIRED" || errStatus === 401) {
-        setActiveRewrite(null);
-        setLogSteps([]);
+        // Even after the self-healing retry the server rejected auth: this is a
+        // genuinely stale/absent session. Keep the pipeline visible as failed
+        // and prompt re-auth — never silently reset to "No Active Package".
+        const failedAuth = steps.map((s) =>
+          s.status === "processing" || s.status === "pending"
+            ? { ...s, status: "error" as const, meta: "AUTH" }
+            : s,
+        );
+        setLogSteps(failedAuth);
         setIsRewriting(false);
         isExecutingRef.current = false;
-        void handleAuthWall();
+        toast.error("Your session was interrupted. Please sign in again and retry.", { id: "clone-crush-auth" });
+        window.setTimeout(() => toast.dismiss("clone-crush-auth"), 8000);
+        void requestAuthentication("re-authenticate to complete your Chain-Loop");
         return;
       }
       if (errCode === "PRO_REQUIRED" || (errStatus === 403 && requestedTier === "premium")) {
