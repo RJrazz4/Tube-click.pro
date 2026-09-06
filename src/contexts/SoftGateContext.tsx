@@ -38,7 +38,13 @@ interface SoftGateContextValue {
    */
   authReady: boolean;
   runGuarded: <T>(actionLabel: string, action: () => Promise<T> | T) => Promise<T | undefined>;
-  requestAuthentication: (actionLabel?: string) => Promise<boolean>;
+  /**
+   * Ensure the user is authenticated, opening the sign-in dialog if needed.
+   * When `force` is true, a freshly-rejected (stale) session is signed out
+   * first so a genuinely fresh token is minted instead of trusting an expired
+   * session object (which otherwise makes this a silent no-op).
+   */
+  requestAuthentication: (actionLabel?: string, opts?: { force?: boolean }) => Promise<boolean>;
   /** Resolves true once auth is fully hydrated; bounded, never hangs. */
   waitForAuthReady: () => Promise<boolean>;
 }
@@ -367,9 +373,23 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("message", receiveAuth);
   }, [syncSession]);
 
-  const requestAuthentication = useCallback(async (actionLabel = "continue") => {
-    const { data } = await supabase.auth.getSession();
-    if (data.session) return true;
+  const requestAuthentication = useCallback(async (actionLabel = "continue", opts?: { force?: boolean }) => {
+    if (!opts?.force) {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) return true;
+    } else {
+      // A prior server-authenticated call was rejected with 401 even though a
+      // session object exists: the stored session is stale/dead (access token
+      // rejected by GoTrue and the refresh token expired, so refreshSession()
+      // cannot renew it). Clearing it forces a fresh sign-in so a valid token
+      // is actually minted — otherwise getSession() would keep returning the
+      // same dead session and this path would silently no-op forever.
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } catch {
+        // Fall through: the dialog may still open and mint a fresh session.
+      }
+    }
     if (pendingPromiseRef.current) return pendingPromiseRef.current;
     setAuthError("");
     const authPromise = new Promise<boolean>((resolve) => {
