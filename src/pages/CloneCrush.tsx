@@ -797,6 +797,12 @@ export default function CloneCrush() {
             niche: nicheInput,
             tier: requestedTier,
             language: outputLanguage,
+            // Metadata for the server's spoken-word bouncer: the channel
+            // handle/name and any hashtags let it halt pure-music sources
+            // before the AI generates a hallucinated spoken script.
+            channelHandle: profile?.handle || profile?.name || undefined,
+            channelName: profile?.name || selectedVideo?.channelName || undefined,
+            hashtags: (selectedVideo?.title?.match(/#[\w]+/g) || []),
           }),
           58_000,
         );
@@ -1004,12 +1010,28 @@ export default function CloneCrush() {
         toast.error("This request could not be authorized. Please refresh and try again.", { id: "clone-crush-forbidden" });
         return;
       }
-      if (errCode === "DAILY_LIMIT" || errCode === 402) {
+      if (errCode === "DAILY_LIMIT" || errCode === 402 || errStatus === 402) {
         setDailyLimitActive(true);
         void refreshQuota(true);
-        toast.error("Daily free limit reached — see Pro options", { id: "daily-limit" });
+        const quotaMsg = (err as any)?.error || "Daily free limit reached — see Pro options";
+        toast.error(quotaMsg, { id: "daily-limit", duration: 7000 });
         setIsRewriting(false);
         isExecutingRef.current = false;
+        return;
+      }
+      if (errCode === "UNSUPPORTED_CHANNEL" || errStatus === 422) {
+        // Bouncer halted a non-verbal/music channel. Graceful rejection: show
+        // the clean message, stop the pipeline, keep the log visible as N/A.
+        const message = err instanceof Error ? err.message : String(err);
+        const failed = steps.map((s) =>
+          s.status === "processing" || s.status === "pending"
+            ? { ...s, status: "error" as const, meta: "NON-VERBAL" }
+            : s,
+        );
+        setLogSteps(failed);
+        setIsRewriting(false);
+        isExecutingRef.current = false;
+        toast.error(message, { id: "clone-crush-bouncer", duration: 8000 });
         return;
       }
       // Genuine transport failure — the generation did NOT succeed, so never

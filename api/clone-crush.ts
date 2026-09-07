@@ -1058,6 +1058,110 @@ function competitorMetrics(competitors: any[], niche: string, cpm = '$5-8') {
 }
 
 // -------------------------------------------------------------
+// AI BOUNCER — spoken-word vs non-verbal channel classification gate.
+// This tool generates SPOKEN-WORD video scripts only. A channel that is
+// pure music / DJ mix / instrumental / otherwise non-verbal must be halted
+// before the Chain-Loop runs, or the LLM hallucinates a spoken script for
+// a topic that has none (e.g. a "Tech & Coding" script "based on" a Dark
+// Phonk music channel). Deterministic genre markers run first (zero cost,
+// reliable for obvious cases like "@VoltagePhonkMusic"); the metadata is
+// then passed to a pre-check LLM prompt as the authoritative classifier.
+// -------------------------------------------------------------
+const UNSUPPORTED_CHANNEL_MESSAGE = 'Unsupported Channel: This tool is optimized for spoken-word video scripts. Pure music channels are not supported.';
+
+type ChannelVerdict = { spokenWord: boolean; reason: string };
+
+// Unambiguous non-verbal/music genre markers. Deliberately conservative: we
+// never block on bare words like "music"/"audio"/"song" (spoken channels
+// legitimately contain those) — only on clearly genre-specific markers.
+const NON_VERBAL_MARKERS = [
+  'phonk', 'dj mix', 'dj set', 'dj live', 'lofi', 'lo-fi', 'nightcore',
+  'edm mix', 'techno mix', 'deep house', 'house mix', 'drum and bass', 'dnb mix',
+  'type beat', 'beats to', 'instrumental', 'bass boosted', 'slowed + reverb',
+  'slowed reverb', 'remix', 'music mix', 'mashup', 'neurofunk', 'trance',
+  'psytrance', 'dubstep', 'hardstyle', 'synthwave', 'dark phonk', 'amv', 'afrobeat',
+];
+
+/** Cheap, deterministic pre-filter. Returns an opinion only on DECISIVE
+ *  genre signals; returns null when the signal is ambiguous so the LLM gate
+ *  gets the final call (and never false-blocks a spoken channel). */
+function heuristicChannelVerdict(handle: string, title: string, niche: string): ChannelVerdict | null {
+  const text = [handle, title, niche].filter(Boolean).join(' ').toLowerCase();
+  const hits = NON_VERBAL_MARKERS.filter((m) => text.includes(m));
+  if (hits.length >= 1) {
+    return { spokenWord: false, reason: `genre markers: ${hits.join(', ')}` };
+  }
+  return null;
+}
+
+/** Authoritative LLM classification gate. Runs the metadata (handle, titles,
+ *  hashtags/niche, transcript excerpt) through a pre-check prompt that
+ *  returns strict JSON. Fail-open: if the classifier is unavailable or
+ *  undecided, we DO NOT block (never reject a legitimately spoken channel). */
+async function llmChannelVerdict(meta: {
+  handle?: string; title: string; niche?: string; hashtags?: string[]; transcript?: string;
+}): Promise<ChannelVerdict | null> {
+  try {
+    const tags = (meta.hashtags?.length ? meta.hashtags : []).slice(0, 12).join(' ');
+    const transcript = (meta.transcript || '').slice(0, 600).replace(/\s+/g, ' ').trim();
+    const prompt = `You are a strict channel-classification guard for a spoken-word video script generator.
+Decide whether the content produces SPOKEN-WORD narration (people talking: tutorials, reviews, storytelling, commentary, educational, motivational, podcast, vlog, news, documentary) OR is NON-VERBAL / MUSIC (pure music, DJ mixes, instrumental tracks, beats, phonk, EDM, lo-fi, ambient, lyric-only visuals, no speech).
+
+Rules:
+- If the content is music, a DJ mix, an instrumental, or otherwise has no spoken-word narration, "spoken_word" MUST be false.
+- If there is any real spoken narration (even with background music), "spoken_word" may be true.
+- Base the decision on the handle, title, niche and any transcript text provided.
+
+Respond with STRICT JSON ONLY, no prose:
+{"spoken_word": true, "category": "<short>", "confidence": 0.0-1.0, "signals": ["<evidence>"]}
+
+Channel metadata:
+Handle: ${meta.handle || 'unknown'}
+Channel name/niche: ${meta.niche || 'unknown'}
+Video title: ${meta.title || 'unknown'}
+Hashtags: ${tags || 'none'}
+Transcript excerpt: ${transcript || 'none available'}`;
+
+    const outcome = await fetchOpenRouterWithRetry({
+      body: {
+        systemInstruction: { parts: [{ text: 'You classify whether YouTube content is spoken-word or non-verbal. Reply with strict JSON only.' }] },
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 300 },
+      },
+      deadlineMs: 9_000,
+      maxTokens: 300,
+    });
+    const res = outcome.res;
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = extractOpenRouterText(data);
+    if (!content) return null;
+    const parsed = JSON.parse(cleanupJson(content)) as { spoken_word?: unknown; confidence?: unknown; category?: unknown; signals?: unknown };
+    const spoken = typeof parsed.spoken_word === 'boolean' ? parsed.spoken_word : null;
+    const confidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0;
+    const category = typeof parsed.category === 'string' ? parsed.category : 'unknown';
+    const signals = Array.isArray(parsed.signals) ? parsed.signals.filter((s) => typeof s === 'string') : [];
+    if (spoken === null) return null;
+    if (!spoken && confidence >= 0.6) {
+      return { spokenWord: false, reason: `LLM classified as ${category} (conf ${confidence.toFixed(2)}): ${signals.join('; ')}` };
+    }
+    return { spokenWord: true, reason: `LLM classified as ${category} (conf ${confidence.toFixed(2)})` };
+  } catch {
+    return null;
+  }
+}
+
+/** Combined bouncer: deterministic heuristic, then LLM. Only a DECISIVE
+ *  non-verbal verdict halts generation; anything ambiguous/unknown proceeds. */
+async function assertSpokenWordChannel(meta: {
+  handle?: string; title: string; niche?: string; hashtags?: string[]; transcript?: string;
+}): Promise<ChannelVerdict | null> {
+  const heuristic = heuristicChannelVerdict(meta.handle || '', meta.title, meta.niche || '');
+  if (heuristic && !heuristic.spokenWord) return heuristic;
+  return llmChannelVerdict(meta);
+}
+
+// -------------------------------------------------------------
 // Primary handler — returns structured intelligence for every request,
 // including in degraded/fallback modes. See top-of-file docblock.
 // -------------------------------------------------------------
@@ -1087,20 +1191,28 @@ export default async function handler(req: Request) {
     let tier: 'free' | 'premium' = 'free';
     if (action === 'rewrite' || action === 'thumbnail-reverse') {
       // -------------------------------------------------------------
-      // CTO DIRECTIVE (2026-09-06): a valid authenticated session is the
-      // sole requirement to run the Chain-Loop. The tier/entitlement gate
-      // (`resolveTier` → `hasProEntitlement`) could false-reject a valid
-      // caller whenever the `get_pro_entitlement` RPC is unavailable, so it
-      // is bypassed here. Auth is still enforced: no valid caller forms a
-      // 401 AUTH_REQUIRED. To restore Pro-gated tiers, un-gate `resolveTier`
-      // below.
+      // CTO DIRECTIVE (2026-09-07): reinstate tier/quota enforcement to
+      // securely match the frontend Conveyor-Slot timer, WITHOUT the bug that
+      // falsely 403'd a valid session. Order is critical:
+      //   1) AUTH first — a valid caller is mandatory, else 401 AUTH_REQUIRED.
+      //   2) ENTITLEMENT — a premium request only becomes premium when the
+      //      entitlement check actively confirms it. If the entitlement RPC is
+      //      unavailable OR returns not-entitled, we degrade to FREE tier
+      //      (never a hard 403) so a valid session is never blocked; the
+      //      frontend timer + free daily quota govern the visual/spam limit.
       // -------------------------------------------------------------
       const caller = await authenticatedUser(req);
       if (!caller) {
         return jsonResponse({ error: 'Sign in to execute the Chain-Loop', code: 'AUTH_REQUIRED', callerAuth: callerAuthDiagnostic(req) }, 401);
       }
       const requestedTier = enforceTier(bodyResult.data.tier);
-      tier = requestedTier === 'premium' || requestedTier === 'enterprise' ? 'premium' : 'free';
+      if (requestedTier === 'premium' || requestedTier === 'enterprise') {
+        let entitled = false;
+        try { entitled = await hasProEntitlement(caller.id); } catch { entitled = false; }
+        tier = entitled ? 'premium' : 'free';
+      } else {
+        tier = 'free';
+      }
     }
 
     const { channelUrl, niche, targetVideoId, originalTranscript, originalTitle } = bodyResult.data;
@@ -1253,14 +1365,60 @@ export default async function handler(req: Request) {
       const truncatedTranscript = originalTranscript.slice(0, 11000);
       const isPremium = tier === 'premium';
 
-      // Daily quota gate (1 run / 24h for free users) — BYPASSED per CTO
-      // directive (2026-09-06) so a valid session is never blocked from
-      // generating. The freeze is lifted; the consumption RPC is still
-      // invoked (fire-and-forget) so the 2-node referral proof-of-work
-      // accounting stays intact, but its result is NOT honored as a hard
-      // block. Restore the gate by honoring `quota` here.
+      // -------------------------------------------------------------
+      // AI BOUNCER — halt the pipeline for non-verbal / music channels
+      // BEFORE the Chain-Loop runs so the LLM can't hallucinate a spoken
+      // script for a pure-music source. Deterministic genre markers then an
+      // LLM classification verdict; only a DECISIVE non-verbal result halts.
+      // -------------------------------------------------------------
+      const handle = typeof bodyResult.data.channelHandle === 'string' ? bodyResult.data.channelHandle
+        : typeof bodyResult.data.channelName === 'string' ? bodyResult.data.channelName : undefined;
+      const hashtags = Array.isArray(bodyResult.data.hashtags)
+        ? bodyResult.data.hashtags.filter((h: unknown) => typeof h === 'string')
+        : (originalTitle.match(/#[\w]+/g) || []);
+      const bouncerVerdict = await assertSpokenWordChannel({
+        handle,
+        title: originalTitle,
+        niche: niche || undefined,
+        hashtags,
+        transcript: truncatedTranscript,
+      });
+      if (bouncerVerdict && !bouncerVerdict.spokenWord) {
+        console.warn('[clone-crush:bouncer] blocked non-verbal channel:', bouncerVerdict.reason);
+        return jsonResponse({ success: false, error: UNSUPPORTED_CHANNEL_MESSAGE, code: 'UNSUPPORTED_CHANNEL', service: 'clone-crush' }, 422);
+      }
+
+      // -------------------------------------------------------------
+      // Daily quota gate (1 run / 24h for free users) — REINSTATEMENT per
+      // CTO directive (2026-09-07) to securely match the frontend Conveyor
+      // timer. AUTH is already validated above, so consumeDailyQuota's own
+      // authenticatedUser() will succeed; only an actually-exhausted free
+      // quota returns 402. Its internal fallback still fails OPEN on an RPC
+      // outage (returns allowed) so a Supabase hiccup never hard-blocks a
+      // valid session. Pro users bypass via the internal check.
+      // -------------------------------------------------------------
       if (!isPremium) {
-        await consumeDailyQuota(req).catch(() => null);
+        const quota = await consumeDailyQuota(req);
+        if (quota.code === 'AUTH_REQUIRED') {
+          return jsonResponse({ error: 'Sign in to execute a Chain-Loop', code: 'AUTH_REQUIRED', callerAuth: callerAuthDiagnostic(req) }, 401);
+        }
+        if (!quota.allowed) {
+          const remainingSeconds = quota.remainingSeconds ?? 0;
+          return jsonResponse({
+            success: false,
+            error: remainingSeconds > 0
+              ? `Daily free limit reached. Next Conveyor slot unlocks in ${Math.ceil(remainingSeconds / 60)}m.`
+              : 'Daily free limit reached. Unlock Pro for unlimited Chain-Loops.',
+            code: 'DAILY_LIMIT',
+            lockoutSeconds: remainingSeconds,
+            tier: 'free',
+            limit: quota.limit ?? 1,
+            usedToday: quota.usedToday ?? 1,
+            remaining: 0,
+            resetAt: quota.resetAt,
+            remainingSeconds,
+          }, 402);
+        }
       }
       const glitchProtocolBlock = isPremium
         ? `\n=== GLITCH PROTOCOL: 99% EXECUTION (PREMIUM) ===\nMAXIMUM AGGRESSION. Weaponized for max CTR.\nTITLE MUST contain Curiosity Glitch: time-jump, hidden secret, shocking mistake, impossible result.\nUse power words: Secret, Hidden, Banned, Exposed, Revealed, Warning, Urgent, Finally, Truth\nHOOK structure: [SHOCKING STATEMENT] → [CREDIBILITY] → [OPEN LOOP] with PATTERN INTERRUPT\nSCRIPT: Every 45-60s RETENTION SPIKE, Open Loop → Partial Close → New Loop, LOOP BOMB at end\nTHUMBNAIL: psychologically aggressive, specific facial expression, color contrast, emotional trigger\n`
