@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Brain, Loader2, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useSoftGate } from "@/contexts/SoftGateContext";
 import { useAudienceBrief, useAudienceProfile, useChallengeState, useEnrollChallenge, useEngineConnection, useGenerateScript } from "@/hooks/useEngineData";
 import { engineConfigured, EngineError } from "@/lib/engine/client";
@@ -21,6 +22,25 @@ export function AudienceIntelligenceSection() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const enabled = engineConfigured() && isAuthenticated;
+
+  // The Render backend engine redirects back here after Google OAuth with a
+  // ?youtube=connected|error query param. Consume it: force the connection
+  // query to refetch immediately (so the "Connect YouTube" button swaps to the
+  // connected card as soon as the vault is written), clean the marker out of
+  // the URL, and surface result feedback. This closes the cross-domain
+  // handoff loop that otherwise left the UI showing a stale disconnected state.
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("youtube");
+    if (!result) return;
+    window.history.replaceState({}, document.title, window.location.pathname);
+    void qc.invalidateQueries({ queryKey: ["engine", "connection"] });
+    qc.refetchQueries({ queryKey: ["engine", "connection"] });
+    if (result === "connected") {
+      toast.success("YouTube connected — analytics syncing.", { id: "youtube-connect" });
+    } else if (result === "error") {
+      toast.error("YouTube connection failed. Please try again.", { id: "youtube-connect" });
+    }
+  }, [qc]);
 
   const connection = useEngineConnection(enabled);
   const audience = useAudienceProfile(enabled && (connection.data?.connected ?? false));

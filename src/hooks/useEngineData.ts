@@ -29,6 +29,13 @@ export function useEngineConnection(enabled: boolean) {
     queryFn: () => engineFetch<ConnectionStatus>("/api/youtube/connection"),
     enabled,
     staleTime: 60_000,
+    // Always refetch when this hook mounts (i.e. when the dashboard view that
+    // shows the Connect/Connected card is entered). Connection status is the
+    // one field that must NEVER be served from cache across an OAuth round
+    // trip: the backend store is updated during the Google consent redirect,
+    // and the app reloads on landing back with a stale cached "connected:
+    // false" that this card would otherwise keep showing.
+    refetchOnMount: "always",
     retry: (count, err) => !(err instanceof EngineError && err.status === 401) && count < 2,
   });
 }
