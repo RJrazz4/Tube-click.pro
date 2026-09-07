@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { createAppQueryClient } from "@/lib/cache/queryClient";
 import { SoftGateProvider } from "@/contexts/SoftGateContext";
@@ -72,6 +72,15 @@ const App = () => (
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   <Route path="/" element={<Index />} />
+                  {/* The application's creator home IS the dashboard, but it lives
+                      at "/". The third-party YouTube/OAuth provider (Render backend
+                      engine) redirects a successful Google login back to /dashboard,
+                      which is not a defined route and previously hit the 404
+                      ("Route /dashboard not found"). Alias /dashboard (and any
+                      /dashboard/* deep link) to the real dashboard so an OAuth
+                      callback lands on a valid, existing page instead of a 404. */}
+                  <Route path="/dashboard" element={<Index />} />
+                  <Route path="/dashboard/*" element={<Navigate to="/" replace />} />
                   <Route path="/voice" element={<SoftGateRoute><VoiceStudio /></SoftGateRoute>} />
                   <Route path="/repurposer" element={<SoftGateRoute><Repurposer /></SoftGateRoute>} />
                   <Route path="/analytics" element={<SoftGateRoute><Analytics /></SoftGateRoute>} />
