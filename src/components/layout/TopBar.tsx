@@ -8,15 +8,18 @@ import { useProUpgrade } from "@/contexts/ProUpgradeContext";
 import { GhostNodeStatus } from "@/components/ui/GhostNodeStatus";
 import { LiveActiveCounter } from "@/components/ui/LiveActiveCounter";
 import { UserMenu } from "@/components/layout/UserMenu";
+import { cn } from "@/lib/utils";
+import { useSidebarState } from "@/lib/sidebarState";
 
 export function TopBar() {
   const [ghostOpen, setGhostOpen] = useState(false);
   const handleGhostTrigger = useGhostTrigger(() => setGhostOpen(true));
   const { isAuthenticated, requestAuthentication } = useSoftGate();
   const { openProUpgrade } = useProUpgrade();
+  const collapsed = useSidebarState((s) => s.collapsed);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-40 flex h-16 items-center justify-between border-b border-primary/10 glass-strong px-6 backdrop-blur-2xl md:left-64 max-md:px-3">
+    <header className={cn("fixed top-0 left-0 right-0 z-40 flex h-16 items-center justify-between border-b border-primary/10 glass-strong px-6 backdrop-blur-2xl transition-[left] duration-300 max-md:px-3", collapsed ? "md:left-20" : "md:left-64")}>
       <div className="absolute inset-0 ghost-scanline opacity-[0.02] pointer-events-none" />
       <div className="flex items-center gap-3 max-sm:gap-1.5 relative z-10">
         <h1

@@ -23,6 +23,7 @@ const VoiceStudio = lazy(() => import("./pages/VoiceStudio"));
 const Repurposer = lazy(() => import("./pages/Repurposer"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const SeoOptimizer = lazy(() => import("./pages/SeoOptimizer"));
+const YoutubeGrowth = lazy(() => import("./pages/YoutubeGrowth"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Terms = lazy(() => import("./pages/Terms"));
 const About = lazy(() => import("./pages/About"));
@@ -84,6 +85,7 @@ const App = () => (
                   <Route path="/voice" element={<SoftGateRoute><VoiceStudio /></SoftGateRoute>} />
                   <Route path="/repurposer" element={<SoftGateRoute><Repurposer /></SoftGateRoute>} />
                   <Route path="/analytics" element={<SoftGateRoute><Analytics /></SoftGateRoute>} />
+                  <Route path="/youtube-growth" element={<SoftGateRoute><YoutubeGrowth /></SoftGateRoute>} />
                   <Route path="/seo" element={<SoftGateRoute><SeoOptimizer /></SoftGateRoute>} />
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/terms" element={<Terms />} />

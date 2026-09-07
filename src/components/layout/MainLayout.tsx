@@ -7,6 +7,7 @@ import { CommandPaletteGhost } from "@/components/ui/CommandPaletteGhost";
 import { GlobalMatrixLayer } from "@/components/ui/GlobalMatrixLayer";
 import { VideoWallBackground } from "@/components/ui/VideoWallBackground";
 import { useCanonicalMeta } from "@/hooks/useCanonicalMeta";
+import { useSidebarState } from "@/lib/sidebarState";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -14,6 +15,8 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   useCanonicalMeta();
+  const collapsed = useSidebarState((s) => s.collapsed);
+  const contentMargin = collapsed ? "md:ml-20" : "md:ml-64";
   return (
     <div className="app-shell min-h-[100dvh] bg-background flex flex-col relative">
       <GlobalMatrixLayer />
@@ -25,12 +28,12 @@ export function MainLayout({ children }: MainLayoutProps) {
       <CommandPaletteGhost />
       <Sidebar />
       <TopBar />
-      <main id="main-content" tabIndex={-1} className="pt-16 flex-1 md:ml-64 max-md:ml-0 max-md:pb-[calc(4.5rem+env(safe-area-inset-bottom))] relative z-10">
+      <main id="main-content" tabIndex={-1} className={`pt-16 flex-1 max-md:ml-0 max-md:pb-[calc(4.5rem+env(safe-area-inset-bottom))] relative z-10 transition-[margin] duration-300 ${contentMargin}`}>
         <div className="p-4 sm:p-6 lg:p-8">
           {children}
         </div>
       </main>
-      <div className="md:ml-64 max-md:ml-0 max-md:mb-[calc(4.5rem+env(safe-area-inset-bottom))] relative z-10">
+      <div className={`max-md:ml-0 max-md:mb-[calc(4.5rem+env(safe-area-inset-bottom))] relative z-10 transition-[margin] duration-300 ${contentMargin}`}>
         <Footer />
       </div>
       {/* Ghost hint for command palette - desktop only, lightweight */}

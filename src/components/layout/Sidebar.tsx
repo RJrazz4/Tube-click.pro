@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   BookOpen,
@@ -9,7 +10,10 @@ import {
   LayoutDashboard,
   Menu,
   Mic,
+  PanelLeftClose,
+  PanelLeftOpen,
   PenLine,
+  Rocket,
   Search,
   Settings,
   Share2,
@@ -19,9 +23,31 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDashboardRefresh } from "@/lib/dashboardRefresh";
+import { useSidebarState } from "@/lib/sidebarState";
 import { SupportModal } from "./SupportModal";
 
-const navGroups = [
+/**
+ * Navigation model.
+ *
+ * Every item carries:
+ *  - `label`      full text rendered when the sidebar is expanded (desktop)
+ *  - `shortLabel` truncated text shown when the sidebar is collapsed (desktop
+ *                 icon rail) or on the mobile tab rail. Falls back to `label`.
+ *
+ * This is what powers the state-aware "YouTube advance growth" → "YT Growth"
+ * rendering: expanded shows the full string; collapsed/mobile shows the short
+ * label next to the icon, with `whitespace-nowrap / overflow-hidden /
+ * text-ellipsis` so the transition never breaks the layout.
+ */
+type NavItem = {
+  icon: LucideIcon;
+  label: string;
+  shortLabel?: string;
+  description?: string;
+  path: string;
+};
+
+const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: "Workspace",
     items: [
@@ -36,22 +62,24 @@ const navGroups = [
       { icon: PenLine, label: "Create from a topic", description: "Generate titles, hooks, and scripts", path: "/create" },
       { icon: Mic, label: "Voiceover", description: "Turn scripts into narration", path: "/voice" },
       { icon: Share2, label: "Repurpose", description: "Format content for other platforms", path: "/repurposer" },
+      { icon: Rocket, label: "YouTube advance growth", shortLabel: "YT Growth", description: "Advanced channel growth playbook & roadmap", path: "/youtube-growth" },
       { icon: Search, label: "SEO", description: "Improve titles and tags", path: "/seo" },
       { icon: BarChart3, label: "Growth estimator", description: "Plan reach and revenue", path: "/analytics" },
     ],
   },
 ];
 
-const mobilePrimaryItems = [
+const mobilePrimaryItems: NavItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Zap, label: "Analyze", path: "/clone-crush" },
   { icon: Mic, label: "Voiceover", path: "/voice" },
   { icon: Share2, label: "Repurpose", path: "/repurposer" },
 ];
 
-const mobileMoreItems = [
+const mobileMoreItems: NavItem[] = [
   { icon: BookOpen, label: "Library", description: "Find your saved content", path: "/library" },
   { icon: PenLine, label: "Create from topic", description: "Generate titles, hooks, and scripts", path: "/create" },
+  { icon: Rocket, label: "YouTube advance growth", shortLabel: "YT Growth", description: "Advanced channel growth playbook", path: "/youtube-growth" },
   { icon: Search, label: "SEO", description: "Improve titles and tags", path: "/seo" },
   { icon: BarChart3, label: "Growth estimator", description: "Plan reach and revenue", path: "/analytics" },
   { icon: Gift, label: "Referral rewards", description: "Earn Pro with qualified referrals", path: "/rewards" },
@@ -69,6 +97,8 @@ export function Sidebar() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const bumpDashboard = useDashboardRefresh((s) => s.bump);
+  const collapsed = useSidebarState((s) => s.collapsed);
+  const toggleCollapsed = useSidebarState((s) => s.toggleCollapsed);
   // Clicking the sidebar "Dashboard" (→ "/") must force a clean state refresh
   // of the Command Center so the master hub shows real-time synced metrics.
   const go = (path: string) => {
@@ -78,31 +108,44 @@ export function Sidebar() {
   return (
     <aside
       aria-label="Primary navigation"
-      className="mobile-safe-bottom fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-primary/10 glass-strong py-5 backdrop-blur-2xl max-md:bottom-0 max-md:top-auto max-md:h-[calc(4.5rem+env(safe-area-inset-bottom))] max-md:w-full max-md:flex-row max-md:border-r-0 max-md:border-t max-md:px-2 max-md:py-1"
+      className={cn(
+        "mobile-safe-bottom fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-primary/10 glass-strong py-5 backdrop-blur-2xl transition-[width] duration-300 max-md:bottom-0 max-md:top-auto max-md:h-[calc(4.5rem+env(safe-area-inset-bottom))] max-md:w-full max-md:flex-row max-md:border-r-0 max-md:border-t max-md:px-2 max-md:py-1",
+        collapsed ? "md:w-20" : "md:w-64",
+      )}
     >
       <div className="absolute inset-0 ghost-scanline opacity-[0.015] pointer-events-none max-md:hidden" />
 
       {/* Desktop navigation */}
       <div className="relative z-10 hidden h-full min-h-0 flex-col md:flex">
-        <Link to="/" onClick={() => go("/")} className="mb-7 flex items-center gap-3 px-4" aria-label="Go to TubeClick Pro dashboard">
+        <Link
+          to="/"
+          onClick={() => go("/")}
+          className={cn("mb-7 flex items-center gap-3 px-4", collapsed && "justify-center px-0")}
+          aria-label="Go to TubeClick Pro dashboard"
+          title="TubeClick Pro"
+        >
           <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-gradient-to-br from-neon-purple to-neon-cyan neon-glow-purple transition-transform duration-300 hover:scale-105">
             <Sparkles className="h-5 w-5 text-white" aria-hidden="true" />
             <span className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-background bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]" />
           </div>
-          <div className="min-w-0">
-            <p className="font-display text-sm font-black tracking-wide text-foreground">
-              TubeClick <span className="text-cyan-300">Pro</span>
-            </p>
-            <p className="mt-0.5 text-[9px] font-mono uppercase tracking-[0.18em] text-muted-foreground">Creator workspace</p>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <p className="font-display text-sm font-black tracking-wide text-foreground">
+                TubeClick <span className="text-cyan-300">Pro</span>
+              </p>
+              <p className="mt-0.5 text-[9px] font-mono uppercase tracking-[0.18em] text-muted-foreground">Creator workspace</p>
+            </div>
+          )}
         </Link>
 
-        <nav aria-label="Workspace navigation" className="min-h-0 flex-1 space-y-6 overflow-y-auto px-3 scrollbar-none">
+        <nav aria-label="Workspace navigation" className={cn("min-h-0 flex-1 space-y-6 overflow-y-auto px-3 scrollbar-none", collapsed && "px-2")}>
           {navGroups.map((group) => (
             <div key={group.label}>
-              <p className="mb-2 px-3 text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/60">
-                {group.label}
-              </p>
+              {!collapsed && (
+                <p className="mb-2 px-3 text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/60">
+                  {group.label}
+                </p>
+              )}
               <div className="space-y-1">
                 {group.items.map((item) => {
                   const active = isActivePath(location.pathname, item.path);
@@ -112,8 +155,12 @@ export function Sidebar() {
                       to={item.path}
                       onClick={() => go(item.path)}
                       aria-current={active ? "page" : undefined}
+                      title={item.label}
                       className={cn(
                         "group flex min-h-[52px] items-center gap-3 rounded-xl border px-3 py-2 transition-all duration-200",
+                        collapsed
+                          ? "w-full flex-col justify-center gap-1 px-1 py-2 text-center"
+                          : "min-h-[52px]",
                         active
                           ? "border-primary/25 bg-primary/15 text-primary shadow-[0_0_18px_rgba(139,92,246,0.14)]"
                           : "border-transparent text-sidebar-foreground hover:border-primary/15 hover:bg-secondary/60 hover:text-foreground",
@@ -122,11 +169,19 @@ export function Sidebar() {
                       <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border", active ? "border-primary/25 bg-primary/15" : "border-border/50 bg-secondary/40 group-hover:border-primary/20")}>
                         <item.icon className="h-4 w-4" aria-hidden="true" />
                       </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold leading-tight">{item.label}</span>
-                        <span className="mt-0.5 block truncate text-[10px] leading-tight text-muted-foreground">{item.description}</span>
-                      </span>
-                      <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground/40 transition-transform", active && "translate-x-0.5 text-primary")} aria-hidden="true" />
+                      {collapsed ? (
+                        <span className="w-full truncate whitespace-nowrap text-[9px] font-semibold leading-tight text-sidebar-foreground group-hover:text-foreground" style={{ textOverflow: "ellipsis", overflow: "hidden" }}>
+                          {item.shortLabel ?? item.label}
+                        </span>
+                      ) : (
+                        <>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-semibold leading-tight">{item.label}</span>
+                            <span className="mt-0.5 block truncate text-[10px] leading-tight text-muted-foreground">{item.description}</span>
+                          </span>
+                          <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground/40 transition-transform", active && "translate-x-0.5 text-primary")} aria-hidden="true" />
+                        </>
+                      )}
                     </Link>
                   );
                 })}
@@ -135,11 +190,13 @@ export function Sidebar() {
           ))}
         </nav>
 
-        <div className="mt-4 space-y-2 px-3">
+        <div className={cn("mt-4 space-y-2 px-3", collapsed && "space-y-1.5 px-2")}>
           <Link
             to="/rewards"
+            title="Referral rewards"
             className={cn(
               "group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors",
+              collapsed && "flex-col gap-1 justify-center px-1 py-2 text-center",
               isActivePath(location.pathname, "/rewards")
                 ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
                 : "border-amber-400/15 bg-amber-400/5 text-amber-200/80 hover:border-amber-400/30 hover:bg-amber-400/10",
@@ -149,42 +206,62 @@ export function Sidebar() {
               <Gift className="h-4 w-4 text-amber-300" aria-hidden="true" />
               <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-300" />
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold leading-tight">Referral rewards</span>
-              <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">Earn Pro with qualified referrals</span>
-            </span>
+            {!collapsed && (
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold leading-tight">Referral rewards</span>
+                <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">Earn Pro with qualified referrals</span>
+              </span>
+            )}
           </Link>
 
           <Link
             to="/settings"
+            title="Settings"
             aria-current={isActivePath(location.pathname, "/settings") ? "page" : undefined}
             className={cn(
               "flex min-h-[46px] items-center gap-3 rounded-xl border px-3 transition-colors",
+              collapsed && "w-full justify-center px-0",
               isActivePath(location.pathname, "/settings")
                 ? "border-primary/25 bg-primary/15 text-primary"
                 : "border-transparent text-sidebar-foreground hover:border-primary/15 hover:bg-secondary/60 hover:text-foreground",
             )}
           >
             <Settings className="ml-1 h-4 w-4" aria-hidden="true" />
-            <span className="text-sm font-semibold">Settings</span>
+            {!collapsed && <span className="text-sm font-semibold">Settings</span>}
           </Link>
 
           <button
             type="button"
             onClick={() => setSupportOpen(true)}
+            title="Support"
             className={cn(
               "flex min-h-[46px] w-full items-center gap-3 rounded-xl border px-3 transition-colors text-left",
+              collapsed && "w-full justify-center px-0",
               "border-transparent text-sidebar-foreground hover:border-primary/15 hover:bg-secondary/60 hover:text-foreground",
             )}
           >
             <HelpCircle className="ml-1 h-4 w-4" aria-hidden="true" />
-            <span className="text-sm font-semibold">Support</span>
+            {!collapsed && <span className="text-sm font-semibold">Support</span>}
           </button>
 
-          <div className="flex items-center justify-between rounded-lg border border-primary/10 bg-secondary/25 px-3 py-2">
-            <span className="flex items-center gap-1.5 text-[9px] font-mono text-green-400"><span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />System ready</span>
-            <span className="text-[9px] font-mono text-muted-foreground">Creator tools</span>
+          <div className={cn("flex items-center justify-between rounded-lg border border-primary/10 bg-secondary/25 px-3 py-2", collapsed && "justify-center px-0 py-2")}>
+            <span className="flex items-center gap-1.5 text-[9px] font-mono text-green-400"><span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />{!collapsed && "System ready"}</span>
+            {!collapsed && <span className="text-[9px] font-mono text-muted-foreground">Creator tools</span>}
           </div>
+
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={cn(
+              "flex min-h-[40px] w-full items-center gap-3 rounded-xl border border-border/60 bg-secondary/40 px-3 transition-colors text-muted-foreground hover:border-primary/30 hover:bg-secondary/70 hover:text-foreground",
+              collapsed && "w-full justify-center px-0",
+            )}
+          >
+            {collapsed ? <PanelLeftOpen className="ml-1 h-4 w-4" aria-hidden="true" /> : <PanelLeftClose className="h-4 w-4" aria-hidden="true" />}
+            {!collapsed && <span className="text-xs font-semibold">Collapse</span>}
+          </button>
         </div>
       </div>
 
@@ -204,7 +281,7 @@ export function Sidebar() {
               )}
             >
               <item.icon className="h-4 w-4" aria-hidden="true" />
-              <span className="truncate">{item.label}</span>
+              <span className="truncate whitespace-nowrap">{item.shortLabel ?? item.label}</span>
             </Link>
           );
         })}
@@ -248,7 +325,7 @@ export function Sidebar() {
                 >
                   <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span className="min-w-0">
-                    <span className="block text-xs font-semibold">{item.label}</span>
+                    <span className="block text-xs font-semibold">{item.shortLabel ?? item.label}</span>
                     <span className="mt-0.5 block truncate text-[9px] text-muted-foreground">{item.description}</span>
                   </span>
                 </button>
