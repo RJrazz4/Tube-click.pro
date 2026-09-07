@@ -55,7 +55,9 @@ import {
 } from "@/hooks/useEngineData";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
 import { AutomationEngine } from "@/components/growth/AutomationEngine";
+import { DailyContentEngine } from "@/components/growth/DailyContentEngine";
 import type { BriefSignal, CompetitorSignal } from "@/lib/growth/synthesis";
+import type { CompetitorGap } from "@/lib/engine/types";
 
 /**
  * Advanced YouTube Growth Engine — a data-driven growth intelligence console.
@@ -183,6 +185,17 @@ export default function YoutubeGrowth() {
 
   const narrativeBrief = profile.data?.narrative?.brief ?? null;
 
+  // Competitor gap context for the Daily Content Engine (real Clone&Crush data).
+  const competitorGap: CompetitorGap = useMemo(() => ({
+    niche: envyMetrics?.niche ?? undefined,
+    avgVelocity: envyMetrics?.averageViralVelocity ?? undefined,
+    monthlyRevenue: envyMetrics?.totalCompetitorMonthlyRevenueNum ?? undefined,
+    topVideoTitle: competitorTop?.title ?? undefined,
+    topVideoChannel: competitorTop?.channelName ?? undefined,
+    topVideoVelocity: competitorTop?.velocity ?? undefined,
+    topVideoViews: competitorTop?.views ?? undefined,
+  }), [envyMetrics, competitorTop]);
+
   // ── composite Growth Score (0..100) — modeled, transparent weighting ──
   const growthScore = useMemo(() => {
     const signals = avgMomentum || 0; // audience demand strength
@@ -301,6 +314,9 @@ export default function YoutubeGrowth() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ═══ DAILY CONTENT ENGINE — one targeted package per day (Dual-LLM) ═══ */}
+      <DailyContentEngine connected={connected} competitorGap={competitorGap} />
 
       {/* ═══ AUTOMATION ENGINE — the decision layer ═══ */}
       <AutomationEngine

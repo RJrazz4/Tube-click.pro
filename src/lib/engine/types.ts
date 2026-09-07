@@ -107,6 +107,60 @@ export interface EngineScriptDetail extends EngineScriptListItem {
   prompt_version?: string;
 }
 
+// ── Dual-LLM Daily Content Engine (backend /api/content/daily) ──────────
+export interface DailyVisualBeat {
+  at: string; // "00:00-00:05"
+  shot: string;
+  broll: string;
+}
+
+export interface DailyPackage {
+  format: 'short' | 'long';
+  hunger_topic: string;
+  title: string;
+  script: string;
+  hook: { text: string; seconds: number; variants: string[] };
+  voiceover_prompt: string;
+  tags: string[];
+  description: string;
+  visual_timeline: DailyVisualBeat[];
+  thumbnail_text?: string;
+  posting_window: { note: string };
+  audience_evidence: { grounding_references: string[]; evidence_numbers: string[] };
+}
+
+export interface DailyEditorReport {
+  approved: boolean;
+  opening_rewritten: boolean;
+  generic_intros_removed: string[];
+  hook_reason: string;
+  format_issues: string[];
+  model?: string;
+}
+
+export interface DailyContentRecord {
+  date: string;
+  userId: string;
+  tier: 'free' | 'premium';
+  groundingHash: string;
+  generationModel: string;
+  editorModel: string;
+  result: { short: DailyPackage; long?: DailyPackage };
+  reports: { short: DailyEditorReport; long?: DailyEditorReport };
+  costUsd: number;
+  createdAt: string;
+}
+
+export interface CompetitorGap {
+  niche?: string;
+  avgVelocity?: number;
+  monthlyRevenue?: number;
+  topVideoTitle?: string;
+  topVideoChannel?: string;
+  topVideoVelocity?: number;
+  topVideoViews?: number;
+}
+
 export interface ConnectionStatus {
   connected: boolean;
   status?: "active" | "expired" | "revoked" | "error";

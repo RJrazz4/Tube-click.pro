@@ -5,7 +5,9 @@ import type {
   AudienceBrief,
   AudienceProfile,
   ChallengeState,
+  CompetitorGap,
   ConnectionStatus,
+  DailyContentRecord,
   EngineScriptDetail,
   EngineScriptListItem,
 } from "@/lib/engine/types";
@@ -241,6 +243,47 @@ export function useYouTubeHub(enabled: boolean) {
     },
     enabled,
     staleTime: 5 * 60_000,
+  });
+}
+
+// ---------------------------------------------------------------------
+// Dual-LLM Daily Content Engine — one targeted package per day.
+//   GET  /api/content/daily   today's package (Editor-approved)
+//   POST /api/content/daily   trigger today's generation (queued)
+// ---------------------------------------------------------------------
+export function useDailyContent(enabled: boolean) {
+  return useQuery({
+    queryKey: ["engine", "daily-content"] as const,
+    queryFn: () => engineFetch<DailyContentRecord>("/api/content/daily"),
+    enabled,
+    staleTime: 60_000,
+    retry: (count, err) =>
+      // 404 (not generated yet) is a real state — don't retry-spin.
+      !(err instanceof EngineError && [401, 404, 503].includes(err.status)) && count < 2,
+  });
+}
+
+export function useGenerateDailyContent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (competitorGap: CompetitorGap) =>
+      engineFetch<{ status: string; jobId: string; date: string; cached?: boolean }>(
+        "/api/content/daily",
+        { method: "POST", body: { competitorGap } },
+      ),
+    onSuccess: (result) => {
+      if (result.cached) {
+        toast.success("Today's package is ready");
+      } else {
+        toast.success("Daily content engine dispatched", {
+          description: "LLM Generator → Editor pipeline running. Tapping the dashboard again shortly.",
+        });
+      }
+      // Poll after the dual-LLM pipeline has had time to run.
+      setTimeout(() => void qc.invalidateQueries({ queryKey: ["engine", "daily-content"] }), 15_000);
+      setTimeout(() => void qc.invalidateQueries({ queryKey: ["engine", "daily-content"] }), 40_000);
+    },
+    onError: (err: Error) => toast.error(err.message, { duration: 5_000 }),
   });
 }
 
