@@ -42,6 +42,11 @@ async function accessToken(forceRefresh = false): Promise<string> {
   return token;
 }
 
+// Per-request hard timeout. A hung engine (Render cold start, network stall)
+// must never leave a React Query observer spinning in `isLoading` forever —
+// it would render an endless "Loading audience intelligence…" card.
+const ENGINE_FETCH_TIMEOUT_MS = 25_000;
+
 interface EngineFetchOptions {
   method?: "GET" | "POST" | "DELETE";
   body?: unknown;
@@ -66,6 +71,7 @@ export async function engineFetch<T>(path: string, options: EngineFetchOptions =
         ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
       },
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      signal: AbortSignal.timeout(ENGINE_FETCH_TIMEOUT_MS),
     });
   };
 

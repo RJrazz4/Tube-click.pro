@@ -26,23 +26,40 @@ export function AudienceIntelligenceSection() {
   // The Render backend engine redirects back here after Google OAuth with a
   // ?youtube=connected|error query param. Consume it: force the connection
   // query to refetch immediately (so the "Connect YouTube" button swaps to the
-  // connected card as soon as the vault is written), clean the marker out of
-  // the URL, and surface result feedback. This closes the cross-domain
-  // handoff loop that otherwise left the UI showing a stale disconnected state.
+  // connected card as soon as the vault is written) and clean the marker out
+  // of the URL. The TOAST is decided by the ACTUAL refetched connection result
+  // (see the second effect), not by the marker alone — a marker of "error" can
+  // coexist with a successful upsert, and we must not lie about the outcome.
   useEffect(() => {
     const result = new URLSearchParams(window.location.search).get("youtube");
     if (!result) return;
     window.history.replaceState({}, document.title, window.location.pathname);
     void qc.invalidateQueries({ queryKey: ["engine", "connection"] });
-    qc.refetchQueries({ queryKey: ["engine", "connection"] });
-    if (result === "connected") {
-      toast.success("YouTube connected — analytics syncing.", { id: "youtube-connect" });
-    } else if (result === "error") {
-      toast.error("YouTube connection failed. Please try again.", { id: "youtube-connect" });
-    }
+    void qc.refetchQueries({ queryKey: ["engine", "connection"] });
   }, [qc]);
 
   const connection = useEngineConnection(enabled);
+
+  // Decide the connect-outcome toast from the refetched connection state, so it
+  // resolves once the query settles (never an endless spinner). Only show it
+  // once we actually observed an OAuth return on this mount.
+  const [oauthReturn, setOauthReturn] = useState<string | null>(null);
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("youtube");
+    if (result) setOauthReturn(result);
+  }, []);
+  useEffect(() => {
+    if (!oauthReturn) return;
+    if (connection.isLoading || connection.isPending) return; // wait for it to settle
+    const connected = connection.data?.connected ?? false;
+    if (connection.isError || !connected) {
+      toast.error("YouTube connection failed. Please try again.", { id: "youtube-connect" });
+    } else {
+      toast.success("YouTube connected — analytics syncing.", { id: "youtube-connect" });
+    }
+    setOauthReturn(null);
+  }, [oauthReturn, connection.isLoading, connection.isPending, connection.isError, connection.data]);
+
   const audience = useAudienceProfile(enabled && (connection.data?.connected ?? false));
   const challenge = useChallengeState(enabled);
   const enroll = useEnrollChallenge();
@@ -71,7 +88,24 @@ export function AudienceIntelligenceSection() {
       </Card>
     );
   }
-  if (connection.isLoading || challenge.isLoading) {
+  // The connection status query is the source of truth for the "Connect"
+  // gateway. If it has settled into an error (the engine is unreachable,
+  // auth failed, or the request timed out), resolve to an actionable error
+  // state — never spin forever. Timeout is enforced in engineFetch.
+  if (connection.isError && !connection.isLoading && !connection.isFetching) {
+    const msg = connection.error instanceof EngineError ? connection.error.message : "The intelligence engine is unreachable.";
+    return (
+      <Card className="glass border-border/60">
+        <CardContent className="p-5 flex flex-col items-center gap-3 text-center">
+          <p className="text-xs text-red-400 font-mono">{msg}</p>
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => void qc.invalidateQueries({ queryKey: ["engine", "connection"] })}>
+            <RefreshCw className="w-3.5 h-3.5" /> Retry connection
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+  if (connection.isPending || challenge.isPending) {
     return (
       <Card className="glass border-border/60">
         <CardContent className="p-5 flex items-center gap-3 text-muted-foreground">
