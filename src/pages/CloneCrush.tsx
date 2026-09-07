@@ -330,6 +330,12 @@ export default function CloneCrush() {
   // Double-click / StrictMode guard across renders.
   const isExecutingRef = useRef(false);
   const pendingAuthResumeVideoIdRef = useRef<string | null>(null);
+  // Debounce timer for the URL input's heavy side-effects (pipeline reset +
+  // error clear). A paste fires onChange; running these synchronously on every
+  // keystroke re-renders a large state tree and freezes the input. The channel
+  // draft itself (the visible input text) is committed immediately for a
+  // responsive paste; only the expensive resets are deferred.
+  const channelResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pendingAuthResumeNonce, setPendingAuthResumeNonce] = useState(0);
 
   // Single paywall route helper — opens the central Pro Upgrade modal
@@ -423,6 +429,9 @@ export default function CloneCrush() {
   useEffect(() => () => {
     if (conveyorRetryTimerRef.current !== null) {
       window.clearTimeout(conveyorRetryTimerRef.current);
+    }
+    if (channelResetTimerRef.current !== null) {
+      clearTimeout(channelResetTimerRef.current);
     }
   }, []);
 
@@ -1313,14 +1322,23 @@ export default function CloneCrush() {
                     value={displayedChannelInput}
                     onChange={(event) => {
                       const next = event.target.value;
+                      // Commit the visible draft immediately so the input stays
+                      // responsive (a paste must feel instant).
                       const result = setChannelDraft(next, isPro ? "pro" : "free");
                       if (!result.ok) { routeToProUpsell("channel"); return; }
-                      if (next.trim().length > 0 && (activeRewrite || logSteps.length > 0 || rewrites.length > 0)) {
-                        setActiveRewrite(null);
-                        setLogSteps([]);
-                        setActiveVideoId(null);
-                      }
-                      setChannelInputError(null);
+                      // Defer the expensive pipeline-reset/error side effects
+                      // so a paste or fast typing never blocks the main thread
+                      // with a burst of synchronous re-renders. These only need
+                      // to apply once the user stops typing.
+                      if (channelResetTimerRef.current) clearTimeout(channelResetTimerRef.current);
+                      channelResetTimerRef.current = setTimeout(() => {
+                        if (next.trim().length > 0 && (activeRewrite || logSteps.length > 0 || rewrites.length > 0)) {
+                          setActiveRewrite(null);
+                          setLogSteps([]);
+                          setActiveVideoId(null);
+                        }
+                        setChannelInputError(null);
+                      }, 220);
                     }}
                     onKeyDown={(event) => {
                       if (!isFreeChannelLocked) return;
@@ -1356,7 +1374,15 @@ export default function CloneCrush() {
                     <p className="absolute -bottom-5 left-0 right-0 text-[10px] text-destructive mt-1 truncate">{channelInputError}</p>
                   )}
                 </div>
-                <div className="relative sm:w-[190px] shrink-0 group">
+                <Button onClick={handleProfileChannel} disabled={isProfiling || !isTierReady} className="cyber-button px-5 h-11 shrink-0 font-display text-sm flex gap-2">
+                  {isProfiling ? <><Loader2 className="w-4 h-4 animate-spin" />Analyzing...</>
+                    : !isTierReady ? <><Loader2 className="w-4 h-4 animate-spin" />Checking access...</>
+                    : isFreeConveyorActive ? <><Lock className="w-4 h-4" />Current analysis active</>
+                    : <><Cpu className="w-4 h-4" />Find opportunities</>}
+                </Button>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative sm:w-[240px] shrink-0 group">
                   <span className="pointer-events-none absolute left-9 top-1.5 z-10 font-mono text-[7px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">
                     Output Language
                   </span>
@@ -1368,7 +1394,7 @@ export default function CloneCrush() {
                   >
                     <SelectTrigger
                       aria-label="Output Language"
-                      className="h-11 border-cyan-400/30 bg-gradient-to-r from-cyan-500/10 via-secondary/50 to-fuchsia-500/10 pl-9 pt-3 font-display text-xs uppercase tracking-wider shadow-[inset_0_0_18px_rgba(34,211,238,0.06)] hover:border-cyan-400/50 focus:ring-cyan-400/40"
+                      className="w-full h-11 border-cyan-400/30 bg-gradient-to-r from-cyan-500/10 via-secondary/50 to-fuchsia-500/10 pl-9 pt-3 font-display text-xs uppercase tracking-wider shadow-[inset_0_0_18px_rgba(34,211,238,0.06)] hover:border-cyan-400/50 focus:ring-cyan-400/40"
                     >
                       <SelectValue />
                     </SelectTrigger>
@@ -1379,12 +1405,6 @@ export default function CloneCrush() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleProfileChannel} disabled={isProfiling || !isTierReady} className="cyber-button px-5 h-11 shrink-0 font-display text-sm flex gap-2">
-                  {isProfiling ? <><Loader2 className="w-4 h-4 animate-spin" />Analyzing...</>
-                    : !isTierReady ? <><Loader2 className="w-4 h-4 animate-spin" />Checking access...</>
-                    : isFreeConveyorActive ? <><Lock className="w-4 h-4" />Current analysis active</>
-                    : <><Cpu className="w-4 h-4" />Find opportunities</>}
-                </Button>
               </div>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                 <Radio className="w-3 h-3 text-green-400" />
