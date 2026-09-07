@@ -17,6 +17,7 @@ import { AudienceIntelligenceSection } from "@/components/audience/AudienceIntel
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
 import { LocalInsightPanel } from "@/components/intelligence/LocalInsightPanel";
 import { LocalSignalBoard } from "@/components/intelligence/LocalSignalBoard";
+import { useDashboardRefresh } from "@/lib/dashboardRefresh";
 
 const ViralGrowthPass = lazy(() => import("@/components/referrals/ViralGrowthPass").then(m => ({ default: m.ViralGrowthPass })));
 const CompetitorShowdown = lazy(() => import("@/components/showdown/CompetitorShowdown").then(m => ({ default: m.CompetitorShowdown })));
@@ -67,6 +68,7 @@ export default function Dashboard() {
   const envyMetrics = useCloneCrushStore((s) => s.envyMetrics);
   const threatAlerts = useCloneCrushStore((s) => s.threatAlerts);
   const wideningGap = useCloneCrushStore((s) => s.wideningGap);
+  const hubNonce = useDashboardRefresh((s) => s.nonce);
   const [isExporting, setIsExporting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [verificationOpen, setVerificationOpen] = useState(false);
@@ -126,7 +128,9 @@ export default function Dashboard() {
         )}
 
         <WorkflowContinueCard />
-        <AudienceIntelligenceSection />
+        {/* Command Center — remounts fresh whenever the sidebar Dashboard (→ "/")
+            is clicked, forcing a clean state refresh of the master hub. */}
+        <AudienceIntelligenceSection key={hubNonce} />
 
         {competitors.length > 0 && (
           <section aria-labelledby="opportunities-heading" className="space-y-4">

@@ -10,9 +10,11 @@ import { useAudienceBrief, useAudienceProfile, useChallengeState, useEnrollChall
 import { engineConfigured, EngineError } from "@/lib/engine/client";
 import { ConnectYouTubeCard } from "./ConnectYouTubeCard";
 import { ConnectedCreatorHub } from "./ConnectedCreatorHub";
+import { ConveyorSlots } from "./ConveyorSlots";
 import { HungerGrid } from "./HungerGrid";
 import { ChallengeTracker } from "@/components/challenge/ChallengeTracker";
 import { DailyDropCard } from "@/components/challenge/DailyDropCard";
+import { useLicense, isProTier } from "@/stores/useAuthStore";
 
 /**
  * Dashboard section: Connect card → (Tracker + Daily Drop + Hunger grid + Brief).
@@ -22,6 +24,8 @@ export function AudienceIntelligenceSection() {
   const { isAuthenticated } = useSoftGate();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const license = useLicense();
+  const isPro = isProTier(license);
   const enabled = engineConfigured() && isAuthenticated;
 
   // The Render backend engine redirects back here after Google OAuth with a
@@ -147,12 +151,21 @@ export function AudienceIntelligenceSection() {
         </Card>
       )}
 
-      {/* Connected Creator Hub — the hero module for the user's own channel */}
-      {connected && <ConnectedCreatorHub connection={connection} />}
-
-      {/* 2. The challenge — always the hero once authenticated */}
-      <ChallengeTracker state={challenge.data} onEnroll={doEnroll} enrolling={enroll.isPending} />
-      <DailyDropCard state={challenge.data} />
+      {/* Connected Creator Hub — the Command Center for the user's own channel.
+          sideSlot carries the Day X/30 streak + content conveyor into the middle
+          grid, side-by-side with the live visualizations. */}
+      {connected && (
+        <ConnectedCreatorHub
+          connection={connection}
+          sideSlot={
+            <>
+              <ChallengeTracker state={challenge.data} onEnroll={doEnroll} enrolling={enroll.isPending} />
+              <DailyDropCard state={challenge.data} />
+              <ConveyorSlots isPro={isPro} />
+            </>
+          }
+        />
+      )}
 
       {/* 3. Hunger cards (needs a connected channel + computed profile) */}
       {connected &&

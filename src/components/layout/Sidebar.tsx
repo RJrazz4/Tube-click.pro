@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useDashboardRefresh } from "@/lib/dashboardRefresh";
 import { SupportModal } from "./SupportModal";
 
 const navGroups = [
@@ -67,6 +68,12 @@ export function Sidebar() {
   const navigate = useNavigate();
   const [moreOpen, setMoreOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
+  const bumpDashboard = useDashboardRefresh((s) => s.bump);
+  // Clicking the sidebar "Dashboard" (→ "/") must force a clean state refresh
+  // of the Command Center so the master hub shows real-time synced metrics.
+  const go = (path: string) => {
+    if (path === "/") bumpDashboard();
+  };
 
   return (
     <aside
@@ -77,7 +84,7 @@ export function Sidebar() {
 
       {/* Desktop navigation */}
       <div className="relative z-10 hidden h-full min-h-0 flex-col md:flex">
-        <Link to="/" className="mb-7 flex items-center gap-3 px-4" aria-label="Go to TubeClick Pro dashboard">
+        <Link to="/" onClick={() => go("/")} className="mb-7 flex items-center gap-3 px-4" aria-label="Go to TubeClick Pro dashboard">
           <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-gradient-to-br from-neon-purple to-neon-cyan neon-glow-purple transition-transform duration-300 hover:scale-105">
             <Sparkles className="h-5 w-5 text-white" aria-hidden="true" />
             <span className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-background bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]" />
@@ -103,6 +110,7 @@ export function Sidebar() {
                     <Link
                       key={item.path}
                       to={item.path}
+                      onClick={() => go(item.path)}
                       aria-current={active ? "page" : undefined}
                       className={cn(
                         "group flex min-h-[52px] items-center gap-3 rounded-xl border px-3 py-2 transition-all duration-200",
@@ -188,6 +196,7 @@ export function Sidebar() {
             <Link
               key={item.path}
               to={item.path}
+              onClick={() => go(item.path)}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "flex min-h-[50px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 text-[10px] font-semibold transition-colors",
