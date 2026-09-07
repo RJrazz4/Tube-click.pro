@@ -51,8 +51,11 @@ import {
   useYouTubeHub,
   useChallengeState,
   useEngineScripts,
+  useAudienceProfile,
 } from "@/hooks/useEngineData";
 import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
+import { AutomationEngine } from "@/components/growth/AutomationEngine";
+import type { BriefSignal, CompetitorSignal } from "@/lib/growth/synthesis";
 
 /**
  * Advanced YouTube Growth Engine — a data-driven growth intelligence console.
@@ -112,6 +115,7 @@ export default function YoutubeGrowth() {
 
   const connection = useYouTubeConnection(enabled);
   const hub = useYouTubeHub(enabled && (connection.data?.connected ?? false));
+  const profile = useAudienceProfile(enabled && (connection.data?.connected ?? false));
   const challenge = useChallengeState(enabled);
   const scriptsQ = useEngineScripts(enabled);
 
@@ -142,7 +146,6 @@ export default function YoutubeGrowth() {
 
   const challengeActive = challenge.data?.status === "active";
   const streak = challenge.data?.streak ?? challenge.data?.elapsed_days ?? 0;
-  const bestStreak = challenge.data?.best_streak ?? 0;
   const scriptDays = challenge.data?.total_script_days ?? 0;
   const publishDays = challenge.data?.total_publish_days ?? 0;
   const consistency = clamp(scriptDays, 0, 30); // 0..30
@@ -157,6 +160,28 @@ export default function YoutubeGrowth() {
   const competitorRevenue = envyMetrics?.totalCompetitorMonthlyRevenueNum ?? 0;
   const niche = envyMetrics?.niche ?? "your niche";
   const nicheCpm = envyMetrics?.nicheCpm ?? "—";
+
+  // ── automation engine inputs (real telemetry, mapped) ──
+  const geoName = geoTop?.name;
+  const topSignals: BriefSignal[] = useMemo(() => topHungers.map((h) => ({
+    topic: h.topic,
+    score: h.score,
+    hook_retention: h.hook_retention,
+    watch_share_pct: h.watch_share_pct,
+    geo: geoName,
+  })), [topHungers, geoName]);
+
+  const competitorTop: CompetitorSignal | null = useMemo(() => {
+    const valid = competitors.map((c) => ({
+      title: c.title, channelName: c.channelName, views: c.viewsCount ?? 0,
+      velocity: c.viralVelocityScore ?? 0, revenue: c.estimatedRevenueNum ?? 0,
+      thumbnail: c.thumbnail, url: c.url, videoId: c.videoId,
+    })).filter((c) => c.views > 0);
+    if (!valid.length) return null;
+    return valid.sort((a, b) => b.velocity - a.velocity || b.views - a.views)[0];
+  }, [competitors]);
+
+  const narrativeBrief = profile.data?.narrative?.brief ?? null;
 
   // ── composite Growth Score (0..100) — modeled, transparent weighting ──
   const growthScore = useMemo(() => {
@@ -276,6 +301,22 @@ export default function YoutubeGrowth() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ═══ AUTOMATION ENGINE — the decision layer ═══ */}
+      <AutomationEngine
+        connected={connected}
+        topSignals={topSignals}
+        geo={geoShare}
+        heroRetention={avgRetention}
+        competitorVelocity={competitorAvgVelocity}
+        competitorRevenue={competitorRevenue}
+        niche={niche}
+        nicheCpm={nicheCpm}
+        competitorTop={competitorTop}
+        cadence={consistency}
+        packageCount={packageCount}
+        narrativeBrief={narrativeBrief}
+      />
 
       {/* ═══ KPI STRIP — real, live metrics ═══ */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4">
