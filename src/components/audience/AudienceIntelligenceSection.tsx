@@ -9,6 +9,7 @@ import { useSoftGate } from "@/contexts/SoftGateContext";
 import { useAudienceBrief, useAudienceProfile, useChallengeState, useEnrollChallenge, useEngineConnection, useGenerateScript } from "@/hooks/useEngineData";
 import { engineConfigured, EngineError } from "@/lib/engine/client";
 import { ConnectYouTubeCard } from "./ConnectYouTubeCard";
+import { ConnectedCreatorHub } from "./ConnectedCreatorHub";
 import { HungerGrid } from "./HungerGrid";
 import { ChallengeTracker } from "@/components/challenge/ChallengeTracker";
 import { DailyDropCard } from "@/components/challenge/DailyDropCard";
@@ -145,6 +146,9 @@ export function AudienceIntelligenceSection() {
           </CardContent>
         </Card>
       )}
+
+      {/* Connected Creator Hub — the hero module for the user's own channel */}
+      {connected && <ConnectedCreatorHub connection={connection} />}
 
       {/* 2. The challenge — always the hero once authenticated */}
       <ChallengeTracker state={challenge.data} onEnroll={doEnroll} enrolling={enroll.isPending} />

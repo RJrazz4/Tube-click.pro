@@ -179,3 +179,70 @@ export function useAudienceBrief() {
     onError: (err: Error) => toast.error(err.message),
   });
 }
+
+// ---------------------------------------------------------------------
+// Connected Creator Hub — analytics for the user's OWN connected channel.
+// Pulls the authenticated channel connection (identity + sync status) and
+// the computed audience profile (real signal scores + geo share) from the
+// backend engine's /api/youtube/connection and /api/audience/profile routes.
+// Export types used by the Hub charts.
+// ---------------------------------------------------------------------
+export interface HubSeriesPoint {
+  label: string;
+  value: number;
+}
+
+export interface HubSignals {
+  momentum: HubSeriesPoint[]; // signal momentum per hunger topic (real score)
+  velocity: HubSeriesPoint[]; // engagement velocity per hunger topic (real score)
+  geoShare: { name: string; value: number }[]; // audience pull by geography (real)
+  topHungers: { topic: string; score: number; hook_retention?: number; watch_share_pct?: number }[];
+}
+
+export function useYouTubeHub(enabled: boolean) {
+  return useQuery<HubSignals>({
+    queryKey: Q.audience,
+    queryFn: async () => {
+      const profile = await engineFetch<AudienceProfile>("/api/audience/profile");
+      const hungers = (profile.hungers ?? []).slice();
+      // Real scores computed by the Audience Engine for this connected channel.
+      const momentum = hungers.map((h) => ({
+        label: h.topic.length > 16 ? `${h.topic.slice(0, 15)}…` : h.topic,
+        value: Math.max(0, Math.min(100, Math.round(h.score))),
+      }));
+      const velocity = hungers.map((h) => ({
+        label: h.topic.length > 16 ? `${h.topic.slice(0, 15)}…` : h.topic,
+        value: Math.max(0, Math.min(100, Math.round(h.evidence?.hook_retention ?? h.score))),
+      }));
+      // Audience pull by geography — the engine attaches a real geo signal
+      // (e.g. { India: 0.42, US: 0.18, ... }) to each hunger. Flatten the
+      // strongest geos across all hungers into a share ranking.
+      const geoCount = new Map<string, number>();
+      for (const h of hungers) {
+        const geo = h.geo ?? {};
+        const entries = Object.entries(geo).filter(([, v]) => typeof v === "number") as [string, number][];
+        if (entries.length) {
+          const [country, weight] = entries.reduce<[string, number]>((max, e) =>
+            (e[1]) > (max[1]) ? e : max, entries[0]);
+          geoCount.set(country, (geoCount.get(country) ?? 0) + weight);
+        }
+      }
+      const geoShare = [...geoCount.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([name, value]) => ({ name, value: Math.round(value * 100) }))
+      const topHungers = hungers.map((h) => ({
+        topic: h.topic,
+        score: Math.max(0, Math.min(100, Math.round(h.score))),
+        hook_retention: h.evidence?.hook_retention,
+        watch_share_pct: h.evidence?.watch_share_pct,
+      }));
+      return { momentum, velocity, geoShare, topHungers };
+    },
+    enabled,
+    staleTime: 5 * 60_000,
+  });
+}
+
+// Connection identity/sync status for the Hub header (name, handle, sync).
+export { useEngineConnection as useYouTubeConnection };
