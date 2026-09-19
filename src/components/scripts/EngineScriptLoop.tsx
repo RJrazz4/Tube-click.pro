@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { ScriptCueText } from "@/components/scripts/ScriptCueText";
 import { engineConfigured, engineFetch } from "@/lib/engine/client";
 import type { AudienceHunger, EngineScriptDetail, EngineScriptListItem } from "@/lib/engine/types";
 import {
@@ -197,13 +198,13 @@ export function EngineScriptLoop() {
             {detail.data.package?.hook?.text && (
               <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
                 <p className="text-[9px] font-mono text-primary/70">HOOK • {detail.data.package.hook.seconds}s BUDGET</p>
-                <p className="text-sm mt-1">{detail.data.package.hook.text}</p>
+                <p className="text-sm mt-1"><ScriptCueText text={detail.data.package.hook.text} /></p>
               </div>
             )}
             {detail.data.package?.sections?.map((s) => (
               <div key={s.heading} className="space-y-1">
                 <p className="text-xs font-semibold text-primary">{s.heading}</p>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{s.voiceover}</p>
+                <p className="text-sm text-muted-foreground"><ScriptCueText text={s.voiceover} /></p>
               </div>
             ))}
             {detail.data.package?.title_variants?.length ? (
