@@ -22,6 +22,7 @@ import { useDashboardRefresh } from "@/lib/dashboardRefresh";
 const ViralGrowthPass = lazy(() => import("@/components/referrals/ViralGrowthPass").then(m => ({ default: m.ViralGrowthPass })));
 const CompetitorShowdown = lazy(() => import("@/components/showdown/CompetitorShowdown").then(m => ({ default: m.CompetitorShowdown })));
 const TheLab = lazy(() => import("@/components/lab/TheLab").then(m => ({ default: m.TheLab })));
+const TrendRadarCard = lazy(() => import("@/components/trends/TrendRadarCard").then(m => ({ default: m.TrendRadarCard })));
 
 const tools = [
   { title: "Clone & Crush AI", description: "Analyze a winning video and create an original content package", icon: Zap, path: "/clone-crush", gradient: "from-purple-600 via-indigo-600 to-cyan-500", glow: "neon-glow-purple" },
@@ -131,6 +132,12 @@ export default function Dashboard() {
         {/* Command Center — remounts fresh whenever the sidebar Dashboard (→ "/")
             is clicked, forcing a clean state refresh of the master hub. */}
         <AudienceIntelligenceSection key={hubNonce} />
+
+        <section aria-label="Trend radar">
+          <Suspense fallback={<div className="h-40 animate-pulse rounded-2xl border border-border bg-card/60" />}>
+            <TrendRadarCard />
+          </Suspense>
+        </section>
 
         {competitors.length > 0 && (
           <section aria-labelledby="opportunities-heading" className="space-y-4">

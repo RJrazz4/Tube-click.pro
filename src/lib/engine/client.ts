@@ -100,3 +100,26 @@ export async function connectYouTubeUrl(): Promise<string> {
   const { authUrl } = await engineFetch<{ authUrl: string }>("/api/youtube/auth-url");
   return authUrl;
 }
+
+// ── Trend Radar (zero-cost, keyless YouTube intelligence) ──────────────
+export interface TrendItem {
+  videoId: string;
+  title: string;
+  channel: string;
+  views: number | null;
+  thumbnail: string | null;
+  url: string;
+  source: string;
+}
+export interface TrendRadar {
+  generatedAt: string;
+  topic: string | null;
+  count: number;
+  items: TrendItem[];
+}
+
+/** Live trending videos, or topic search when `topic` is provided. */
+export function fetchTrendRadar(topic?: string): Promise<TrendRadar> {
+  const q = topic?.trim() ? `?topic=${encodeURIComponent(topic.trim())}` : "";
+  return engineFetch<TrendRadar>(`/api/trends${q}`);
+}
