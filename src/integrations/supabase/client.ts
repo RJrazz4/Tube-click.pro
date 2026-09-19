@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { getPinnedUserId, pinUserId } from '@/lib/storage/perUserStorage';
+import { findValidSessionRecord } from '@/lib/auth/sessionRecord';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -36,6 +37,7 @@ function sessionUserId(value: string): string | null {
   }
 }
 
+
 const namespacedAuthStorage: {
   getItem: (key: string) => string | null;
   setItem: (key: string, value: string) => void;
@@ -43,10 +45,18 @@ const namespacedAuthStorage: {
 } = {
   getItem: (key) => {
     try {
-      const physicalKey = key === SB_SESSION_STORAGE_KEY
-        ? namespacedSessionKeyFor(getPinnedUserId())
-        : auxiliaryKeyFor(key);
-      return localStorage.getItem(physicalKey);
+      if (key !== SB_SESSION_STORAGE_KEY) return localStorage.getItem(auxiliaryKeyFor(key));
+      const direct = localStorage.getItem(namespacedSessionKeyFor(getPinnedUserId()));
+      if (direct) return direct;
+      // Namespace-mismatch recovery: the session may live under a different pin
+      // bucket (pin cleared / guest read). Scan the auth-token family and return
+      // the first usable session instead of dropping it.
+      const entries: Array<[string, string | null]> = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(SB_AUTH_KEY_BASE)) entries.push([k, localStorage.getItem(k)]);
+      }
+      return findValidSessionRecord(entries);
     } catch {
       return null;
     }
