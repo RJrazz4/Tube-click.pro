@@ -14,7 +14,7 @@
 
 export type ScriptSegment = { type: "cue"; value: string } | { type: "text"; value: string };
 
-const CUE_RE = /\[([^\[\]\n]{2,140})\]/g;
+const CUE_RE = /\[([^[\]\n]{2,140})\]/g;
 const TIMESTAMP_RE = /^\d{1,2}:\d{2}(?::\d{2})?$/;
 
 export function parseScriptCues(input: string): ScriptSegment[] {

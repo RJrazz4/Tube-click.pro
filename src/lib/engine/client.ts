@@ -123,3 +123,48 @@ export function fetchTrendRadar(topic?: string): Promise<TrendRadar> {
   const q = topic?.trim() ? `?topic=${encodeURIComponent(topic.trim())}` : "";
   return engineFetch<TrendRadar>(`/api/trends${q}`);
 }
+
+// ── Zero-Cost Viral Shorts Clipper ───────────────────────────────────────
+export interface ClipEnqueueResult {
+  status: "queued" | "deduped";
+  jobId: string;
+  videoId: string;
+  window: { autoSelect: boolean; startSeconds: number; durationSeconds: number };
+  quota: { used: number; limit: number };
+}
+
+export interface ClipSelection {
+  startSeconds: number;
+  durationSeconds: number;
+  reason: string;
+  peakType: string;
+}
+
+export interface ClipStatus {
+  jobId: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  progress: number;
+  stage?: string;
+  url?: string;
+  error?: string;
+  selection?: ClipSelection;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClipRequestInput {
+  url: string;
+  durationSeconds?: number;
+  captionStyle?: "karaoke" | "bold" | "minimal";
+  autoSelect?: boolean;
+}
+
+/** Enqueue a clip render. Returns immediately (202) — poll getClip for status. */
+export function requestClip(input: ClipRequestInput): Promise<ClipEnqueueResult> {
+  return engineFetch<ClipEnqueueResult>("/api/clips", { method: "POST", body: input });
+}
+
+/** Poll a clip job's status/result. */
+export function getClip(jobId: string): Promise<ClipStatus> {
+  return engineFetch<ClipStatus>(`/api/clips/${encodeURIComponent(jobId)}`);
+}

@@ -35,6 +35,7 @@ const ReferralCapture = lazy(() => import("./pages/ReferralCapture"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const Rewards = lazy(() => import("./pages/Rewards"));
 const Library = lazy(() => import("./pages/Library"));
+const Clipper = lazy(() => import("./pages/Clipper"));
 
 // Tuned QueryClient for instant feel — stale 5min, gc 10min, no refetch on focus
 const queryClient = createAppQueryClient();
@@ -95,6 +96,7 @@ const App = () => (
                   <Route path="/rewards" element={<Rewards />} />
                   <Route path="/library" element={<Library />} />
                   <Route path="/clone-crush" element={<SoftGateRoute><CloneCrush /></SoftGateRoute>} />
+                  <Route path="/clipper" element={<SoftGateRoute><Clipper /></SoftGateRoute>} />
                   <Route path="/create" element={<SoftGateRoute><ChatAgent /></SoftGateRoute>} />
                   <Route path="/chat" element={<SoftGateRoute><ChatAgent /></SoftGateRoute>} />
                   <Route path="/ref/:code" element={<ReferralCapture />} />

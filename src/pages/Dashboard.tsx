@@ -1,7 +1,7 @@
 import { lazy, memo, Suspense, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
-  Image as ImageIcon, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Loader2, X, Sparkles, RefreshCw, Share2, TrendingUp, Search, Zap, DollarSign, Flame, Gauge, AlertTriangle, Terminal, Cpu, Activity, Gift, PenLine,
+  Image as ImageIcon, Eye, Mic, FileText, Download, Trash2, ArrowUpRight, Loader2, X, Sparkles, RefreshCw, Share2, TrendingUp, Search, Zap, DollarSign, Flame, Gauge, AlertTriangle, Terminal, Cpu, Activity, Gift, PenLine, Scissors,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +26,7 @@ const TrendRadarCard = lazy(() => import("@/components/trends/TrendRadarCard").t
 
 const tools = [
   { title: "Clone & Crush AI", description: "Analyze a winning video and create an original content package", icon: Zap, path: "/clone-crush", gradient: "from-purple-600 via-indigo-600 to-cyan-500", glow: "neon-glow-purple" },
+  { title: "Viral Shorts Clipper", description: "Turn any YouTube video into a captioned vertical short", icon: Scissors, path: "/clipper", gradient: "from-cyan-400 via-sky-500 to-blue-600", glow: "" },
   { title: "Create from a topic", description: "Generate titles, hooks, scripts, and a strategy brief", icon: PenLine, path: "/create", gradient: "from-violet-500 to-fuchsia-600", glow: "" },
   { title: "Voiceover Studio", description: "Turn your script into narration", icon: Mic, path: "/voice", gradient: "from-orange-400 to-red-500", glow: "" },
   { title: "Multi-Platform Repurposer", description: "Turn one script into posts for four platforms", icon: Share2, path: "/repurposer", gradient: "from-pink-500 to-rose-600", glow: "" },
