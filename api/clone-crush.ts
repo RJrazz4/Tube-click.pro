@@ -21,6 +21,7 @@ import {
   extractOpenRouterText,
   cleanupJson
 } from './_shared.js';
+import { LSA_PERSONA, LSA_CUE_DIRECTIVE } from './_lsa.js';
 
 export type CloneCrushOutputLanguage = 'English' | 'Hindi' | 'Hinglish';
 
@@ -1423,13 +1424,15 @@ export default async function handler(req: Request) {
       const glitchProtocolBlock = isPremium
         ? `\n=== GLITCH PROTOCOL: 99% EXECUTION (PREMIUM) ===\nMAXIMUM AGGRESSION. Weaponized for max CTR.\nTITLE MUST contain Curiosity Glitch: time-jump, hidden secret, shocking mistake, impossible result.\nUse power words: Secret, Hidden, Banned, Exposed, Revealed, Warning, Urgent, Finally, Truth\nHOOK structure: [SHOCKING STATEMENT] → [CREDIBILITY] → [OPEN LOOP] with PATTERN INTERRUPT\nSCRIPT: Every 45-60s RETENTION SPIKE, Open Loop → Partial Close → New Loop, LOOP BOMB at end\nTHUMBNAIL: psychologically aggressive, specific facial expression, color contrast, emotional trigger\n`
         : `\n=== GLITCH PROTOCOL: 60% EXECUTION (FREE) ===\nSTANDARD OPTIMIZATION, professional engaging safe\nTITLE: strong SEO, emotional triggers, numbers, power words, clear value\nHOOK: [VALUE] → [CONTEXT] → [WHAT THEY'LL LEARN]\nSCRIPT: well-structured, clear sections, professional pacing\nTHUMBNAIL: clean professional, good lighting, readable text, standard best practices\n`;
-      const rewriteSystemInstruction = `You are an Elite Viral YouTube growth expert, copywriter, and high-retention psychologist. Generate viral assets in a single JSON object.
+      const rewriteSystemInstruction = `${LSA_PERSONA}
+Generate viral assets in a single JSON object.
 === OUTPUT LANGUAGE: ${outputLanguage} (MANDATORY) ===
 ${outputLanguageInstruction(outputLanguage)}
 This language rule applies to every generated JSON value. Keep the JSON property names exactly as specified below and do not add translations or alternate-language versions.
 ${glitchProtocolBlock}
 === STEALTH DISGUISE PROTOCOL (BOTH TIERS) ===
 Heavily disguise output: CHANGE EVERY ANALOGY, SWAP ALL EXAMPLES, rephrase uniquely.
+${LSA_CUE_DIRECTIVE}
 === OUTPUT SCHEMA (respond with JSON only, no markdown, no prose) ===
 {
   "originalTitle": "Original Title",

@@ -14,6 +14,7 @@ import { friendlyError, type FriendlyError } from "@/lib/friendlyError";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { downloadAsText } from "@/lib/export";
 import { cleanScript } from "@/lib/scriptCleaner";
+import { ScriptCueText } from "@/components/scripts/ScriptCueText";
 import { useNavigate } from "react-router-dom";
 import { useSoftGate } from "@/contexts/SoftGateContext";
 
@@ -714,7 +715,7 @@ ${generatedContent.description || 'N/A'}
                         generatedContent.hooks.map((hook, index) => (
                           <div key={index} className="flex items-start gap-2 p-2 md:p-3 bg-secondary rounded-lg group">
                             <span className="text-xs text-muted-foreground shrink-0 mt-1">{index + 1}.</span>
-                            <p className="flex-1 text-xs md:text-sm text-foreground">{hook}</p>
+                            <p className="flex-1 text-xs md:text-sm text-foreground"><ScriptCueText text={hook} /></p>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -758,8 +759,8 @@ ${generatedContent.description || 'N/A'}
                         </Button>
                       </div>
                       <div className="bg-secondary rounded-lg p-3 md:p-4 pr-20">
-                        <p className="text-xs md:text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                          {generatedContent.script || 'No script generated'}
+                        <p className="text-xs md:text-sm text-foreground leading-relaxed">
+                          {generatedContent.script ? <ScriptCueText text={generatedContent.script} /> : 'No script generated'}
                         </p>
                       </div>
                       <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">

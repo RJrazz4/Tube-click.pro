@@ -21,6 +21,7 @@
  */
 
 import { gatewayChatJson, gatewayChatText } from "../packages/orchestrator/ai-gateway.js";
+import { LSA_PERSONA, LSA_CUE_DIRECTIVE } from "./_lsa.js";
 
 export interface ChannelMemoryProfile {
   niche?: string;
@@ -109,9 +110,10 @@ Generate viral YouTube content in exact JSON format:
 
   for (let iter = 1; iter <= MAX_ITERATIONS; iter++) {
     iterations = iter;
-    const systemPrompt = `You are an elite YouTube growth strategist and institutional content director.
+    const systemPrompt = `${LSA_PERSONA}
 ${langInstr}
 ${critiqueFeedback ? `\n\nCRITICAL FIXES REQUIRED FROM PREVIOUS ITERATION:\n${critiqueFeedback}` : ""}
+${LSA_CUE_DIRECTIVE}
 Return exact JSON only matching the requested schema.`;
 
     try {
