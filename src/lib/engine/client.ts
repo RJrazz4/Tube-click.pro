@@ -54,6 +54,11 @@ interface EngineFetchOptions {
   anonymous?: boolean;
   /** Response is raw binary (voiceover MP3). */
   raw?: boolean;
+  /**
+   * Per-request hard timeout override (ms). Needed for routes that can hit a
+   * cold Render free instance (30–60s spin-up) — e.g. the clipper enqueue.
+   */
+  timeoutMs?: number;
 }
 
 export async function engineFetch<T>(path: string, options: EngineFetchOptions = {}): Promise<T> {
@@ -71,7 +76,7 @@ export async function engineFetch<T>(path: string, options: EngineFetchOptions =
         ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
       },
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-      signal: AbortSignal.timeout(ENGINE_FETCH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(options.timeoutMs ?? ENGINE_FETCH_TIMEOUT_MS),
     });
   };
 
@@ -161,10 +166,13 @@ export interface ClipRequestInput {
 
 /** Enqueue a clip render. Returns immediately (202) — poll getClip for status. */
 export function requestClip(input: ClipRequestInput): Promise<ClipEnqueueResult> {
-  return engineFetch<ClipEnqueueResult>("/api/clips", { method: "POST", body: input });
+  // 90s: the enqueue itself is instant, but a cold Render free instance can take
+  // 30–60s to spin up. Aborting at the default 25s caused "signal timed out"
+  // before the job was ever queued.
+  return engineFetch<ClipEnqueueResult>("/api/clips", { method: "POST", body: input, timeoutMs: 90_000 });
 }
 
 /** Poll a clip job's status/result. */
 export function getClip(jobId: string): Promise<ClipStatus> {
-  return engineFetch<ClipStatus>(`/api/clips/${encodeURIComponent(jobId)}`);
+  return engineFetch<ClipStatus>(`/api/clips/${encodeURIComponent(jobId)}`, { timeoutMs: 30_000 });
 }

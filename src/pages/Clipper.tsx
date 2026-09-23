@@ -53,6 +53,7 @@ export default function Clipper() {
   const [clip, setClip] = useState<ClipStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorsRef = useRef(0);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -63,7 +64,10 @@ export default function Clipper() {
 
   useEffect(() => stopPolling, [stopPolling]);
 
-  // Poll the job while it is in flight.
+  // Poll the job while it is in flight. Transient failures (timeout, network
+  // blip, cold start, 5xx) do NOT abort — the worker keeps rendering in the
+  // background, so we keep polling. Only auth loss, a missing job, an explicit
+  // failed status, or a long sustained outage stop the spinner.
   useEffect(() => {
     if (phase !== "processing" || !jobId) return;
     let cancelled = false;
@@ -72,6 +76,7 @@ export default function Clipper() {
       try {
         const status = await getClip(jobId);
         if (cancelled) return;
+        errorsRef.current = 0;
         setClip(status);
         if (status.status === "completed") {
           setPhase("done");
@@ -83,8 +88,21 @@ export default function Clipper() {
           return;
         }
       } catch (err) {
-        if (!cancelled) {
+        if (cancelled) return;
+        const status = (err as { status?: number })?.status;
+        if (status === 401 || status === 403) {
           setError(friendly(err));
+          setPhase("error");
+          return;
+        }
+        if (status === 404) {
+          setError("This clip job expired. Please generate it again.");
+          setPhase("error");
+          return;
+        }
+        errorsRef.current += 1;
+        if (errorsRef.current >= 12) {
+          setError("We lost contact with the engine while rendering. Your clip may still be finishing — refresh in a minute or try again.");
           setPhase("error");
           return;
         }
@@ -92,7 +110,7 @@ export default function Clipper() {
       pollRef.current = setTimeout(tick, 3000);
     };
 
-    pollRef.current = setTimeout(tick, 1200);
+    pollRef.current = setTimeout(tick, 1500);
     return () => {
       cancelled = true;
       stopPolling();
@@ -106,6 +124,7 @@ export default function Clipper() {
       return;
     }
     stopPolling();
+    errorsRef.current = 0;
     setClip(null);
     setError(null);
     setPhase("submitting");
@@ -247,8 +266,10 @@ export default function Clipper() {
             <div className="flex items-center gap-3">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
               <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">{STAGE_LABELS[stageKey] ?? "Working…"}</p>
-                <p className="text-xs text-muted-foreground">This usually takes 1–2 minutes. You can stay on this page.</p>
+                <p className="text-sm font-medium text-foreground">
+                  {phase === "submitting" ? "Starting the engine…" : (STAGE_LABELS[stageKey] ?? "Working…")}
+                </p>
+                <p className="text-xs text-muted-foreground">Processing… this can take 1–3 minutes. Keep this page open.</p>
               </div>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
