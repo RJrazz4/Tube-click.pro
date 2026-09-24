@@ -21,6 +21,7 @@ const STYLES: Array<{ id: CaptionStyle; label: string }> = [
   { id: "bold", label: "Bold" },
   { id: "minimal", label: "Minimal" },
 ];
+const MAX_POLL_MS = 45 * 60 * 1000;
 
 const STAGE_LABELS: Record<string, string> = {
   queued: "Queued — waiting for a worker",
@@ -54,6 +55,7 @@ export default function Clipper() {
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorsRef = useRef(0);
+  const pollStartedAtRef = useRef(0);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -71,8 +73,15 @@ export default function Clipper() {
   useEffect(() => {
     if (phase !== "processing" || !jobId) return;
     let cancelled = false;
+    pollStartedAtRef.current = Date.now();
+    errorsRef.current = 0;
 
     const tick = async () => {
+      if (Date.now() - pollStartedAtRef.current > MAX_POLL_MS) {
+        setError("This render is taking longer than expected. It may still finish in the background — refresh shortly to check its status.");
+        setPhase("error");
+        return;
+      }
       try {
         const status = await getClip(jobId);
         if (cancelled) return;
@@ -101,13 +110,14 @@ export default function Clipper() {
           return;
         }
         errorsRef.current += 1;
-        if (errorsRef.current >= 12) {
-          setError("We lost contact with the engine while rendering. Your clip may still be finishing — refresh in a minute or try again.");
-          setPhase("error");
-          return;
-        }
+        // Keep a cold-start/network outage from ending the UI after 36 seconds.
+        // Back off while the API is unreachable, but continue for the full
+        // render window; the backend heartbeat watchdog handles dead workers.
       }
-      pollRef.current = setTimeout(tick, 3000);
+      const delay = errorsRef.current > 0
+        ? Math.min(15_000, 3_000 * Math.max(1, errorsRef.current))
+        : 3_000;
+      pollRef.current = setTimeout(tick, delay);
     };
 
     pollRef.current = setTimeout(tick, 1500);
