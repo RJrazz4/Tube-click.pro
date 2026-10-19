@@ -232,7 +232,8 @@ export default function VoiceStudio() {
     completeWorkflowHandoff("voice");
   };
 
-  const handleBrowserTTSPlay = () => runGuarded("generate the next voiceover", performBrowserTTSPlay);
+  // Browser TTS is fully local (no server cost) — it must not consume the guest preview.
+  const handleBrowserTTSPlay = () => performBrowserTTSPlay();
 
   const handlePlay = () => {
     if (!useElevenLabs) {
@@ -318,7 +319,7 @@ export default function VoiceStudio() {
                       ))}
                     </SelectContent>
                   </Select>
-                  {selectedVoiceInfo && <p className="text-xs text-muted-foreground flex items-center gap-1"><Zap className="w-3 h-3 text-green-400" />{selectedVoiceInfo.description} — Preview plays static MP3 from /previews/voices/{selectedVoiceInfo.name}.mp3 (0 API calls, saves 80% quota)</p>}
+                  {selectedVoiceInfo && <p className="text-xs text-muted-foreground flex items-center gap-1"><Zap className="w-3 h-3 text-green-400" />{selectedVoiceInfo.description} — Preview plays an instant sample (0 API calls)</p>}
                 </div>
 
                 {/* Preview Button */}
@@ -329,8 +330,7 @@ export default function VoiceStudio() {
                 </div>
 
                 <div className="p-2.5 rounded-lg bg-green-500/10 border border-green-500/20 text-[11px] text-green-400 space-y-1">
-                  <p className="flex items-center gap-1.5"><Zap className="w-3 h-3" />Preview Strategy: Static MP3s in public/previews/voices/ — 2-3 sec samples, no ElevenLabs call</p>
-                  <p className="text-green-400/70">Final generation uses the backend /api/voice/generate VoiceRouter. Provider credentials remain server-side.</p>
+                  <p className="flex items-center gap-1.5"><Zap className="w-3 h-3" />Preview strategy: instant 2–3 second samples, no API calls — final generation uses the full voice engine.</p>
                 </div>
 
                 <div className="space-y-2">

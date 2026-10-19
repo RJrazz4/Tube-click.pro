@@ -124,7 +124,7 @@ export default function SeoOptimizer() {
           <span className="px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-[10px] border border-green-500/20 ml-2">Server-Side Secure</span>
         </h1>
         <p className="text-sm md:text-base text-muted-foreground mt-1">
-          Generate high-CTR tags and search volume estimation via our <span className="text-foreground font-medium">managed AI engine</span> — fully server-side, zero setup.
+          Generate high-CTR tags and search volume estimation via our{" "}<span className="text-foreground font-medium">managed AI engine</span> — fully server-side, zero setup.
         </p>
       </div>
 
@@ -261,7 +261,6 @@ export default function SeoOptimizer() {
               <div className="flex flex-col items-center justify-center h-[340px] text-center">
                 <Search className="w-12 h-12 text-muted-foreground/30 mb-3" />
                 <p className="text-muted-foreground text-sm">Enter a keyword to generate optimized tags with our managed AI engine.</p>
-                <p className="text-xs text-muted-foreground/70 mt-1">Secure route: /api/seo-tags + React Query 10m cache</p>
               </div>
             )}
           </CardContent>

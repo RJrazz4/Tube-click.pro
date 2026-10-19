@@ -11,12 +11,10 @@ import {
   Database,
   Info,
   Gift,
-  Check,
   Download,
   Trash2,
   AlertTriangle,
   ExternalLink,
-  Globe,
   ChevronRight,
   Sparkles,
   Crown,
@@ -200,8 +198,7 @@ function AccountSection() {
                   <span className="text-amber-400 font-mono text-xl tracking-wider">{formatCountdown(cooldownRemaining)}</span>
                 ) : (
                   <>
-                    <span className="text-green-400">Available</span>
-                    <span className="text-sm text-muted-foreground ml-1">now</span>
+                    <span className="text-green-400">Available</span>{" "}<span className="text-sm text-muted-foreground ml-1">now</span>
                   </>
                 )}
               </p>
@@ -562,34 +559,6 @@ function AboutSection() {
 
       <Card className="cyber-card border-border">
         <CardHeader>
-          <CardTitle className="text-base font-display">Technology Stack</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {[
-              { name: "React 18", desc: "UI Framework" },
-              { name: "TypeScript", desc: "Type Safety" },
-              { name: "Tailwind CSS", desc: "Styling" },
-              { name: "Zustand", desc: "State Management" },
-              { name: "React Query", desc: "Server State" },
-              { name: "Vercel", desc: "Deployment" },
-              { name: "Zero-Cost Hydra", desc: "Multi-Provider AI Router" },
-              { name: "Managed Image Services", desc: "Image Generation" },
-            ].map((tech, i) => (
-              <div key={i} className="p-3 rounded-lg bg-secondary/50 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">{tech.name}</p>
-                  <p className="text-xs text-muted-foreground">{tech.desc}</p>
-                </div>
-                <Check className="w-4 h-4 text-green-400" />
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="cyber-card border-border">
-        <CardHeader>
           <CardTitle className="text-base font-display">Support</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -618,33 +587,6 @@ function AboutSection() {
               </Button>
             </div>
           </div>
-          <Button variant="outline" className="w-full justify-between" asChild>
-            <a href="https://github.com/RJrazz4/Tube-click.pro" target="_blank" rel="noopener noreferrer">
-              <span className="flex items-center gap-2">
-                <Globe className="w-4 h-4" />
-                Documentation
-              </span>
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          </Button>
-          <Button variant="outline" className="w-full justify-between" asChild>
-            <a href="https://github.com/RJrazz4/Tube-click.pro/issues" target="_blank" rel="noopener noreferrer">
-              <span className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4" />
-                Report an Issue
-              </span>
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          </Button>
-          <Button variant="outline" className="w-full justify-between" asChild>
-            <a href="https://github.com/RJrazz4/Tube-click.pro/discussions" target="_blank" rel="noopener noreferrer">
-              <span className="flex items-center gap-2">
-                <User className="w-4 h-4" />
-                Community Forum
-              </span>
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          </Button>
         </CardContent>
       </Card>
 

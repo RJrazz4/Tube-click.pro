@@ -6,10 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { useSoftGate } from "@/contexts/SoftGateContext";
 
 export default function Analytics() {
-  const { runGuarded } = useSoftGate();
   const [subs, setSubs] = useState("50000");
   const [avgViews, setAvgViews] = useState("15000");
   const [uploadsPerMonth, setUploadsPerMonth] = useState("4");
@@ -70,8 +68,9 @@ export default function Analytics() {
   };
 
   const calculateROI = () => {
-    if ((parseInt(subs) || 0) <= 0 || (parseInt(avgViews) || 0) <= 0) return performCalculateROI();
-    return runGuarded("see the next growth projection", performCalculateROI);
+    // The ROI projection is a purely local calculation — it is not an AI
+    // generation and must not consume the guest's one free preview.
+    return performCalculateROI();
   };
 
   return (

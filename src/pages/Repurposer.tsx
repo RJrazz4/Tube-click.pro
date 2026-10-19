@@ -66,6 +66,11 @@ export default function Repurposer() {
     // Check cache first
     const cacheKey = QK.transcript(trimmedUrl);
     const cached = queryClient.getQueryData(cacheKey) as any;
+    if (cached?.ghostReconstructed) {
+      // Stale envelope from the old synthetic fallback — never present it.
+      toast.error("No captions found for this video — paste your script manually instead. The repurposer works with any text.");
+      return;
+    }
     if (cached?.transcript) {
       setInputText(cached.transcript.slice(0, 8000)); // limit for UI
       setTranscriptMeta({ videoId: cached.videoId, wordCount: cached.wordCount, length: cached.length, source: cached.source + " (cached)" });
@@ -75,6 +80,14 @@ export default function Repurposer() {
 
     try {
       const data = await transcriptMutation.mutateAsync({ url: trimmedUrl });
+
+      // Honest no-captions signal (server never fabricates transcripts).
+      // Also defensively treats any stale ghost-reconstructed envelope
+      // (e.g. from the old cache) as unavailable.
+      if (data?.noCaptions || (data as any)?.ghostReconstructed) {
+        toast.error("No captions found for this video — paste your script manually instead. The repurposer works with any text.");
+        return;
+      }
       if (!data.transcript || data.transcript.trim().length < 10) {
         throw new Error("Transcript empty");
       }
@@ -181,7 +194,7 @@ export default function Repurposer() {
           <span className="px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-[10px] border border-green-500/20 ml-2">Free Transcript</span>
         </h1>
         <p className="text-sm md:text-base text-muted-foreground mt-1">
-          Free value add: Paste YouTube URL → extract transcript via <span className="text-foreground font-medium">built-in server-side transcript engine</span> → instantly repurpose to YT Description, X Thread, IG Caption & LinkedIn Post.
+          Free value add: Paste YouTube URL → extract transcript via{" "}<span className="text-foreground font-medium">built-in server-side transcript engine</span> → instantly repurpose to YT Description, X Thread, IG Caption & LinkedIn Post.
         </p>
       </div>
 
@@ -261,7 +274,7 @@ export default function Repurposer() {
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 mr-2" />
-                  Repurposing to 4 Platforms
+                  Repurpose to 4 Platforms
                 </>
               )}
             </Button>
