@@ -3,6 +3,7 @@ import { Flame, Loader2, RefreshCw, Search } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { engineConfigured, fetchTrendRadar, type TrendItem } from "@/lib/engine/client";
+import { useSoftGate } from "@/contexts/SoftGateContext";
 
 function fmtViews(v: number | null): string {
   if (v == null) return "";
@@ -32,17 +33,25 @@ export function TrendRadarCard() {
   const [query, setQuery] = useState("");
   const [activeTopic, setActiveTopic] = useState<string | null>(null);
   const [configured] = useState(() => engineConfigured());
+  const [needsAuth, setNeedsAuth] = useState(false);
+  const { requestAuthentication } = useSoftGate();
 
   const load = useCallback(async (topic: string | null) => {
     setLoading(true);
     setError(null);
+    setNeedsAuth(false);
     try {
       const radar = await fetchTrendRadar(topic ?? undefined);
       setItems(radar.items);
       setActiveTopic(radar.topic);
     } catch (err) {
       const status = (err as { status?: number })?.status;
-      setError(status === 401 ? "Sign in to unlock live trend intel." : "Live trends unavailable right now.");
+      if (status === 401) {
+        setNeedsAuth(true);
+        setError("Sign in to unlock live trend intel.");
+      } else {
+        setError("Live trends unavailable right now.");
+      }
       setItems([]);
     } finally {
       setLoading(false);
@@ -93,6 +102,13 @@ export function TrendRadarCard() {
       <CardContent>
         {loading && items.length === 0 ? (
           <div className="flex items-center justify-center py-10 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
+        ) : needsAuth ? (
+          <div className="py-6 text-center">
+            <p className="text-sm text-muted-foreground">Sign in to unlock live trend intel.</p>
+            <Button className="mt-3" size="sm" onClick={() => { void requestAuthentication("unlock live trend intel").then((ok) => { if (ok) void load(activeTopic); }); }}>
+              Sign in to unlock
+            </Button>
+          </div>
         ) : error ? (
           <p className="py-6 text-center text-sm text-muted-foreground">{error}</p>
         ) : items.length === 0 ? (
