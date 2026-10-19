@@ -100,7 +100,7 @@ export function useSeoGeneration() {
 
 // Transcript generation
 export function useTranscriptExtraction() {
-  return useSecureMutation<{ transcript: string; segments: any[]; videoId: string; wordCount: number; length: number; source: string }, { url: string }>("transcript");
+  return useSecureMutation<{ transcript: string | null; segments: any[]; videoId: string; wordCount: number; length: number; source: string; noCaptions?: boolean; ghostReconstructed?: boolean; message?: string }, { url: string }>("transcript");
 }
 
 // Clone & Crush Auto-Competitor & Rewriter - Consolidated Mutation
