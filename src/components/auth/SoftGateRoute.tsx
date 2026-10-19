@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import { useSoftGate } from "@/contexts/SoftGateContext";
 import { isGuestWallRequired } from "@/lib/auth/guestAccess";
@@ -7,7 +7,6 @@ import { isGuestWallRequired } from "@/lib/auth/guestAccess";
 export function SoftGateRoute({ children }: { children: ReactNode }) {
   const { isAuthLoading, requestAuthentication } = useSoftGate();
   const location = useLocation();
-  const navigate = useNavigate();
   const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
@@ -28,10 +27,11 @@ export function SoftGateRoute({ children }: { children: ReactNode }) {
           setBlocked(false);
           return;
         }
-        const authenticated = await requestAuthentication("access this tool");
+        await requestAuthentication("access this tool");
         if (!active) return;
-        if (authenticated) setBlocked(false);
-        else navigate("/", { replace: true });
+        // The dialog always resolves in place (Close / X / sign-in) — never
+        // navigate the user away from the tool they opened.
+        setBlocked(false);
       } catch {
         // On any error, unblock to avoid frozen blur overlay
         if (active) setBlocked(false);
@@ -39,7 +39,7 @@ export function SoftGateRoute({ children }: { children: ReactNode }) {
     };
     void check();
     return () => { active = false; };
-  }, [isAuthLoading, location.key, navigate, requestAuthentication]);
+  }, [isAuthLoading, location.key, requestAuthentication]);
 
   // FIX: Removed global blur (blur-sm) and pointer-events-none that was freezing
   // the entire UI when auth was loading or guest wall check hung.
