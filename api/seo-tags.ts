@@ -5,7 +5,7 @@
  * search volume) via OpenRouter with key rotation. All provider keys
  * are read from server environment variables. Runtime: Edge.
  */
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'edge', maxDuration: 60 };
 
 import { jsonResponse, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError, fetchOpenRouterWithRetry, extractOpenRouterText } from './_shared.js';
 

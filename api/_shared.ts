@@ -63,8 +63,13 @@ export function requireEnv(key: string): string {
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 /** Primary model; override with OPENROUTER_MODEL. */
 export const OPENROUTER_MODEL = "google/gemini-2.5-flash";
-/** Default fallback chain; override with OPENROUTER_MODEL_FALLBACKS (comma-separated). */
-export const OPENROUTER_MODEL_FALLBACKS = ["google/gemini-2.5-flash-lite"];
+/**
+ * Default fallback chain; override with OPENROUTER_MODEL_FALLBACKS (comma-separated).
+ * The last entry is a VERIFIED free open-source model
+ * (checked against https://openrouter.ai/api/v1/models on 2026-10-19):
+ * google/gemma-4-31b-it:free — Gemma 4 31B instruct, free tier (rate-limited).
+ */
+export const OPENROUTER_MODEL_FALLBACKS = ["google/gemini-2.5-flash-lite", "google/gemma-4-31b-it:free"];
 /*
  * Note: Gemini 2.0 model paths are retired on OpenRouter; 2.5-flash and
  * 2.5-flash-lite are the direct successors (same tier, support
@@ -96,10 +101,13 @@ export interface OpenRouterFetchOutcome {
 /**
  * Resolve OpenRouter API keys from environment.
  *
- * Accepted forms, in priority order:
- *   1. OPENROUTER_API_KEYS=k1,k2,k3   (preferred, comma-separated)
- *   2. OPENROUTER_API_KEY=k1          (singleton legacy alias)
- *   3. OPENROUTER_API_KEY_1..N        (numbered form)
+ * All configured forms are COMBINED (plural first, then singular, then
+ * numbered) so no key is ever silently shadowed:
+ *   1. OPENROUTER_API_KEYS=k1,k2,k3   (comma-separated)
+ *   2. OPENROUTER_API_KEY=k1          (singleton)
+ *   3. OPENROUTER_API_KEY_1..N        (numbered form, underscore)
+ *   4. OPENROUTER_API_KEY1..N         (numbered form, no underscore —
+ *      e.g. OPENROUTER_API_KEY2 as added manually in the Vercel dashboard)
  *
  * Returns a trimmed, de-duplicated array. Throws a descriptive error when
  * no usable key is configured, so a mis-named variable cannot silently
@@ -109,15 +117,17 @@ export function openRouterKeys(): string[] {
   const env = process.env;
   const collected: string[] = [];
   const plural = (env.OPENROUTER_API_KEYS || "").trim();
-  if (plural) {
-    collected.push(...plural.split(","));
-  } else {
-    const singular = (env.OPENROUTER_API_KEY || "").trim();
-    if (singular) collected.push(singular);
-    for (let i = 1; i <= 20; i++) {
-      const numbered = (env[`OPENROUTER_API_KEY_${i}`] || "").trim();
-      if (numbered) collected.push(numbered);
-    }
+  if (plural) collected.push(...plural.split(","));
+  const singular = (env.OPENROUTER_API_KEY || "").trim();
+  if (singular) collected.push(singular);
+  for (let i = 1; i <= 20; i++) {
+    const numbered = (env[`OPENROUTER_API_KEY_${i}`] || "").trim();
+    if (numbered) collected.push(numbered);
+  }
+  // No-underscore numbered form, e.g. OPENROUTER_API_KEY2.
+  for (let i = 1; i <= 10; i++) {
+    const numbered = (env[`OPENROUTER_API_KEY${i}`] || "").trim();
+    if (numbered) collected.push(numbered);
   }
   const unique = [...new Set(collected.map(k => k.trim()).filter(Boolean))];
   if (!unique.length) {
@@ -175,34 +185,38 @@ export function extractOpenRouterText(data: any): string {
   return "";
 }
 
-const sleepMsOR = (ms: number) => new Promise(r => setTimeout(r, ms));
-
-/** Error categories where backoff is useless and rotating key/model is the remedy. */
-const OR_ROTATE_CODES = new Set(["RATE_LIMITED", "QUOTA_EXCEEDED_DAILY", "INSUFFICIENT_CREDITS", "API_KEY_INVALID"]);
-
 export interface OpenRouterFetchOptions {
   /** Gemini-style body (existing shape). */
   body: any;
-  /** Per-call deadline in ms; defaults to AI_GATEWAY_TIMEOUT_MS or 45s for long-form calls. */
+  /** Per-call deadline in ms; defaults to 18s. The whole operation is capped at 45s. */
   deadlineMs?: number;
   /** Override max output tokens; otherwise inferred from generationConfig or a safe default. */
   maxTokens?: number;
 }
 
 /**
- * Fetch OpenAI-compatible chat completion through the Vercel AI Gateway.
+ * Fetch OpenAI-compatible chat completion DIRECTLY from OpenRouter
+ * (https://openrouter.ai/api/v1/chat/completions).
  *
- * This function is now a thin compatibility shim over
- * `packages/orchestrator/ai-gateway.ts` so legacy callers (seo-tags,
- * analyze-storyboard, clone-crush) keep working without modification.
- * It accepts the legacy Gemini-style body, converts it to system+user
- * prompts, calls the gateway, and returns a synthetic `Response` whose
- * shape matches the old OpenRouter JSON envelope (`choices[0].message.content`)
- * so that existing callers' `res.json()` + `extractOpenRouterText()`
- * continue to work.
+ * Accepts the legacy Gemini-style body, converts it with toOpenRouterBody,
+ * and rotates through every configured key (OPENROUTER_API_KEYS /
+ * OPENROUTER_API_KEY / OPENROUTER_API_KEY_1..N) and the model chain
+ * (OPENROUTER_MODEL > OPENROUTER_MODEL_FALLBACKS, ending on a verified
+ * free open-source model). Returns a synthetic `Response` whose shape
+ * matches the OpenRouter JSON envelope (`choices[0].message.content`) so
+ * existing callers' `res.json()` + `extractOpenRouterText()` keep working.
  *
- * Retries, fallback across models, rate-limit handling, and observability
- * are delegated to the gateway itself.
+ * Rotation policy: 401/403 (bad key), 429 (rate limit), 402 (no credits on
+ * this key), 5xx and timeouts/network errors → try the NEXT KEY.
+ * 404 (unknown model / no endpoints) → try the NEXT MODEL.
+ * 400/422 (bad request / content blocked) → stop; retrying is useless.
+ * When everything fails, the LAST upstream status is preserved so
+ * providerErrorResponse() classifies it correctly (RATE_LIMITED,
+ * API_KEY_INVALID, UPSTREAM_ERROR, ...).
+ *
+ * Time budget: each attempt gets an 18s deadline and the whole operation
+ * is capped at 45s, so the Vercel Edge function (maxDuration 60) never
+ * dies mid-flight.
  */
 export async function fetchOpenRouterWithRetry(
   geminiStyleBodyOrOpts: any | OpenRouterFetchOptions,
@@ -214,107 +228,100 @@ export async function fetchOpenRouterWithRetry(
       : { body: geminiStyleBodyOrOpts };
   const geminiStyleBody = opts.body;
 
-  const { gatewayChatText, gatewayChatJson } = await import("../packages/orchestrator/ai-gateway.js");
+  const keys = openRouterKeys();
+  const models = openRouterModelChain();
+  const perCallMs = Math.min(Math.max(opts.deadlineMs ?? 18000, 4000), 40000);
+  const totalBudgetMs = 45000;
+  const started = Date.now();
+  const budgetLeft = () => Date.now() - started < totalBudgetMs;
 
-  // Convert the Gemini-style body to system+user prompts using the
-  // existing body builder so behaviour stays identical for callers.
-  const primaryModel =
-    process.env.AI_GATEWAY_PRIMARY?.trim() ||
-    process.env.OPENROUTER_MODEL?.trim() ||
-    OPENROUTER_MODEL;
-  const body = toOpenRouterBody(geminiStyleBody, primaryModel);
-
-  // Flatten all messages into system + user. When there are multiple
-  // user/assistant turns (rare for these callers) we preserve them under
-  // labelled tags so the model still sees the full context.
-  const messages: any[] = Array.isArray(body.messages) ? body.messages : [];
-  const sysMsg = messages.find((m: any) => m.role === "system");
-  const nonSys = messages.filter((m: any) => m.role !== "system");
-  const systemPrompt = typeof sysMsg?.content === "string" ? sysMsg.content : "";
-  let userPrompt: string;
-  if (nonSys.length === 1 && typeof nonSys[0]?.content === "string") {
-    userPrompt = nonSys[0].content;
-  } else {
-    userPrompt = nonSys
-      .map((m: any) => {
-        const text =
-          typeof m?.content === "string"
-            ? m.content
-            : JSON.stringify(m?.content ?? "");
-        return `<${m.role}>\n${text}\n</${m.role}>`;
-      })
-      .join("\n\n");
-  }
-
-  const temperature = typeof body.temperature === "number" ? body.temperature : 0.8;
-  // Long-form asset generation (rewrite, full-script) needs a generous
-  // budget; short JSON calls default lower. Callers can override via opts.
   const maxTokens =
     opts.maxTokens ??
-    (typeof body.max_tokens === "number" ? body.max_tokens : 4096);
-  const deadlineMs = opts.deadlineMs;
+    (typeof geminiStyleBody?.generationConfig?.maxOutputTokens === "number"
+      ? geminiStyleBody.generationConfig.maxOutputTokens
+      : 4096);
 
-  const jsonMode =
-    geminiStyleBody?.generationConfig?.responseMimeType === "application/json" ||
-    body.response_format?.type === "json_object";
+  const attempted: string[] = [];
+  let failedOver = false;
+  let lastRes: Response | null = null;
+  let lastError: unknown = null;
 
-  try {
-    const gwCall = jsonMode ? gatewayChatJson : gatewayChatText;
-    const result = await gwCall({
-      systemPrompt,
-      userPrompt,
-      temperature,
-      maxTokens,
-      deadlineMs,
-    });
+  outer: for (const model of models) {
+    attempted.push(model);
+    let requestBody: any;
+    try {
+      requestBody = toOpenRouterBody(geminiStyleBody, model);
+    } catch (e) {
+      lastError = e;
+      continue;
+    }
+    requestBody.max_tokens = maxTokens;
 
-    // Build a synthetic OpenAI-compatible Response so downstream callers
-    // can keep `await res.json()` + `extractOpenRouterText(...)` unchanged.
-    const payload = {
-      id: `gw-${Date.now()}`,
-      object: "chat.completion",
-      model: result.model,
-      choices: [
-        {
-          index: 0,
-          message: { role: "assistant", content: result.text },
-          finish_reason: "stop",
-        },
-      ],
-      usage: result.usage
-        ? {
-            prompt_tokens: result.usage.inputTokens ?? 0,
-            completion_tokens: result.usage.outputTokens ?? 0,
-            total_tokens: result.usage.totalTokens ?? 0,
-          }
-        : { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-    };
-    const res = new Response(JSON.stringify(payload), {
-      status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
-    return {
-      res,
-      model: result.model,
-      attempted: result.modelsAttempted,
-      failedOver: result.failedOver,
-    };
-  } catch (err) {
-    // Surface a 502 Response with the stable error envelope consumed by
-    // providerErrorResponse(); callers then turn that into a UI-safe message.
-    const msg = err instanceof Error ? err.message : "AI gateway error";
-    const payload = { error: { message: msg, code: "UPSTREAM_ERROR" } };
-    const res = new Response(JSON.stringify(payload), {
-      status: 502,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
-    return {
-      res,
-      model: primaryModel,
-      attempted: [primaryModel],
-      failedOver: false,
-    };
+    for (const key of keys) {
+      if (!budgetLeft()) break outer;
+      const { signal, clear } = timeoutSignal(perCallMs);
+      try {
+        const res = await fetch(OPENROUTER_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://tubeclickpro.in",
+            "X-Title": "TubeClick Pro",
+          },
+          body: JSON.stringify(requestBody),
+          signal,
+        });
+        clear();
+
+        if (res.ok) {
+          return { res, model, attempted, failedOver: failedOver || attempted.length > 1 };
+        }
+
+        if (res.status === 404) {
+          // Unknown model / no endpoints — fail over to the next model.
+          failedOver = true;
+          lastRes = res;
+          break; // next model, keys reset
+        }
+        if (res.status === 400 || res.status === 422) {
+          // Bad request / content blocked — retrying cannot help.
+          lastRes = res;
+          break outer;
+        }
+        // 401/403 (bad key), 429 (rate limit), 402 (credits exhausted on this
+        // key), 5xx (transient) — rotate to the next key.
+        failedOver = true;
+        lastRes = res;
+        continue;
+      } catch (e) {
+        clear();
+        // Timeout / network error — rotate to the next key.
+        failedOver = true;
+        lastError = e;
+        continue;
+      }
+    }
   }
+
+  if (lastRes) {
+    // Preserve the upstream status so providerErrorResponse() classifies it.
+    const text = await lastRes.text().catch(() => "");
+    const res = new Response(text, {
+      status: lastRes.status,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+    return { res, model: attempted[attempted.length - 1], attempted, failedOver: true };
+  }
+
+  // Nothing ever answered — surface a 502 with the stable error envelope
+  // consumed by providerErrorResponse().
+  const msg = lastError instanceof Error ? lastError.message : "OpenRouter request failed";
+  const res = new Response(JSON.stringify({ error: { message: msg, code: "UPSTREAM_ERROR" } }), {
+    status: 502,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+  });
+  return { res, model: attempted[attempted.length - 1] ?? OPENROUTER_MODEL, attempted, failedOver: true };
 }
 
 export function cleanupJson(value: string) {

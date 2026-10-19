@@ -5,7 +5,7 @@
  * angle, visual/motion prompts) from a script, using OpenRouter with
  * key rotation. Runs on the Edge runtime for low-latency US responses.
  */
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'edge', maxDuration: 60 };
 import { jsonResponse, corsHeaders, safeJsonBody, providerErrorResponse, sanitizeThrownError, fetchOpenRouterWithRetry, extractOpenRouterText } from './_shared.js';
 
 function cleanupJson(v: string) { return v.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim(); }

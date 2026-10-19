@@ -8,11 +8,14 @@
  *   1. Direct YouTube watch page caption track fetch (Edge-compatible).
  *   2. Piped public API relay mesh.
  *   3. Invidious relay mesh.
- *   4. Deterministic ghost synthetic reconstruction scaffold so Repurposer / Chain-Loop
- *      never times out or blocks.
+ *
+ * HONESTY RULE: if no real caption source yields a transcript, the route
+ * returns { transcript: null, noCaptions: true } — NEVER a fabricated
+ * transcript. Callers must surface that state to the user instead of
+ * presenting synthetic text as real.
  */
 export const runtime = 'edge';
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'edge', maxDuration: 60 };
 
 import { jsonResponse, corsHeaders, safeJsonBody } from './_shared.js';
 
@@ -174,39 +177,6 @@ async function fetchViaInvidious(videoId: string): Promise<TranscriptResult | nu
   return firstValid(INVIDIOUS_NODES.map((base) => fetchInvidiousNode(base, videoId)), 2300);
 }
 
-function ghostHash(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function generateGhostTranscript(videoId: string): { text: string; segments: any[] } {
-  const h = ghostHash(videoId);
-  const hooks = [
-    "What I'm about to share will change how you think about growth forever",
-    "At 3:42 in the morning, everything clicked for me",
-    "The algorithm doesn't want you to know this, but I'm going to show you anyway",
-    "I made every mistake so you don't have to - here's what actually works",
-  ];
-  const bodies = [
-    "The first thing you need to understand is retention is everything. If you can keep someone watching past 30 seconds, you've already won half the battle. The second part is pattern interrupt - every 8 seconds, something new on screen. A zoom, a graphic, a sound effect. This is what the top 1% do without telling you.",
-    "Most creators focus on views, but the real metric is viewer satisfaction score. YouTube measures not just if they watched, but how they felt. Did they like? Did they comment? Did they share? These micro-signals compound into massive reach. I've tested this across 47 channels - same content, different packaging, 10x difference.",
-    "Let me break down the three-layer retention loop that I use for every single video. Layer one is the hook - you have 7 seconds. Layer two is the open loop - keep them curious. Layer three is the payoff with a new loop. This cycle repeats until the end, and if you do it right, your average view duration jumps from 38% to 68% overnight.",
-  ];
-  const closes = [
-    "So implement this starting today, and watch your analytics shift in the next 7 days. The system rewards those who understand psychology, not just production.",
-    "This isn't theory - this is deployed across my ghost network of channels. The proof is in the retention graph. Now go execute.",
-  ];
-  const hook = hooks[h % hooks.length];
-  const body = bodies[(h >> 3) % bodies.length];
-  const close = closes[(h >> 5) % closes.length];
-  const full = `${hook}. ${body} ${close} Remember, the game is not about being the best - it's about being the most watchable. Algorithm follows human behavior, not the other way around. Ghost Protocol note: Edge transcript reconstruction scaffold active — preserves viral DNA for multi-platform repurposing.`;
-  return { text: full, segments: [{ text: full, duration: 120, offset: 0 }] };
-}
-
 function transcriptEnvelope(videoId: string, result: TranscriptResult, extras: Record<string, unknown> = {}) {
   return {
     videoId,
@@ -227,7 +197,7 @@ export default async function handler(req: Request) {
   try {
     const bodyResult = await safeJsonBody(req);
     if (bodyResult.error) return jsonResponse({ error: bodyResult.error }, 400);
-    const { url, lang = 'en', title: providedTitle } = bodyResult.data;
+    const { url, lang = 'en' } = bodyResult.data;
 
     if (!url || typeof url !== 'string') return jsonResponse({ error: 'YouTube URL required' }, 400);
     const videoId = extractId(url.trim());
@@ -247,22 +217,33 @@ export default async function handler(req: Request) {
       }));
     }
 
-    const ghost = generateGhostTranscript(videoId + (providedTitle || ''));
-    return jsonResponse(transcriptEnvelope(videoId, { ...ghost, source: 'ghost-synthetic-edge', ghostNode: 'EDGE-01 • SYNTHETIC', timedOut: true }, {
-      ghostReconstructed: true,
-      timedOut: true,
+    // Honest no-captions signal — never fabricate a transcript.
+    return jsonResponse({
+      videoId,
+      transcript: null,
+      segments: [],
+      source: 'no-captions',
+      noCaptions: true,
+      length: 0,
+      wordCount: 0,
       elapsedMs: Date.now() - startedAt,
       timeoutBudgetMs: 5000,
-      intelNote: 'Transcript extraction completed via edge synthetic reconstruction scaffold.',
-    }));
+      message: 'No captions found for this video. Paste your script manually instead.',
+    });
 
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[transcript:edge] fatal:', msg);
-    const ghost = generateGhostTranscript('fallback');
-    return jsonResponse(transcriptEnvelope('ghost_fallback', { ...ghost, source: 'ghost-fallback-edge', ghostNode: 'EDGE-01', timedOut: true }, {
-      ghostReconstructed: true,
+    return jsonResponse({
+      videoId: 'unknown',
+      transcript: null,
+      segments: [],
+      source: 'no-captions',
+      noCaptions: true,
+      length: 0,
+      wordCount: 0,
+      message: 'No captions found for this video. Paste your script manually instead.',
       warning: msg,
-    }));
+    });
   }
 }
