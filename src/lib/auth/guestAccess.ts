@@ -61,9 +61,11 @@ export async function consumeGuestPreview(): Promise<void> {
       localStorage.setItem(LOCAL_PREVIEW_KEY, "true");
       throw error;
     }
-    // Development/offline fallback. Production remains protected by the
-    // signed server cookie when the endpoint is available.
-    localStorage.setItem(LOCAL_PREVIEW_KEY, "true");
+    // A transient failure (network/offline) must NOT consume the guest's
+    // one free preview — clear the optimistic claim so the next attempt
+    // can retry. The signed server cookie remains authoritative in
+    // production.
+    localStorage.removeItem(LOCAL_PREVIEW_KEY);
   }
 }
 
