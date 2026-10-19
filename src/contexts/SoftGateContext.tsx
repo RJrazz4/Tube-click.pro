@@ -582,7 +582,7 @@ export function SoftGateProvider({ children }: { children: ReactNode }) {
                     <Label htmlFor="soft-gate-email">Email</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input id="soft-gate-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="h-11 bg-background/50 pl-9" placeholder="creator@example.com" />
+                      <Input id="soft-gate-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="h-11 bg-background/50 pl-9" placeholder="you@example.com" />
                     </div>
                   </div>
                   <div className="space-y-1.5">

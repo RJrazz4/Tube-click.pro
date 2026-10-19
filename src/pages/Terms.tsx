@@ -78,7 +78,7 @@ export default function Terms() {
         <section className="space-y-4">
           <h2 className="text-2xl font-semibold text-foreground">Limitation of Liability</h2>
           <p>
-            To the maximum extent permitted by law, TubeGenius Pro and its creators shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to:
+            To the maximum extent permitted by law, TubeClick Pro and its creators shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to:
           </p>
           <ul className="list-disc pl-6 space-y-2">
             <li>Loss of profits or revenue</li>

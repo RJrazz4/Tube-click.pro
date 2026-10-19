@@ -34,12 +34,12 @@ const tools = [
   { title: "SEO Tag & Competitor AI", description: "Improve titles and search tags", icon: Search, path: "/seo", gradient: "from-emerald-500 to-teal-600", glow: "" },
 ];
 
-const StatCard = memo(function StatCard({ label, value, icon: Icon, color }: { label: string; value: number; icon: any; color: string }) {
+const StatCard = memo(function StatCard({ label, value, icon: Icon, color, synced }: { label: string; value: number; icon: any; color: string; synced?: boolean }) {
   return (
     <Card className="glass-strong border-border hover:border-primary/30 transition-colors bracket">
       <CardContent className="p-3 md:p-4">
         <div className="flex items-start justify-between">
-          <div><p className="text-xs md:text-sm text-muted-foreground">{label}</p><p className="text-2xl md:text-3xl font-display font-bold text-foreground mt-1">{value}</p><p className="text-[9px] font-mono text-primary/60 mt-1">Synced • just now</p></div>
+          <div><p className="text-xs md:text-sm text-muted-foreground">{label}</p><p className="text-2xl md:text-3xl font-display font-bold text-foreground mt-1">{value}</p><p className="text-[9px] font-mono text-primary/60 mt-1">{synced ? "Synced • just now" : "No activity yet"}</p></div>
           <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-primary/10 flex items-center justify-center"><Icon className={`w-4 h-4 md:w-5 md:h-5 ${color}`} /></div>
         </div>
       </CardContent>
@@ -171,7 +171,7 @@ export default function Dashboard() {
             <h2 id="workspace-stats-heading" className="font-display text-lg md:text-xl font-semibold text-foreground">Workspace at a glance</h2>
             <p className="mt-1 text-xs text-muted-foreground">A quick view of the content you have created in this workspace.</p>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">{statDefs.map(stat=> <StatCard key={stat.key} label={stat.label} value={stat.value} icon={stat.icon} color={stat.color} />)}</div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">{statDefs.map(stat=> <StatCard key={stat.key} label={stat.label} value={stat.value} icon={stat.icon} color={stat.color} synced={stat.value > 0} />)}</div>
         </section>
 
         <section aria-labelledby="create-tools-heading" className="space-y-4">

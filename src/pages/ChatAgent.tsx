@@ -525,7 +525,7 @@ ${generatedContent.description || 'N/A'}
                     <div>
                       <p className="text-foreground font-semibold text-sm md:text-base">Ready to create viral content?</p>
                       <p className="text-muted-foreground text-xs md:text-sm mt-1">
-                        Enter a topic and I'll generate {language === "hinglish" ? "cinematic Hinglish" : language === "hindi" ? "Hindi" : "English"} content.
+                        Enter a topic and I'll generate{" "}{language === "hinglish" ? "cinematic Hinglish" : language === "hindi" ? "Hindi" : "English"} content.
                       </p>
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">

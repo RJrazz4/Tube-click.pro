@@ -17,8 +17,8 @@ export function Footer() {
           </div>
           <nav className="flex items-center gap-4">
             <Link to="/privacy" className="text-xs font-mono text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"><ShieldCheck className="w-3 h-3" />Privacy</Link>
-            <Link to="/terms" className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors">Terms • Level 4</Link>
-            <Link to="/about" className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"><Terminal className="w-3 h-3" />About • War Room</Link>
+            <Link to="/terms" className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors">Terms</Link>
+            <Link to="/about" className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"><Terminal className="w-3 h-3" />About</Link>
           </nav>
         </div>
         <div className="mt-4 pt-4 border-t border-border/20 flex flex-col md:flex-row items-center justify-between gap-2 text-[9px] font-mono text-muted-foreground/50">
