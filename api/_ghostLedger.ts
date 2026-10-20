@@ -13,6 +13,7 @@
 
 import { jsonResponse } from "./_shared.js";
 import { verifyGhostAuthHeader } from "./_ghostAuth.js";
+import { hasLeadActivation } from "./_freePro.js";
 
 export type GhostAction = "interrogate" | "squad" | "recon" | "dawn_patrol";
 
@@ -99,6 +100,24 @@ export async function getGhostQuota(req: Request): Promise<GhostQuotaSnapshot> {
     };
   }
   const { url } = supabaseCreds();
+  // Round 4b — FREE_PRO_MODE server mirror: a lead-activated caller sees the
+  // Pro snapshot (every action allowed, no ledger consumption) — mirrors the
+  // client-side free-Pro state so /api/ghost/credits never contradicts it.
+  if (await hasLeadActivation(verified.userId)) {
+    const proAction: GhostActionQuota = {
+      used: 0, limit: 0, remaining: 0, allowed: true,
+      reset_at: null, remaining_seconds: 0, total_runs: 0,
+    };
+    return {
+      allowed: true, code: "OK", tier: "pro", is_black_ops: false,
+      actions: {
+        interrogate: { ...proAction },
+        squad: { ...proAction },
+        recon: { ...proAction },
+        dawn_patrol: { ...proAction },
+      },
+    };
+  }
   // Use the ANON key for this call (we just need to pass a JWT) — the
   // function is grant'd to authenticated.
   const anonKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_ANON_KEY || "";
@@ -156,6 +175,23 @@ export async function consumeGhostAction(
     return {
       allowed: false, code: "AUTH_REQUIRED", action,
       tier: "guest", is_black_ops: false,
+      used: 0, limit: 0, remaining: 0,
+      reset_at: null, remaining_seconds: 0, total_runs: 0,
+    };
+  }
+  // Round 4b — FREE_PRO_MODE server mirror: a lead-activated caller behaves
+  // as Pro WITHOUT consuming the credit ledger (no per-action limits while
+  // the free-Pro window is live). The referral proof-of-work hook is
+  // registered here exactly as the RPC path would on an allowed run, so
+  // referrals keep qualifying. `consumeGhostActionForUser` (the cron path)
+  // is intentionally NOT overridden — the scheduler's due-users list is
+  // gated on is_pro() in the database, so lead-activated users are served
+  // interactively, not by the cron.
+  if (await hasLeadActivation(verified.userId)) {
+    void registerReferralProofOfWork(verified.userId, action);
+    return {
+      allowed: true, code: "OK", action,
+      tier: "pro", is_black_ops: false,
       used: 0, limit: 0, remaining: 0,
       reset_at: null, remaining_seconds: 0, total_runs: 0,
     };
