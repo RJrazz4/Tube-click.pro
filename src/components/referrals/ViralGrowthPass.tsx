@@ -14,8 +14,7 @@ import { ReferralPromoArtifact } from "@/components/referrals/ReferralPromoArtif
 import { ProExpiryCountdown } from "@/components/referrals/ProExpiryCountdown";
 import { ReferralLeaderboardGhost } from "@/components/referrals/ReferralLeaderboardGhost";
 import { GhostStreak } from "@/components/referrals/GhostStreak";
-import { useAuthStore } from "@/stores/useAuthStore";
-import { useAppStore } from "@/stores/useAppStore";
+import { refreshLicenseFromProfile } from "@/lib/entitlement/licenseRefresh";
 
 // Fallback only; the server is authoritative via profile.requiredForReward.
 const MILESTONE_SIZE = 2;
@@ -32,9 +31,6 @@ function TerminalProgress({ value, total, label }: { value: number; total: numbe
 }
 
 export function ViralGrowthPass() {
-  const setLicense = useAuthStore((state) => state.setLicense);
-  const license = useAuthStore((state) => state.license);
-  const setAppTier = useAppStore((state) => state.setTier);
   const [profile, setProfile] = useState<ReferralProfile | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "signed-out" | "unavailable">("loading");
   const [copied, setCopied] = useState(false);
@@ -48,15 +44,10 @@ export function ViralGrowthPass() {
       const nextProfile = await loadReferralProfile();
       setProfile(nextProfile);
       setStatus("ready");
-      if (nextProfile.proTierExpiresAt && new Date(nextProfile.proTierExpiresAt).getTime() > Date.now()) {
-        setLicense({ tier: "pro", status: "active", expiresAt: nextProfile.proTierExpiresAt });
-        setAppTier("pro");
-      } else if (license.tier === "pro" && license.expiresAt) {
-        setLicense({ tier: "free", status: "active", expiresAt: undefined });
-        setAppTier("free");
-      }
+      // Single source of truth for license reconciliation.
+      await refreshLicenseFromProfile();
     } catch { setStatus("unavailable"); }
-  }, [license.expiresAt, license.tier, setAppTier, setLicense]);
+  }, []);
 
   useEffect(() => {
     void refresh();
