@@ -573,161 +573,6 @@ function estimatedRevenueForViews(views: number): number {
 }
 
 // -------------------------------------------------------------
-// Deterministic seeded hash — used to synthesize fallback data when
-// upstream intelligence is unavailable (no external API cost).
-// -------------------------------------------------------------
-function ghostHash(str: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-// -------------------------------------------------------------
-// SYNTHETIC GHOST MATRIX - Falls back when YT API quota dead
-// Uses REAL YouTube thumbnails (i.ytimg.com) but synthetic metadata,
-// so UI never shows red FAILED. Feels like ghost scrape reconstruction.
-// -------------------------------------------------------------
-const VIRAL_POOL = [
-  { id: 'dQw4w9WgXcQ', channel: 'Viral Labs', baseViews: 12400000 },
-  { id: '9bZkp7q19f0', channel: 'Trend Forge', baseViews: 8900000 },
-  { id: 'JGwWNGJdvx8', channel: 'Growth Terminal', baseViews: 6700000 },
-  { id: 'RgKAFK5djSk', channel: 'Signal Intel', baseViews: 5400000 },
-  { id: 'kJQP7kiw5Fk', channel: 'Velocity X', baseViews: 7200000 },
-  { id: 'CevxZvSJLk8', channel: 'Neural Ops', baseViews: 4300000 },
-  { id: 'OPf0YbXqDm0', channel: 'Ghost Unit', baseViews: 3800000 },
-  { id: 'fJ9rUzIMcZQ', channel: 'War Room', baseViews: 5100000 },
-  { id: 'hT_nvWreIhg', channel: 'Intel Drop', baseViews: 6200000 },
-  { id: 'YQHsXMglC9A', channel: 'Blackbox', baseViews: 4700000 },
-  { id: 'NUsoVlDFqZg', channel: 'Stealth Lab', baseViews: 3900000 },
-  { id: 'Zi_XLOBDo_Y', channel: 'Phantom', baseViews: 5600000 },
-  { id: 'k85mRPqvMbE', channel: 'Cipher', baseViews: 4100000 },
-  { id: 'QcIy9NiNbmo', channel: 'Nebula', baseViews: 7300000 },
-  { id: '2Vv-BfVoq4g', channel: 'Orbit', baseViews: 2900000 },
-  { id: '09R8_2nJtjg', channel: 'Pulse', baseViews: 8500000 },
-  { id: 'uelHwf8o7_U', channel: 'Vector', baseViews: 6000000 },
-  { id: '0KSOMA3QBU0', channel: 'Prism', baseViews: 3400000 },
-  { id: 'b1kbLwvqugk', channel: 'Echo', baseViews: 7800000 },
-  { id: '6f3RzjIKk2g', channel: 'Flux', baseViews: 5200000 },
-];
-
-function generateSyntheticCompetitors(
-  niche: string,
-  seedOffset = 0,
-  language: CloneCrushOutputLanguage = 'English',
-) {
-  const hash = ghostHash(niche + seedOffset);
-  const niches = language === 'Hindi'
-    ? ['राज़', 'पर्दाफाश', 'छुपा सच', 'प्रतिबंधित तरीका', 'एल्गोरिदम हैक', 'वायरल फ़ॉर्मूला', 'गहरा राज़', 'चौंकाने वाला सच', 'कमाई का रास्ता', 'अंदरूनी तरकीब']
-    : language === 'Hinglish'
-      ? ['Ka Secret', 'Ka Sach Exposed', 'Ki Hidden Truth', 'Ka Banned Method', 'Ka Algorithm Hack', 'Ka Viral Formula', 'Ka Dark Secret', 'Ki Shocking Truth', 'Ka Profit Loophole', 'Ki Andar Ki Trick']
-      : ['Secret', 'Exposed', 'Hidden Truth', 'Banned Method', 'Algorithm Hack', 'Viral Formula', 'Dark Secret', 'Shocking Truth', 'Profit Loophole', 'Underground Trick'];
-  const hooks = language === 'Hindi'
-    ? ['यह बात कोई नहीं बताता', 'मैंने 30 दिन तक आज़माया', 'रात 3 बजे सब बदल गया', 'यह गलती आपको महँगी पड़ रही है', '97% लोग क्यों असफल होते हैं', 'उन्होंने यह आपसे छुपाया', 'लीक हुए वीडियो में खुलासा', 'सच आपको चौंका देगा']
-    : language === 'Hinglish'
-      ? ['Ye Baat Koi Nahi Batata', 'Maine 30 Din Test Kiya', 'Raat 3 Baje Sab Badal Gaya', 'Ye Mistake Aapko Mehengi Pad Rahi Hai', '97% Log Kyun Fail Hote Hain', 'Unhone Ye Aapse Chhupaya', 'Leaked Video Mein Sach', 'Truth Aapko Shock Kar Dega']
-      : ['Nobody Tells You', 'I Tested For 30 Days', 'At 3AM Everything Changed', 'The Mistake Costing You $', 'Why 97% Fail', 'They Hid This From You', 'Leaked Footage Shows', 'The Truth Will Shock You'];
-  const results: any[] = [];
-  // Generate a wider page so callers can slice windows deterministically.
-  const PAGE_SIZE = 12;
-  for (let i = 0; i < PAGE_SIZE; i++) {
-    const globalIdx = seedOffset + i;
-    const poolIdx = (hash + globalIdx * 7) % VIRAL_POOL.length;
-    const pool = VIRAL_POOL[poolIdx];
-    const nicheIdx = (hash + globalIdx) % niches.length;
-    const hookIdx = (hash + globalIdx * 3) % hooks.length;
-    const viewsJitter = 0.6 + ((hash + globalIdx * 13) % 80) / 100;
-    const views = Math.max(VIRAL_VIEW_THRESHOLD, Math.round(pool.baseViews * viewsJitter));
-    const recencyHours = (2 + ((hash + globalIdx * 5) % 168));
-    const recencyText = recencyHours < 24 ? `${recencyHours} hours ago` : `${Math.round(recencyHours/24)} days ago`;
-    const velocity = Math.min(100, Math.round(40 + Math.log10(views) * 2 + (24/Math.max(recencyHours,1))*15 + (hash%20)));
-    const revenue = Math.round(views / 1000 * (5 + (hash%10)));
-    // Deterministic per-video IDs derived from (niche, index) so append-only
-    // conveyor shifts are stable and dedupe-able.
-    const videoId = `ghost_${(hash ^ (globalIdx * 2654435761)).toString(36).slice(0, 10)}`;
-    results.push({
-      id: videoId,
-      videoId,
-      title: language === 'Hindi'
-        ? `${niche} का ${niches[nicheIdx]}: ${hooks[hookIdx]} [${niche.split(' ')[0]} #${globalIdx+1}]`
-        : `${niche} ${niches[nicheIdx]}: ${hooks[hookIdx]} [${niche.split(' ')[0]} #${globalIdx+1}]`,
-      url: `https://www.youtube.com/watch?v=${videoId}`,
-      thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-      views: `${views.toLocaleString()} views`,
-      viewsCount: views,
-      viewsText: `${views.toLocaleString()} views`,
-      publishedAt: new Date(Date.now() - recencyHours * 3600000).toISOString(),
-      publishedDate: recencyText,
-      publishedText: recencyText,
-      channelName: pool.channel,
-      duration: 'PT10M30S',
-      viralVelocityScore: velocity,
-      estimatedRevenue: `$${revenue.toLocaleString()}`,
-      estimatedRevenueNum: revenue,
-      relevance: localizedCopy(language, {
-        English: `Ghost reconstructed insight • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view viral gate enforced`,
-        Hindi: `घोस्ट द्वारा पुनर्निर्मित जानकारी • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ व्यूज़ की वायरल सीमा लागू`,
-        Hinglish: `Ghost reconstructed insight • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ views ka viral gate apply kiya gaya`,
-      }),
-      isGhostReconstructed: true,
-      ghostNode: `MUM-0${(globalIdx%3)+1}`,
-      viralThreshold: VIRAL_VIEW_THRESHOLD,
-    });
-  }
-  return filterViralOnly(results);
-}
-
-function generateSyntheticProfile(
-  input: string,
-  language: CloneCrushOutputLanguage = 'English',
-) {
-  const clean = input.trim().replace(/https?:\/\/(www\.)?youtube\.com\//i, '').replace('@','').slice(0, 30) || 'GhostCreator';
-  const hash = ghostHash(clean);
-  const names = [clean.charAt(0).toUpperCase()+clean.slice(1) + ' Labs', clean + ' Terminal', clean.charAt(0).toUpperCase()+clean.slice(1)+' • Ghost Unit'];
-  const name = names[hash % names.length];
-  const handle = '@' + clean.replace(/[^a-zA-Z0-9._-]/g,'').toLowerCase().slice(0, 20);
-  const subs = 15000 + (hash % 500000);
-  const avatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(handle)}&backgroundColor=transparent`;
-  const descriptions: Record<CloneCrushOutputLanguage, string[]> = {
-    English: [
-      `Encrypted creator profile: ${name}. Niche velocity detected. Ghost Protocol active. Building audience through algorithmic opportunities and viral retention loops.`,
-      `${name} is operating in stealth mode and decoding viral DNA for audience growth. Channel analytics show an upward velocity trend.`,
-      `Classified channel insight: ${name}. Strong niche signals and high retention potential detected. Linked to ghost node MUM-01 for real-time tracking.`,
-    ],
-    Hindi: [
-      `एन्क्रिप्टेड क्रिएटर प्रोफ़ाइल: ${name}। निच की तेज़ रफ़्तार मिली है। घोस्ट प्रोटोकॉल सक्रिय है और वायरल रिटेंशन से ऑडियंस बढ़ रही है।`,
-      `${name} स्टेल्थ मोड में ऑडियंस ग्रोथ के लिए वायरल पैटर्न समझ रहा है। चैनल एनालिटिक्स में तेज़ी का रुझान दिख रहा है।`,
-      `गोपनीय चैनल जानकारी: ${name}। मज़बूत निच संकेत और बेहतर रिटेंशन की संभावना मिली है। रियल-टाइम ट्रैकिंग के लिए घोस्ट नोड MUM-01 से जुड़ा है।`,
-    ],
-    Hinglish: [
-      `Encrypted creator profile: ${name}. Niche ki velocity strong hai, Ghost Protocol active hai, aur viral retention loops se audience grow ho rahi hai.`,
-      `${name} stealth mode mein audience growth ke liye viral DNA decode kar raha hai. Channel analytics mein upward trend dikh raha hai.`,
-      `Classified channel insight: ${name}. Strong niche signals aur high retention potential mila hai. Real-time tracking ke liye ghost node MUM-01 se linked hai.`,
-    ],
-  };
-  const descs = descriptions[language];
-  return {
-    id: 'ghost_' + hash.toString(36),
-    url: `https://www.youtube.com/${handle}`,
-    name,
-    handle,
-    avatar,
-    banner: 'PLACEHOLDER_GRADIENT',
-    description: descs[hash % descs.length],
-    profiledAt: new Date().toISOString(),
-    subscriberCount: subs,
-    subscriberCountText: subs.toLocaleString(),
-    videoCount: 42 + (hash % 200),
-    extractedKeywords: handle.replace('@','').split(/[^a-z0-9]+/i).filter(Boolean).slice(0,5),
-    isGhostReconstructed: true,
-    ghostNode: 'MUM-01',
-    clearance: 'LEVEL 4',
-  };
-}
-
-// -------------------------------------------------------------
 // YT API with key rotation + Ghost Relay fallback
 // -------------------------------------------------------------
 async function youtubeApi(path: string, params: Record<string, string>) {
@@ -758,12 +603,26 @@ async function youtubeApi(path: string, params: Record<string, string>) {
   throw new Error(`YouTube Data API requests failed for all ${keys.length} configured keys: ${lastError?.message || 'unknown error'}`);
 }
 
-type ChannelReference = { id: string } | { handle: string } | { query: string };
+type ChannelReference = { id: string } | { handle: string } | { query: string } | { videoId: string };
+
+/**
+ * Extract an 11-char YouTube video id from watch / youtu.be / shorts / embed
+ * URLs, or null. Used so pasting a VIDEO URL into the channel field resolves
+ * the video's real channel via the Data API instead of fabricating a profile.
+ */
+function extractVideoIdFromUrl(input: string): string | null {
+  const m = input.match(/(?:youtube\.com\/(?:watch\?[^#\s]*v=|shorts\/|embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
 function channelRef(input: string): ChannelReference {
   const value = input.trim();
   if (!value) throw new Error('A YouTube channel URL or @handle is required');
   if (/^UC[A-Za-z0-9_-]{20,}$/.test(value)) return { id: value };
   if (/^@[A-Za-z0-9._-]+$/.test(value)) return { handle: value };
+  // A video URL resolves to its real channel — never a fabricated profile.
+  const pastedVideoId = extractVideoIdFromUrl(value);
+  if (pastedVideoId) return { videoId: pastedVideoId };
   const normalized = /^https?:\/\//i.test(value) ? value : `https://${value}`;
   let url: URL;
   try { url = new URL(normalized); } catch { throw new Error('Enter a valid YouTube channel URL or @handle'); }
@@ -779,7 +638,13 @@ function channelRef(input: string): ChannelReference {
 async function youtubeChannelProfile(input: string) {
   const ref = channelRef(input);
   let channelData: any;
-  if ('id' in ref || 'handle' in ref) {
+  if ('videoId' in ref) {
+    // A video URL was pasted: resolve its REAL channel via the Data API.
+    const video = await youtubeApi('videos', { part: 'snippet', id: ref.videoId });
+    const channelId = video?.items?.[0]?.snippet?.channelId;
+    if (!channelId) throw new Error('Could not resolve a channel from that video URL');
+    channelData = await youtubeApi('channels', { part: 'snippet,statistics,brandingSettings', id: channelId });
+  } else if ('id' in ref || 'handle' in ref) {
     channelData = await youtubeApi('channels', { part: 'snippet,statistics,brandingSettings', ...('id' in ref ? { id: ref.id } : { forHandle: ref.handle }) });
   } else {
     const search = await youtubeApi('search', { part: 'snippet', q: ref.query, type: 'channel', maxResults: '1' });
@@ -1233,19 +1098,17 @@ export default async function handler(req: Request) {
         // If every single configured key returned a hard quota/403 (no
         // remaining credentials), return a 502 so the client knows this is a
         // server-side credential-exhaustion event rather than pretending to
-        // have scraped a profile. Synthetic ghost reconstruction is reserved
-        // for recoverable network/timeout/parse failures.
+        // have scraped a profile. Fabricating a profile is never acceptable —
+        // surface an honest error so the UI shows a retry message.
         if (/YouTube Data API requests failed for all/i.test(raw) && /quota/i.test(raw)) {
           return jsonResponse({ error: raw, code: 'UPSTREAM_QUOTA' }, 502);
         }
         return jsonResponse({
-          success: true,
-          profile: generateSyntheticProfile(channelUrl, outputLanguage),
-          outputLanguage,
-          ghostReconstructed: true,
-          ghostNode: 'MUM-01',
-          ...(raw && raw !== 'GHOST_RECONSTRUCT' ? { fallbackReason: sanitizeThrownError(err, 'clone-crush:profile') } : {}),
-        });
+          success: false,
+          error: 'YouTube channel data is unavailable right now (API quota or network). Please retry in a minute.',
+          code: 'UPSTREAM_UNAVAILABLE',
+          service: 'clone-crush',
+        }, 502);
       }
     }
 
@@ -1260,17 +1123,16 @@ export default async function handler(req: Request) {
       // limit defaults to 3 (bootstrap window); append shifts request 1.
       const rawLimit = Number(bodyResult.data.limit);
       const limit = Number.isFinite(rawLimit) && rawLimit > 0 && rawLimit <= 12 ? Math.round(rawLimit) : 3;
-      // Default source is 'youtube' (fresh bootstrap); only advance to
-      // 'synthetic' when there's a cursor that already encoded a
-      // fallback. This mirrors the pre-pagination flow that always
-      // tried the live API first.
-      let source: 'youtube' | 'piped' | 'synthetic' = 'youtube';
+      // Default source is 'youtube' (fresh bootstrap); a cursor can also
+      // encode 'piped' for the relay fallback. This mirrors the
+      // pre-pagination flow that always tried the live API first.
+      let source: 'youtube' | 'piped' = 'youtube';
       let offset = 0;
       try {
         if (typeof bodyResult.data.after === 'string' && bodyResult.data.after.length > 0) {
           const decoded = JSON.parse(Buffer.from(bodyResult.data.after, 'base64').toString('utf8'));
           if (decoded && typeof decoded === 'object') {
-            if (decoded.source === 'youtube' || decoded.source === 'piped' || decoded.source === 'synthetic') source = decoded.source;
+            if (decoded.source === 'youtube' || decoded.source === 'piped') source = decoded.source;
             if (Number.isFinite(decoded.offset)) offset = Math.max(0, Math.round(decoded.offset));
           }
         }
@@ -1285,7 +1147,7 @@ export default async function handler(req: Request) {
         ? bodyResult.data.windowId
         : Buffer.from(`${niche}:${Date.now().toString(36)}`).toString('base64url');
 
-      const buildEnvelope = (list: any[], src: 'youtube'|'piped'|'synthetic', usedOffset: number, moreAvailable: boolean) => {
+      const buildEnvelope = (list: any[], src: 'youtube'|'piped', usedOffset: number, moreAvailable: boolean) => {
         // Strip any IDs the client says it has already seen (dedup across shifts).
         const deduped = list.filter((v) => v?.videoId && !excludeIds.has(v.videoId));
         const window = deduped.slice(0, limit);
@@ -1353,12 +1215,19 @@ export default async function handler(req: Request) {
             return buildEnvelope(mapped, 'piped', offset, piped.length >= fetchSize + offset);
           }
         } catch {
-          // Continue to the deterministic synthetic fallback below.
+          // Continue to the honest 502 below.
         }
       }
-      // Final synthetic fallback (deterministic, infinite pagination by advancing seedOffset).
-      const synthPage = generateSyntheticCompetitors(niche, offset, outputLanguage);
-      return buildEnvelope(synthPage, 'synthetic', offset, true);
+      // No synthetic fallback: fabricating competitor videos and view counts
+      // is worse than an honest error. When the live API and the Piped relay
+      // both fail, surface a 502 so the UI shows a retry message instead of
+      // invented videos.
+      return jsonResponse({
+        success: false,
+        error: 'YouTube competitor data is unavailable right now (API quota or network). Please retry in a minute.',
+        code: 'UPSTREAM_UNAVAILABLE',
+        service: 'clone-crush',
+      }, 502);
     }
 
     if (action === 'rewrite') {

@@ -19,6 +19,9 @@ export default function Repurposer() {
   const [inputText, setInputText] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [transcriptMeta, setTranscriptMeta] = useState<{ videoId: string; wordCount: number; length: number; source: string } | null>(null);
+  // Rendered (not just toasted) when the server reports no captions — the
+  // textarea stays enabled so the user can paste a script manually.
+  const [noCaptionsNotice, setNoCaptionsNotice] = useState<{ videoId: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [repurposed, setRepurposed] = useState<{
     youtubeDesc: string;
@@ -71,20 +74,34 @@ export default function Repurposer() {
       toast.error("No captions found for this video — paste your script manually instead. The repurposer works with any text.");
       return;
     }
+    if (cached?.noCaptions) {
+      // Previously learned this video has no captions — surface the honest
+      // notice without re-fetching.
+      setNoCaptionsNotice({ videoId: cached.videoId || trimmedUrl });
+      toast.error("No captions found for this video — paste your script manually instead. The repurposer works with any text.");
+      return;
+    }
     if (cached?.transcript) {
+      setNoCaptionsNotice(null);
       setInputText(cached.transcript.slice(0, 8000)); // limit for UI
       setTranscriptMeta({ videoId: cached.videoId, wordCount: cached.wordCount, length: cached.length, source: cached.source + " (cached)" });
       toast.success("Transcript served from cache — instant! (React Query 10m)");
       return;
     }
 
+    setNoCaptionsNotice(null);
+
     try {
       const data = await transcriptMutation.mutateAsync({ url: trimmedUrl });
 
       // Honest no-captions signal (server never fabricates transcripts).
       // Also defensively treats any stale ghost-reconstructed envelope
-      // (e.g. from the old cache) as unavailable.
+      // (e.g. from the old cache) as unavailable. Renders an inline notice
+      // (not just a toast) and leaves the textarea enabled for manual paste.
       if (data?.noCaptions || (data as any)?.ghostReconstructed) {
+        setNoCaptionsNotice({ videoId: data?.videoId || trimmedUrl });
+        // Cache the negative result so revisits don't re-fetch.
+        queryClient.setQueryData(cacheKey, data);
         toast.error("No captions found for this video — paste your script manually instead. The repurposer works with any text.");
         return;
       }
@@ -242,6 +259,15 @@ export default function Repurposer() {
                   <span>{transcriptMeta.wordCount} words</span>
                   <span>• {transcriptMeta.length} chars</span>
                   <span>• via {transcriptMeta.source}</span>
+                </div>
+              )}
+              {noCaptionsNotice && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[12px] leading-relaxed text-amber-200">
+                  <p className="font-bold mb-1">No captions found for this video</p>
+                  <p className="text-amber-200/80">
+                    YouTube returned no captions (disabled or none uploaded) — and we never invent a transcript.
+                    Paste your script or topic in the box below and hit <span className="font-semibold">Repurpose to 4 Platforms</span> — it works with any text.
+                  </p>
                 </div>
               )}
               <p className="text-[11px] text-muted-foreground/70">

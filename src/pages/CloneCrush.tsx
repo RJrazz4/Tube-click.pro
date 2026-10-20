@@ -51,6 +51,20 @@ function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
   return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
 }
 
+/**
+ * Human-readable auth-failure message using the server's callerAuth
+ * diagnostic (attached to 401 responses by api/clone-crush.ts):
+ * "present" = a token was sent but rejected (re-sign-in won't help without a
+ * fresh session); anything else = no token reached the server at all.
+ */
+function authFailureMessage(err: unknown): string {
+  const callerAuth = (err as any)?.body?.callerAuth as { authHeader?: string } | undefined;
+  if (callerAuth?.authHeader === "present") {
+    return "Your session token was rejected by the server. Please sign out and sign back in, then retry.";
+  }
+  return "Your session was interrupted (no token reached the server). Please sign in again and retry.";
+}
+
 const VIRAL_VIEW_THRESHOLD = 50_000;
 const PENDING_AUTH_WORKFLOW_KEY = "tc:clone-crush:pending-auth:v1";
 const PENDING_AUTH_WORKFLOW_MAX_AGE_MS = 30 * 60 * 1000;
@@ -306,6 +320,12 @@ export default function CloneCrush() {
     return competitors[0] ?? null;
   })();
   const [selectedTier, setSelectedVideoTier] = useState<"free" | "premium">(isPro ? "premium" : "free");
+  // Tracks whether the user explicitly picked a rewrite tier. While untouched,
+  // the tier follows live entitlement — a Pro user whose entitlement verifies
+  // AFTER first render must be upgraded to the premium radio, not left
+  // stranded on "Standard 60%" (the request tier would otherwise go out as
+  // "free" and the server would run the free/quota path).
+  const tierUserChosenRef = useRef(false);
   const [copiedText, setCopiedText] = useState(false);
   const [activeTab, setActiveTab] = useState("script");
   const [logSteps, setLogSteps] = useState<{ label: string; status: "pending" | "processing" | "success" | "rerouting" | "error"; meta?: string }[]>([]);
@@ -337,6 +357,7 @@ export default function CloneCrush() {
   // draft itself (the visible input text) is committed immediately for a
   // responsive paste; only the expensive resets are deferred.
   const channelResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const channelInputRef = useRef<HTMLInputElement>(null);
   const [pendingAuthResumeNonce, setPendingAuthResumeNonce] = useState(0);
 
   // Single paywall route helper — opens the central Pro Upgrade modal
@@ -365,9 +386,11 @@ export default function CloneCrush() {
   }, [canUsePremium, selectedTier, selectedVideo, routeToProUpsell]);
 
   // Keep selectedTier in lockstep with live entitlement. Free users can
-  // NEVER be on the premium tier — downgrade them instantly.
+  // NEVER be on the premium tier — downgrade them instantly. Pro users who
+  // never picked a tier are upgraded so the premium radio reflects reality.
   useEffect(() => {
     if (!isPro) setSelectedVideoTier("free");
+    else if (!tierUserChosenRef.current) setSelectedVideoTier("premium");
   }, [isPro]);
 
   // Becoming Pro instantly clears the free-tier 24h cooldown so the
@@ -739,6 +762,17 @@ export default function CloneCrush() {
     if (isExecutingRef.current) return;
     isExecutingRef.current = true;
 
+    // Signed-in preflight — the server's auth gate 401s every generation step
+    // when no session token exists in this tab. Prompt sign-in NOW instead of
+    // marching the 7-step pipeline into red AUTH failures.
+    const { hasAuthenticatedSession } = await import("@/lib/auth/guestAccess");
+    if (!(await hasAuthenticatedSession())) {
+      isExecutingRef.current = false;
+      toast.error("Please sign in first — no active session was found in this tab.", { id: "clone-crush-auth" });
+      void requestAuthentication("sign in to run a Chain-Loop");
+      return;
+    }
+
     // steps is declared in function scope so the catch/finally blocks can
     // reference it even when an error throws mid-pipeline.
     let steps: { label: string; status: "pending" | "processing" | "success" | "rerouting" | "error"; meta?: string }[] = [];
@@ -971,7 +1005,7 @@ export default function CloneCrush() {
           setLogSteps(failedAuth);
           setIsRewriting(false);
           isExecutingRef.current = false;
-          toast.error("Your session was interrupted. Please sign in again and retry.", { id: "clone-crush-auth" });
+          toast.error(authFailureMessage(rewriteRes), { id: "clone-crush-auth" });
           window.setTimeout(() => toast.dismiss("clone-crush-auth"), 8000);
           void requestAuthentication("re-authenticate to complete your Chain-Loop");
           return;
@@ -1001,7 +1035,7 @@ export default function CloneCrush() {
         setLogSteps(failedAuth);
         setIsRewriting(false);
         isExecutingRef.current = false;
-        toast.error("Your session was interrupted. Please sign in again and retry.", { id: "clone-crush-auth" });
+        toast.error(authFailureMessage(err), { id: "clone-crush-auth" });
         window.setTimeout(() => toast.dismiss("clone-crush-auth"), 8000);
         void requestAuthentication("re-authenticate to complete your Chain-Loop");
         return;
@@ -1247,7 +1281,12 @@ export default function CloneCrush() {
                       onClick={() => {
                         if (!slot) {
                           if (!isPro && i >= FREE_GHOST_CACHE_SLOTS) { routeToProUpsell("locked"); return; }
-                          // Empty slot in range — focus input to save new channel.
+                          // Empty slot in range — activate it and focus the channel
+                          // input so the next profiled channel saves into this slot.
+                          switchActiveSlot(i);
+                          setChannelDraft("", isPro ? "pro" : "free");
+                          toast.info(`Slot ${i + 1} selected — paste a channel URL below to save it here`, { id: "slot-empty" });
+                          window.setTimeout(() => channelInputRef.current?.focus(), 50);
                           return;
                         }
                         if (isFreeCooldownActive) { toast.error("24h cooldown active — finish this Chain-Loop before switching", { id: "cooldown-switch" }); return; }
@@ -1318,6 +1357,7 @@ export default function CloneCrush() {
                 <div className="relative flex-1">
                   <Youtube className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
+                    ref={channelInputRef}
                     aria-label="YouTube Channel URL or Handle"
                     placeholder="YouTube Channel URL or Handle (e.g. @MrBeast)"
                     value={displayedChannelInput}
@@ -1446,7 +1486,7 @@ export default function CloneCrush() {
               <div className="lg:col-span-2 flex flex-col items-center justify-center py-2 lg:py-0"><div className="relative flex items-center justify-center"><div className="absolute inset-0 bg-red-500/30 rounded-full blur-xl animate-pulse" /><div className="w-14 h-14 rounded-full bg-gradient-to-br from-red-600 to-rose-950 border-2 border-red-500 flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.9)] relative z-10 animate-pulse"><Zap className="w-7 h-7 text-white fill-white animate-bounce" /></div></div><span className="text-[11px] font-display font-extrabold text-red-500 tracking-widest mt-2 uppercase drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">COMPETITOR COMPARISON</span></div>
               <div className="lg:col-span-5 h-full">
                 <Card className="glass-strong border-border/80 p-5 h-full flex flex-col justify-between">
-                  <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">Competitor opportunities</span><span className="text-xs text-muted-foreground">{competitors.length} videos {(competitors[0] as any)?.isGhostReconstructed && <span className="text-amber-300">• Estimated</span>}</span></div>
+                  <div><div className="flex items-center justify-between mb-3"><span className="text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded-full font-bold">Competitor opportunities</span><span className="text-xs text-muted-foreground">{competitors.length} videos {(competitors[0] as any)?.isGhostReconstructed && <span className="text-amber-300">• via relay</span>}</span></div>
                   {isSearchingCompetitors ? (<div className="py-10 text-center space-y-2"><Loader2 className="w-7 h-7 animate-spin text-primary mx-auto" /><p className="text-xs text-muted-foreground">Auditing what's working…</p><div className="flex justify-center gap-1 mt-2">{[0,1,2,3].map(i=><span key={i} className="w-1 h-1 rounded-full bg-primary/60 animate-pulse" style={{animationDelay:`${i*150}ms`}} />)}</div></div>) : competitors.length>0 ? (
                     <div key={workflowNonce} className="grid grid-cols-1 gap-3 mt-2 sm:grid-cols-3">{competitors.map((video, idx)=>{ const isSelected = selectedVideo?.videoId===video.videoId; const velocityColor = (video.viralVelocityScore||0)>=70?'text-red-400':(video.viralVelocityScore||0)>=40?'text-yellow-400':'text-green-400';
                       // Conveyor semantics: slot0 (idx===0) is the
@@ -1680,7 +1720,7 @@ export default function CloneCrush() {
               <CardHeader className="pb-3"><CardTitle className="font-display text-base flex items-center gap-2"><Zap className="w-5 h-5 text-primary" />3. Create your content package</CardTitle><CardDescription className="text-xs">Build an original package with a title, hook, script, thumbnail direction, SEO tags, and an editing guide.</CardDescription></CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
-                  <div onClick={()=>setSelectedVideoTier("free")} className={`rounded-xl border p-4 cursor-pointer transition-all ${selectedTier==="free"?"border-primary bg-primary/5 ring-1 ring-primary/30":"border-border/60 hover:border-border bg-secondary/10"}`}>
+                  <div onClick={()=>{ tierUserChosenRef.current = true; setSelectedVideoTier("free"); }} className={`rounded-xl border p-4 cursor-pointer transition-all ${selectedTier==="free"?"border-primary bg-primary/5 ring-1 ring-primary/30":"border-border/60 hover:border-border bg-secondary/10"}`}>
                     <div className="flex items-center gap-2 mb-1"><input type="radio" checked={selectedTier==="free"} onChange={()=>{}} className="accent-primary" /><p className="text-sm font-bold text-foreground">Standard rewrite <span className="ml-1 text-[10px] font-mono font-normal text-yellow-300">60%</span></p></div>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">Pulls out the core idea and rebuilds it with a fresh narrative, pacing, and examples. Included with Free.</p>
                   </div>
@@ -1688,6 +1728,7 @@ export default function CloneCrush() {
                     // Free users clicking the 99% Glitch tier card → instant upsell
                     // (use canUsePremium which reads the live store + isProTier).
                     if (!canUsePremium()) { routeToProUpsell("premium"); return; }
+                    tierUserChosenRef.current = true;
                     setSelectedVideoTier("premium");
                   }} className={`rounded-xl border p-4 cursor-pointer transition-all ${!isPro?"opacity-60":""} ${selectedTier==="premium"?"border-primary bg-primary/5 ring-1 ring-primary/30":"border-border/60 hover:border-border bg-secondary/10"}`}>
                     <div className="flex items-center justify-between gap-2 mb-1"><div className="flex items-center gap-2"><input type="radio" checked={selectedTier==="premium"} onChange={()=>{}} disabled={!isPro} className="accent-primary" /><p className="text-sm font-bold text-foreground">Pro rewrite <span className="ml-1 text-[10px] font-mono font-normal text-red-300">99% Glitch</span></p></div>{!isPro && <Lock className="w-3.5 h-3.5 text-primary" />}</div>

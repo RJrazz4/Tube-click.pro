@@ -27,7 +27,10 @@ export class EdgeFunctionError extends Error {
   retryAfter?: number;
   action?: string;
   isGhostCache?: boolean;
-  constructor(message: string, status: number, opts?: { code?: string; retryAfter?: number; action?: string; isGhostCache?: boolean }) {
+  /** Raw parsed response body, when the server returned one (e.g. 401s carry
+   * a `callerAuth` diagnostic explaining why the token was rejected). */
+  body?: unknown;
+  constructor(message: string, status: number, opts?: { code?: string; retryAfter?: number; action?: string; isGhostCache?: boolean; body?: unknown }) {
     super(message);
     this.name = "EdgeFunctionError";
     this.status = status;
@@ -35,6 +38,7 @@ export class EdgeFunctionError extends Error {
     this.retryAfter = opts?.retryAfter;
     this.action = opts?.action;
     this.isGhostCache = opts?.isGhostCache;
+    this.body = opts?.body;
   }
 }
 
@@ -353,7 +357,7 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
       }
 
       const msg = extractMessage(parsed, res.status);
-      lastErr = new EdgeFunctionError(msg, res.status, errorMeta(parsed));
+      lastErr = new EdgeFunctionError(msg, res.status, { ...errorMeta(parsed), body: parsed });
 
       // Auth wall. On 401 (the caller's token was missing or expired) mint a
       // fresh Supabase token and retry once before giving up; 403 is an
