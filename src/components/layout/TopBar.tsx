@@ -10,6 +10,7 @@ import { LiveActiveCounter } from "@/components/ui/LiveActiveCounter";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { cn } from "@/lib/utils";
 import { useSidebarState } from "@/lib/sidebarState";
+import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
 
 export function TopBar() {
   const [ghostOpen, setGhostOpen] = useState(false);
@@ -64,11 +65,11 @@ export function TopBar() {
           size="sm"
           onClick={() => openProUpgrade({ defaultTab: "referral", reason: "topbar" })}
           className="relative gap-2 border-primary/20 bg-primary/5 hover:border-primary/40 hover:bg-primary/10 text-xs"
-          aria-label="See Pro options"
-          title="Review paid and referral Pro options"
+          aria-label={FREE_PRO_MODE ? "Activate free Pro" : "See Pro options"}
+          title={FREE_PRO_MODE ? "Pro is FREE for everyone — activate it" : "Review paid and referral Pro options"}
         >
           <Sparkles className="h-4 w-4 text-primary" />
-          <span className="hidden sm:inline">Pro options</span>
+          <span className="hidden sm:inline">{FREE_PRO_MODE ? "Pro — FREE" : "Pro options"}</span>
         </Button>
       </div>
     </header>

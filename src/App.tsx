@@ -9,6 +9,7 @@ import { createAppQueryClient } from "@/lib/cache/queryClient";
 import { SoftGateProvider } from "@/contexts/SoftGateContext";
 import { ProUpgradeProvider } from "@/contexts/ProUpgradeContext";
 import { ProUpgradeModal } from "@/components/subscription/ProUpgradeModal";
+import { ProActivationModal } from "@/components/leads/ProActivationModal";
 import { SoftGateRoute } from "@/components/auth/SoftGateRoute";
 import { AppErrorBoundary } from "@/components/ui/AppErrorBoundary";
 import { ConnectionStatus } from "@/components/ui/ConnectionStatus";
@@ -107,6 +108,7 @@ const App = () => (
             </MainLayout>
           </BrowserRouter>
           <ProUpgradeModal />
+          <ProActivationModal />
         </ProUpgradeProvider>
       </SoftGateProvider>
     </TooltipProvider>

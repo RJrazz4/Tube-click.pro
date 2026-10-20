@@ -7,6 +7,7 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import { claimReferralAttribution, loadReferralProfile } from "@/lib/referrals/client";
+import { loadLeadSubmitted } from "@/lib/leads/leadDetails";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useAppStore } from "@/stores/useAppStore";
 
@@ -23,8 +24,18 @@ export async function refreshLicenseFromProfile(): Promise<RefreshResult> {
   await claimReferralAttribution().catch(() => undefined);
   const profile = await loadReferralProfile();
 
-  const { setLicense } = useAuthStore.getState();
+  const { setLicense, setLeadSubmitted } = useAuthStore.getState();
   const { setTier } = useAppStore.getState();
+
+  // Round 4 (FREE_PRO_MODE): reconcile the lead-form activation flag from
+  // the lead_profiles table. true → stays true; false → keep the current
+  // local flag; null (unknown / schema not applied yet) → keep local flag.
+  try {
+    const lead = await loadLeadSubmitted(data.session.user.id);
+    if (lead === true) setLeadSubmitted(true);
+  } catch {
+    /* lead schema may not be applied yet — local flag persists */
+  }
 
   const expiryMs = profile.proTierExpiresAt
     ? new Date(profile.proTierExpiresAt).getTime()

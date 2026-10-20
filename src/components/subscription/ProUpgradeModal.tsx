@@ -27,6 +27,8 @@ import { useFreeUnlockEligibility, markFreeUnlockUsed } from "@/lib/referrals/fr
 import { loadReferralProfile } from "@/lib/referrals/client";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { EntitlementStatus } from "./EntitlementStatus";
+import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
+import { FreeProBanner } from "@/components/subscription/FreeProBanner";
 
 export function ProUpgradeModal() {
   const { isOpen, defaultTab, closeProUpgrade } = useProUpgrade();
@@ -68,6 +70,57 @@ export function ProUpgradeModal() {
   };
 
   if (!isOpen) return null;
+
+  /* ── FREE_PRO_MODE (Round 4): no buying pressure. Primary = FREE Pro
+     activation (details form). Secondary = the ONE live purchase surface,
+     the Founder Plan (PaymentCheckout self-constrains to founder + UPI in
+     free mode). The payment/referral tab UI below stays parked, unmodified,
+     and returns when the switch flips off. ──────────────────────────────── */
+  if (FREE_PRO_MODE) {
+    return (
+      <Dialog open={isOpen} onOpenChange={(open) => !open && closeProUpgrade()}>
+        <DialogContent className="max-h-[88vh] overflow-hidden border-border/60 bg-background/95 p-0 backdrop-blur-xl sm:max-w-2xl">
+          <div className="pointer-events-none absolute -top-24 right-0 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-28 left-0 h-56 w-56 rounded-full bg-accent/15 blur-3xl" />
+
+          <div className="relative max-h-[88vh] overflow-y-auto">
+            <DialogHeader className="px-5 pb-2 pt-5 text-left">
+              <DialogTitle className="font-display text-2xl font-black">
+                Pro — <span className="text-gradient-cyan">FREE</span> for everyone
+              </DialogTitle>
+              <DialogDescription className="text-sm">
+                Sab Pro features abhi FREE hain. Details submit karo, Pro turant
+                activate ho jayega — koi payment nahi.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-5 px-5 pb-6 pt-3">
+              <EntitlementStatus compact />
+
+              <FreeProBanner />
+
+              <div className="flex items-center gap-3" aria-hidden="true">
+                <span className="h-px flex-1 bg-border/60" />
+                <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                  ya phir
+                </span>
+                <span className="h-px flex-1 bg-border/60" />
+              </div>
+
+              <PaymentCheckout />
+
+              {!isAuthenticated && (
+                <p className="text-center text-[11px] text-muted-foreground">
+                  Pehle sign in karo — Pro activation aur Founder Plan dono ke liye
+                  account chahiye.
+                </p>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   const goPayment = () => setTab("payment");
 

@@ -29,6 +29,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { PaymentCheckout } from "@/components/subscription/PaymentCheckout";
+import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
+import { FreeProBanner } from "@/components/subscription/FreeProBanner";
+import { FounderPlanCard } from "@/components/subscription/FounderPlanCard";
 import { EntitlementStatus } from "@/components/subscription/EntitlementStatus";
 import { ReferralApplyForm } from "@/components/referrals/ReferralApplyForm";
 import { useProUpgrade } from "@/contexts/ProUpgradeContext";
@@ -717,7 +720,14 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="subscription">
-          <PaymentCheckout />
+          {FREE_PRO_MODE ? (
+            <div className="space-y-5">
+              <FreeProBanner />
+              <FounderPlanCard />
+            </div>
+          ) : (
+            <PaymentCheckout />
+          )}
         </TabsContent>
         
         <TabsContent value="dashboard">
