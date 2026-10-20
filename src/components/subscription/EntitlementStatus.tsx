@@ -49,7 +49,7 @@ export function EntitlementStatus({ compact = false, className }: EntitlementSta
         </span>
         {FREE_PRO_MODE && pro && (
           <span className="rounded-full border border-green-500/40 bg-green-500/15 px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider text-green-300">
-            FREE
+            ACTIVE
           </span>
         )}
         {FREE_PRO_MODE && !pro && (
@@ -68,11 +68,13 @@ export function EntitlementStatus({ compact = false, className }: EntitlementSta
         </div>
         <div>
           <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Current plan</p>
-          <p className={cn("font-display text-lg font-bold", pro ? "text-primary" : "text-foreground")}>{pro ? "Pro" : "Free"}</p>
+          <p className={cn("font-display text-lg font-bold", pro ? "text-primary" : "text-foreground")}>
+            {FREE_PRO_MODE && pro ? "Pro — ACTIVE • FREE for everyone" : pro ? "Pro" : "Free"}
+          </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {FREE_PRO_MODE
               ? pro
-                ? "Pro — FREE for everyone (launch offer). Koi payment nahi, koi expiry pressure nahi."
+                ? "Sab Pro tools unlocked — koi payment nahi, koi expiry pressure nahi."
                 : "Details bharo, Pro FREE pao — professional details submit karte hi Pro activate ho jayega."
               : pro
                 ? expiry
