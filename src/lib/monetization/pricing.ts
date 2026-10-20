@@ -7,6 +7,9 @@
  *   - UPI Trial ............... ₹99 INR ... paid via UPI only ............ 3 days
  *   - UPI Full Plan ........... ₹860 INR .. paid via UPI only ............ 30 days
  *   - 15-Days Mini Plan ....... ₹400 INR .. paid via UPI only ............ 15 days
+ *   - Founder Plan ............ ₹99 INR ... paid via UPI only ............ 30 days
+ *     (Round 4: the ONLY plan purchasable while FREE_PRO_MODE is on —
+ *      ₹999 list, 90% OFF launch hook, 2-month launch window.)
  *
  * Payment verification is client-side / manual: the user pays, then pastes a
  * TxID (USDT) or UTR / reference number (UPI). No live backend invoice pricing
@@ -18,8 +21,10 @@
  * Override any of these with the matching VITE_* environment variable.
  */
 
+import { FREE_PRO_MODE } from "./freeProMode";
+
 export type PaymentMethod = "usdt" | "upi";
-export type PlanId = "usdt_trial_3" | "usdt_crypto" | "upi_trial_3" | "upi_full" | "mini_15";
+export type PlanId = "usdt_trial_3" | "usdt_crypto" | "upi_trial_3" | "upi_full" | "mini_15" | "founder_monthly_99";
 
 export interface Plan {
   id: PlanId;
@@ -33,6 +38,13 @@ export interface Plan {
   method: PaymentMethod;
   description: string;
   highlight?: boolean;
+  /** Per-plan discount percent shown in the badge (30 classic, 90 founder). */
+  discountPct: number;
+  /**
+   * Explicit struck-through list price when it must be an exact figure
+   * (founder: ₹999). When absent, original is derived from amount + pct.
+   */
+  listPrice?: number;
 }
 
 /* ----------------------------------------------------------------- environment */
@@ -73,6 +85,7 @@ export const PLANS: Record<PlanId, Plan> = {
     durationDays: 3,
     method: "usdt",
     description: "3 days of Pro access after USDT (TRC-20) payment review.",
+    discountPct: 30,
   },
   usdt_crypto: {
     id: "usdt_crypto",
@@ -84,6 +97,7 @@ export const PLANS: Record<PlanId, Plan> = {
     method: "usdt",
     description: "30 days of Pro access after USDT (TRC-20) payment review.",
     highlight: true,
+    discountPct: 30,
   },
   upi_trial_3: {
     id: "upi_trial_3",
@@ -94,6 +108,7 @@ export const PLANS: Record<PlanId, Plan> = {
     durationDays: 3,
     method: "upi",
     description: "3 days of Pro access after UPI (India) payment review.",
+    discountPct: 30,
   },
   upi_full: {
     id: "upi_full",
@@ -104,6 +119,7 @@ export const PLANS: Record<PlanId, Plan> = {
     durationDays: 30,
     method: "upi",
     description: "30 days of Pro access after UPI (India) payment review.",
+    discountPct: 30,
   },
   mini_15: {
     id: "mini_15",
@@ -114,10 +130,35 @@ export const PLANS: Record<PlanId, Plan> = {
     durationDays: 15,
     method: "upi",
     description: "15 days of Pro access after UPI (India) payment review.",
+    discountPct: 30,
+  },
+  founder_monthly_99: {
+    id: "founder_monthly_99",
+    name: "Founder Plan",
+    priceLabel: "₹99",
+    amount: 99,
+    currency: "INR",
+    durationDays: 30,
+    method: "upi",
+    description: "Founder Plan — monthly supporter access. 30 days of Pro after UPI (India) payment review. Ye offer sirf 2 mahine ke liye hai.",
+    highlight: true,
+    discountPct: 90,
+    listPrice: 999,
   },
 };
 
-export const PLAN_LIST: Plan[] = [PLANS.usdt_trial_3, PLANS.usdt_crypto, PLANS.upi_trial_3, PLANS.upi_full, PLANS.mini_15];
+export const PLAN_LIST: Plan[] = [PLANS.usdt_trial_3, PLANS.usdt_crypto, PLANS.upi_trial_3, PLANS.upi_full, PLANS.mini_15, PLANS.founder_monthly_99];
+
+/**
+ * Which plans may be sold right now. In FREE_PRO_MODE only the Founder Plan
+ * stays purchasable; every other plan's purchase surface is parked (the plan
+ * definitions and checkout code are untouched, so they come back with the
+ * switch). NOTE: founder_monthly_99 must ALSO be seeded/accepted on the
+ * payment-verifier side — otherwise invoice creation fails honestly.
+ */
+export function isPlanPurchasable(plan: Plan): boolean {
+  return !FREE_PRO_MODE || plan.id === "founder_monthly_99";
+}
 
 /** Plans available under a given payment method. */
 export function plansForMethod(method: PaymentMethod): Plan[] {
@@ -144,20 +185,25 @@ export function currencySymbol(currency: Plan["currency"]): string {
 /* ------------------------------------------------------------------ pricing */
 
 /**
- * EVERGREEN DISCOUNT (owner directive, 2026-10-20):
- * every paid plan shows 30% OFF, always on — no countdown, no expiry.
+ * Discount pricing (owner directives, 2026-10-20):
+ *   - Classic plans: EVERGREEN_DISCOUNT_PCT = 30% OFF, always on.
+ *   - Founder Plan: 90% OFF launch hook (2-month window), ₹999 list.
+ * The discount percent is PARAMETERIZED per plan (plan.discountPct), not
+ * hardcoded — never duplicate this math in JSX.
+ *
  * The code's `amount` is the CHARGED price (what the user actually pays);
- * the struck-through "original" price is derived: round(charged / 0.7).
+ * the struck-through "original" is either the plan's explicit listPrice
+ * (founder) or derived: round(charged / (1 - pct/100)).
  */
 export const EVERGREEN_DISCOUNT_PCT = 30;
 
 export interface PlanPrices {
   /** What the user actually pays (the code's canonical amount). */
   charged: number;
-  /** Struck-through original price, derived from the charged price. */
+  /** Struck-through original price (explicit listPrice, else derived). */
   original: number;
   currency: Plan["currency"];
-  /** Discount percent shown in the badge. Always 30. */
+  /** Discount percent shown in the badge (per plan: 30 classic, 90 founder). */
   offPct: number;
   chargedLabel: string;
   originalLabel: string;
@@ -165,13 +211,14 @@ export interface PlanPrices {
 
 /** ONE source of truth for all price math — never hardcode prices in JSX. */
 export function planPrices(plan: Plan): PlanPrices {
-  const original = Math.round(plan.amount / (1 - EVERGREEN_DISCOUNT_PCT / 100));
+  const pct = plan.discountPct ?? EVERGREEN_DISCOUNT_PCT;
+  const original = plan.listPrice ?? Math.round(plan.amount / (1 - pct / 100));
   const sym = currencySymbol(plan.currency);
   return {
     charged: plan.amount,
     original,
     currency: plan.currency,
-    offPct: EVERGREEN_DISCOUNT_PCT,
+    offPct: pct,
     chargedLabel: `${sym}${plan.amount}`,
     originalLabel: `${sym}${original}`,
   };
