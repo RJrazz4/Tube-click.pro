@@ -18,6 +18,8 @@ import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
 import { LocalInsightPanel } from "@/components/intelligence/LocalInsightPanel";
 import { LocalSignalBoard } from "@/components/intelligence/LocalSignalBoard";
 import { useDashboardRefresh } from "@/lib/dashboardRefresh";
+import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
+import { FreeProBanner } from "@/components/subscription/FreeProBanner";
 
 const ViralGrowthPass = lazy(() => import("@/components/referrals/ViralGrowthPass").then(m => ({ default: m.ViralGrowthPass })));
 const CompetitorShowdown = lazy(() => import("@/components/showdown/CompetitorShowdown").then(m => ({ default: m.CompetitorShowdown })));
@@ -106,6 +108,10 @@ export default function Dashboard() {
     <div className="relative space-y-6 md:space-y-8 animate-fade-in">
       <div className="relative z-10 space-y-6">
         <VerificationModal open={verificationOpen} onOpenChange={setVerificationOpen} onVerified={doExport} />
+
+        {/* Round 4 FREE_PRO_MODE: primary activation prompt — Pro is FREE
+            after the Professional Details form is submitted. */}
+        {FREE_PRO_MODE && <FreeProBanner compact />}
 
         {profile ? (
           <div className="relative overflow-hidden rounded-2xl glass-strong border-primary/20 min-h-[160px] md:min-h-[200px] bracket">

@@ -14,6 +14,9 @@ import { generateNeuralVoice } from "@/api/client/backendEngineVoice";
 import { cn } from "@/lib/utils";
 import { incrementStat, saveContent } from "@/lib/stats";
 import { useAuthStore } from "@/stores/useAuthStore";
+import { isProTier } from "@/stores/useAuthStore";
+import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
+import { openProActivation } from "@/components/leads/ProActivationModal";
 import { NativeSponsorBanner } from "@/components/sponsors/NativeSponsorBanner";
 import { getSponsorForPlacement } from "@/config/sponsors";
 import { useSoftGate } from "@/contexts/SoftGateContext";
@@ -151,14 +154,27 @@ export default function VoiceStudio() {
 
     // Client-side UX gate only. The backend independently verifies the live
     // Supabase subscription and never trusts this persisted frontend state.
-    if (license.tier === "free") {
-      toast.error("TubeClick Neural Voice requires Pro. Browser TTS remains free; review referral options to unlock Pro.", {
-        duration: 5000,
-        action: {
-          label: "See referral Pro options",
-          onClick: () => navigate("/rewards"),
-        },
-      });
+    // FREE_PRO_MODE: isProTier() resolves Pro for every details-submitted
+    // user, so this gate opens for them; everyone else gets the FREE
+    // activation route instead of a payment upsell.
+    if (!isProTier(license)) {
+      if (FREE_PRO_MODE) {
+        toast.error("Neural Voice unlocks with FREE Pro — details submit karo, Pro turant active ho jayega.", {
+          duration: 5000,
+          action: {
+            label: "Activate FREE Pro",
+            onClick: () => openProActivation(),
+          },
+        });
+      } else {
+        toast.error("TubeClick Neural Voice requires Pro. Browser TTS remains free; review referral options to unlock Pro.", {
+          duration: 5000,
+          action: {
+            label: "See referral Pro options",
+            onClick: () => navigate("/rewards"),
+          },
+        });
+      }
       return;
     }
 
