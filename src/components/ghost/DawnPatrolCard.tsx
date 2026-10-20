@@ -23,6 +23,8 @@ import { useCloneCrushStore } from "@/stores/useCloneCrushStore";
 import { useGhostCredits } from "@/hooks/useGhostCredits";
 import { GhostCreditBadge } from "./GhostCreditBadge";
 import { useIsPro } from "@/stores/useAuthStore";
+import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
+import { openProActivation } from "@/components/leads/ProActivationModal";
 
 function formatDate(d: string) {
   try {
@@ -45,7 +47,9 @@ export function DawnPatrolCard() {
   const competitors = useCloneCrushStore((s) => s.competitors);
   const savedNiche = useCloneCrushStore((s) => s.savedNiche);
 
-  const allowed = isPro && dpCredit?.allowed === true;
+  // FREE_PRO_MODE: every Pro user gets the brief — no credit allowance check.
+  // The brief still unlocks only after the Professional Details form.
+  const allowed = FREE_PRO_MODE ? isPro : (isPro && dpCredit?.allowed === true);
 
   async function fireGenerate() {
     if (generating) return;
@@ -103,7 +107,7 @@ export function DawnPatrolCard() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            {allowed && dpCredit && (
+            {allowed && dpCredit && !FREE_PRO_MODE && (
               <GhostCreditBadge
                 action="dawn_patrol"
                 remaining={dpCredit.remaining}
@@ -125,9 +129,15 @@ export function DawnPatrolCard() {
             <p className="text-[11px] text-muted-foreground max-w-xs leading-relaxed">
               Get a short competitor summary and one recommended action each day.
             </p>
-            <Button asChild size="sm" className="cyber-button text-[10px] font-display mt-1">
-              <a href="/rewards?upsell=dawn-patrol&tier=pro">See Pro options</a>
-            </Button>
+            {FREE_PRO_MODE ? (
+              <Button size="sm" className="cyber-button text-[10px] font-display mt-1" onClick={() => openProActivation()}>
+                Activate FREE Pro
+              </Button>
+            ) : (
+              <Button asChild size="sm" className="cyber-button text-[10px] font-display mt-1">
+                <a href="/rewards?upsell=dawn-patrol&tier=pro">See Pro options</a>
+              </Button>
+            )}
           </div>
         ) : !latest ? (
           <div className="rounded-lg border border-amber-400/20 bg-amber-500/5 p-4 space-y-3">
@@ -147,7 +157,7 @@ export function DawnPatrolCard() {
               {generating ? (
                 <><Loader2 className="w-3 h-3 animate-spin mr-1" /> compiling sunrise brief…</>
               ) : (
-                <><Zap className="w-3 h-3 mr-1" /> Run today&apos;s brief (1 credit)</>
+                <><Zap className="w-3 h-3 mr-1" /> {FREE_PRO_MODE ? "Run today's brief" : "Run today's brief (1 credit)"}</>
               )}
             </Button>
           </div>
