@@ -9,6 +9,7 @@
 import { useCallback, useEffect } from "react";
 import { useGhostCreditsStore, type GhostActionId } from "@/stores/useGhostCreditsStore";
 import { useAuthStore, isProTier } from "@/stores/useAuthStore";
+import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
 
 const CACHE_MS = 30_000;
 const TICK_MS = 1_000;
@@ -109,7 +110,11 @@ export function useGhostCredits() {
     refresh,
     isActionBlocked: (action: GhostActionId) => {
       const a = credits.actions[action];
-      return credits.tier === "free" || !a.allowed;
+      // FREE_PRO_MODE: Pro status comes from the details-form activation
+      // (isProTier), not the server credit tier — free-mode Pro users are
+      // never action-blocked.
+      const proNow = FREE_PRO_MODE ? isProTier(license) : credits.tier !== "free";
+      return !proNow || !a.allowed;
     },
     isPro: isProTier(license),
   };
