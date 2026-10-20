@@ -32,6 +32,7 @@ import { PaymentCheckout } from "@/components/subscription/PaymentCheckout";
 import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
 import { FreeProBanner } from "@/components/subscription/FreeProBanner";
 import { FounderPlanCard } from "@/components/subscription/FounderPlanCard";
+import { EnterprisePlanCard } from "@/components/subscription/EnterprisePlanCard";
 import { EntitlementStatus } from "@/components/subscription/EntitlementStatus";
 import { ReferralApplyForm } from "@/components/referrals/ReferralApplyForm";
 import { useProUpgrade } from "@/contexts/ProUpgradeContext";
@@ -722,8 +723,17 @@ export default function Settings() {
         <TabsContent value="subscription">
           {FREE_PRO_MODE ? (
             <div className="space-y-5">
+              {/* ACTIVE status leads the Subscription area (Round 5, owner
+                  feedback): the plan status block sits above every offer
+                  card so the active state is what reads first. */}
+              <Card className="cyber-card border-border">
+                <CardHeader>
+                  <EntitlementStatus />
+                </CardHeader>
+              </Card>
               <FreeProBanner />
               <FounderPlanCard />
+              <EnterprisePlanCard />
             </div>
           ) : (
             <PaymentCheckout />
