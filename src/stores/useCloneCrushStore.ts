@@ -496,8 +496,12 @@ export const useCloneCrushStore = create<CloneCrushState>()(
 
       advanceAfterConsume: (nextVideo, nextCursor) => set((state) => {
         // Atomic shift+append for when the client has the next tile in hand
-        // (saves one round trip). Evict slot0's rewrite.
-        const evictedVideoId = state.conveyorQueue[0]?.videoId ?? state.freeLockedVideoId;
+        // (saves one round trip). The rewrite created for the consumed slot
+        // is DELIBERATELY kept: evicting it hid the user's just-generated
+        // package behind "No Active Chain-Loop Package" (bug 2026-10-20 —
+        // the old code nulled activeRewrite and filtered the rewrites list
+        // here, so a successful generation vanished from the page while the
+        // Library copy survived).
         const base = state.conveyorQueue.slice(1);
         const withAppended = nextVideo ? [...base, nextVideo] : base;
         const next = stampConveyor(withAppended);
@@ -505,8 +509,6 @@ export const useCloneCrushStore = create<CloneCrushState>()(
           conveyorQueue: next,
           competitors: next,
           activeVideoId: next[0]?.videoId ?? null,
-          activeRewrite: null,
-          rewrites: state.rewrites.filter((r) => r.targetVideoId !== evictedVideoId),
           threatAlerts: [],
           wideningGap: null,
           conveyorCursor: nextCursor ?? state.conveyorCursor,
