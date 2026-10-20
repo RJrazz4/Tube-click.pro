@@ -13,6 +13,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { createPerUserStorage } from "@/lib/storage/perUserStorage";
+import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
 
 export type SubscriptionTier = "free" | "pro" | "enterprise";
 export type LicenseStatus = "active" | "expired" | "none";
@@ -91,7 +92,14 @@ interface AuthState {
   license: LicenseInfo;
   user: UserProfile | null;
   isAuthenticated: boolean;
-  
+  /**
+   * Round 4 (FREE_PRO_MODE): true once the user has submitted the
+   * Professional Details lead form. In FREE_PRO_MODE this flag + a live
+   * session is what resolves as Pro (see isProTier below). Persisted
+   * per-user; also reconciled against the lead_profiles table on sign-in.
+   */
+  leadSubmitted: boolean;
+
   // Daily usage tracking
   dailyUsage: {
     date: string;
@@ -102,6 +110,7 @@ interface AuthState {
   // Actions
   setLicense: (license: Partial<LicenseInfo>) => void;
   setUser: (user: UserProfile | null) => void;
+  setLeadSubmitted: (submitted: boolean) => void;
   updateUsage: () => void;
   updateVoiceUsage: (chars: number) => void;
   resetDailyUsage: () => void;
@@ -123,6 +132,7 @@ export const useAuthStore = create<AuthState>()(
       license: DEFAULT_LICENSE,
       user: null,
       isAuthenticated: false,
+      leadSubmitted: false,
       dailyUsage: {
         date: getToday(),
         generationsUsed: 0,
@@ -138,6 +148,8 @@ export const useAuthStore = create<AuthState>()(
           user,
           isAuthenticated: user !== null,
         }),
+
+      setLeadSubmitted: (submitted) => set({ leadSubmitted: submitted }),
 
       updateUsage: () => {
         const today = getToday();
@@ -195,14 +207,20 @@ export const useAuthStore = create<AuthState>()(
         }),
 
       checkAccess: (feature) => {
-        const { license } = get();
-        const features = TIER_FEATURES[license.tier];
+        const features = get().getFeatures();
         return features[feature] as boolean;
       },
 
       getFeatures: () => {
-        const { license } = get();
-        return TIER_FEATURES[license.tier];
+        const state = get();
+        // FREE_PRO_MODE: a signed-in user who completed the lead form gets
+        // the full Pro feature map (voiceovers, export, Pro caps) without
+        // any payment entitlement. Guests / not-yet-activated users keep
+        // their license's feature map.
+        if (FREE_PRO_MODE && state.isAuthenticated && state.leadSubmitted) {
+          return TIER_FEATURES.pro;
+        }
+        return TIER_FEATURES[state.license.tier];
       },
 
     }),
@@ -222,6 +240,7 @@ export const useAuthStore = create<AuthState>()(
         license: state.license,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
+        leadSubmitted: state.leadSubmitted,
         dailyUsage: state.dailyUsage,
       }),
       migrate: (persistedState: unknown) => {
@@ -255,6 +274,15 @@ export const useDailyUsage = () => useAuthStore((s) => s.dailyUsage);
  */
 export function isProTier(license: LicenseInfo | null | undefined): boolean {
   if (!license) return false;
+  // FREE_PRO_MODE (Round 4): the Professional Details lead form is the
+  // activation step. A signed-in user who has submitted it resolves as Pro
+  // everywhere this choke point is consulted, even with a "free" license.
+  // Guests (not authenticated) and signed-in users who have NOT submitted
+  // yet fall through to the real entitlement check below.
+  if (FREE_PRO_MODE) {
+    const s = useAuthStore.getState();
+    if (s.isAuthenticated && s.leadSubmitted) return true;
+  }
   if (license.tier !== "pro") return false;
   if (license.status === "expired") return false;
   if (!license.expiresAt) {
@@ -271,6 +299,7 @@ export function isProTier(license: LicenseInfo | null | undefined): boolean {
   }
 }
 export const useIsPro = () => useAuthStore((s) => isProTier(s.license));
+export const useLeadSubmitted = () => useAuthStore((s) => s.leadSubmitted);
 
 // Check if user can perform an action
 export const useCanPerform = () => {
