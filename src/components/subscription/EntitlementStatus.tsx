@@ -2,6 +2,7 @@ import { Clock3, Crown, LockKeyhole, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isProTier, useLicense } from "@/stores/useAuthStore";
 import { ProExpiryCountdown } from "@/components/referrals/ProExpiryCountdown";
+import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
 
 interface EntitlementStatusProps {
   compact?: boolean;
@@ -43,8 +44,18 @@ export function EntitlementStatus({ compact = false, className }: EntitlementSta
       >
         {pro ? <ShieldCheck className="h-4 w-4 text-primary" aria-hidden="true" /> : <LockKeyhole className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
         <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Plan</span>
-        <span className={cn("text-sm font-bold", pro ? "text-primary" : "text-foreground")}>{pro ? "Pro" : "Free"}</span>
-        {pro && expiry && <span className="hidden text-[10px] text-muted-foreground sm:inline">until {expiry}</span>}
+        <span className={cn("text-sm font-bold", pro ? "text-primary" : "text-foreground")}>
+          {pro ? "Pro" : "Free"}
+        </span>
+        {FREE_PRO_MODE && pro && (
+          <span className="rounded-full border border-green-500/40 bg-green-500/15 px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider text-green-300">
+            FREE
+          </span>
+        )}
+        {FREE_PRO_MODE && !pro && (
+          <span className="text-[10px] text-muted-foreground">Pro FREE — details bharo, activate karo</span>
+        )}
+        {pro && expiry && !FREE_PRO_MODE && <span className="hidden text-[10px] text-muted-foreground sm:inline">until {expiry}</span>}
       </div>
     );
   }
@@ -59,7 +70,17 @@ export function EntitlementStatus({ compact = false, className }: EntitlementSta
           <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Current plan</p>
           <p className={cn("font-display text-lg font-bold", pro ? "text-primary" : "text-foreground")}>{pro ? "Pro" : "Free"}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {pro ? (expiry ? `Pro access active until ${expiry}` : "Pro access active") : expired ? "Your Pro access has expired — you are on the Free plan" : "Core creator tools available with a 24-hour package limit"}
+            {FREE_PRO_MODE
+              ? pro
+                ? "Pro — FREE for everyone (launch offer). Koi payment nahi, koi expiry pressure nahi."
+                : "Details bharo, Pro FREE pao — professional details submit karte hi Pro activate ho jayega."
+              : pro
+                ? expiry
+                  ? `Pro access active until ${expiry}`
+                  : "Pro access active"
+                : expired
+                  ? "Your Pro access has expired — you are on the Free plan"
+                  : "Core creator tools available with a 24-hour package limit"}
           </p>
         </div>
       </div>
@@ -73,12 +94,15 @@ export function EntitlementStatus({ compact = false, className }: EntitlementSta
           <span className={cn("w-1.5 h-1.5 rounded-full", pro ? "bg-green-400 animate-pulse" : expired ? "bg-red-400" : "bg-muted-foreground")} />
           {pro ? "ACTIVE" : expired ? "EXPIRED" : "FREE"}
         </span>
-        {pro && expiry && (
+        {/* FREE_PRO_MODE: no expiry countdown pressure. The paid-expiry chip
+            only shows outside free mode; a real data-driven date may still
+            show for paid accounts when the switch is off. */}
+        {pro && expiry && !FREE_PRO_MODE && (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[10px] font-mono text-primary">
             <Clock3 className="h-3 w-3" aria-hidden="true" /> Expires {expiry}
           </span>
         )}
-        {pro && license.expiresAt && (
+        {pro && license.expiresAt && !FREE_PRO_MODE && (
           <ProExpiryCountdown compact expiresAt={license.expiresAt} />
         )}
       </div>

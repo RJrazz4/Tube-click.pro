@@ -46,11 +46,12 @@ import {
   buildUpiIntent,
   plansForMethod,
   planPrices,
-  EVERGREEN_DISCOUNT_PCT,
+  isPlanPurchasable,
   type PaymentMethod,
   type Plan,
   type PlanId,
 } from "@/lib/monetization/pricing";
+import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
 import {
   isVerifierConfigured,
   createInvoice,
@@ -68,8 +69,10 @@ function isValidTxId(tx: string): boolean {
 /* ------------------------------------------------------------------- price */
 
 /**
- * Evergreen 30% OFF price line: struck-through original + charged price +
- * badge. ALWAYS on (owner directive) — no countdown, no expiry.
+ * Discount price line: struck-through original + charged price + badge.
+ * Badge pct is per-plan (planPrices): 30% OFF classic, 90% OFF founder.
+ * The founder offer is a stated 2-month launch window — no countdown, no
+ * expiry timers (owner directive).
  */
 function PlanPrice({ plan, size = "md" }: { plan: Plan; size?: "md" | "lg" }) {
   const prices = planPrices(plan);
@@ -79,7 +82,7 @@ function PlanPrice({ plan, size = "md" }: { plan: Plan; size?: "md" | "lg" }) {
       <span className="text-[11px] font-normal text-muted-foreground line-through">{prices.originalLabel}</span>
       <span className={`font-display font-black text-foreground ${priceCls}`}>{prices.chargedLabel}</span>
       <span className="rounded-full border border-green-500/40 bg-green-500/15 px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider text-green-300">
-        {EVERGREEN_DISCOUNT_PCT}% OFF
+        {prices.offPct}% OFF
       </span>
     </span>
   );
@@ -90,8 +93,10 @@ function PlanPrice({ plan, size = "md" }: { plan: Plan; size?: "md" | "lg" }) {
 export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
   const { isAuthenticated } = useSoftGate();
 
-  const [method, setMethod] = useState<PaymentMethod | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<PlanId>("upi_full");
+  // FREE_PRO_MODE: only the Founder Plan is purchasable — preselect UPI and
+  // never show the other plans' purchase surfaces (they stay parked).
+  const [method, setMethod] = useState<PaymentMethod | null>(FREE_PRO_MODE ? "upi" : null);
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>(FREE_PRO_MODE ? "founder_monthly_99" : "upi_full");
   const [proof, setProof] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -102,7 +107,11 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
   // NOTE: the USDT pane displays the $9 / 30-day USDT Crypto Plan, so the
   // submitted planId must match it (usdt_crypto) — NOT the $1 trial.
   useEffect(() => {
-    setSelectedPlan(method === "upi" ? "upi_trial_3" : "usdt_crypto");
+    setSelectedPlan(
+      method === "upi"
+        ? (FREE_PRO_MODE ? "founder_monthly_99" : "upi_trial_3")
+        : "usdt_crypto",
+    );
     setProof("");
     setSubmitted(false);
     setVerifyNote(null);
@@ -110,7 +119,7 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
   }, [method]);
 
   const visiblePlans = useMemo<Plan[]>(
-    () => (method ? plansForMethod(method) : []),
+    () => (method ? plansForMethod(method).filter(isPlanPurchasable) : []),
     [method],
   );
   const activePlan: Plan = PLANS[selectedPlan];
@@ -200,10 +209,13 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-display text-lg font-bold text-foreground flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-primary" /> Paid Pro access
+            <CreditCard className="h-4 w-4 text-primary" />
+            {FREE_PRO_MODE ? "Founder Plan — ₹99/month" : "Paid Pro access"}
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Pick a payment method, pay externally, then submit your proof for review.
+            {FREE_PRO_MODE
+              ? "Supporter bano — Pro features toh FREE hain, ye plan sirf hamari build ko support karta hai. Ye offer sirf 2 mahine ke liye hai."
+              : "Pick a payment method, pay externally, then submit your proof for review."}
           </p>
         </div>
       </div>
@@ -214,7 +226,10 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
           : "Manual payment review is not connected in this deployment. Submitting proof records a session status only; contact support before relying on Pro activation."}
       </div>
 
-      {/* Interactive method selector — nothing is revealed until chosen. */}
+      {/* Interactive method selector — nothing is revealed until chosen.
+          In FREE_PRO_MODE the method is fixed to UPI (Founder Plan is
+          UPI-only) and the selector is hidden entirely. */}
+      {!FREE_PRO_MODE && (
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
@@ -254,6 +269,7 @@ export function PaymentCheckout({ onSuccess }: { onSuccess?: () => void }) {
           )}
         </button>
       </div>
+      )}
 
       {!method && (
         <div className="rounded-xl border border-dashed border-border/70 bg-secondary/20 p-5 text-center text-sm text-muted-foreground">
