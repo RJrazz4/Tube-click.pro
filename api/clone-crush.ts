@@ -22,6 +22,7 @@ import {
   cleanupJson
 } from './_shared.js';
 import { LSA_PERSONA, LSA_CUE_DIRECTIVE } from './_lsa.js';
+import { hasLeadActivation } from './_freePro.js';
 
 export type CloneCrushOutputLanguage = 'English' | 'Hindi' | 'Hinglish';
 
@@ -393,8 +394,27 @@ async function resolveTier(req: Request, requestedTier: unknown): Promise<'free'
   if (requested !== 'premium' && requested !== 'enterprise') return 'free';
   const user = await authenticatedUser(req);
   if (!user) throw new Error('Sign in to use the 99% Glitch Protocol');
-  if (!(await hasProEntitlement(user.id))) throw new Error('An active Pro entitlement is required for the 99% Glitch Protocol');
+  const entitlement = await effectiveEntitlement(user.id);
+  if (!entitlement.pro) throw new Error('An active Pro entitlement is required for the 99% Glitch Protocol');
   return 'premium';
+}
+
+// -------------------------------------------------------------
+// Round 4b — FREE_PRO_MODE server mirror.
+// Effective entitlement = DB entitlement (get_pro_entitlement RPC) OR lead
+// activation (a submitted lead_profiles row while the server flag is on).
+// `viaLead` marks the free-Pro path so downstream gates can skip the paid
+// ledger and still fire the referral proof-of-work hook.
+// -------------------------------------------------------------
+type EffectiveEntitlement = { pro: boolean; viaLead: boolean };
+async function effectiveEntitlement(userId: string): Promise<EffectiveEntitlement> {
+  try {
+    if (await hasProEntitlement(userId)) return { pro: true, viaLead: false };
+  } catch {
+    /* fall through to the lead-activation check */
+  }
+  if (await hasLeadActivation(userId)) return { pro: true, viaLead: true };
+  return { pro: false, viaLead: false };
 }
 
 // -------------------------------------------------------------
@@ -426,10 +446,21 @@ async function consumeDailyQuota(req: Request): Promise<QuotaDecision> {
   if (!user) {
     return { allowed: false, code: 'AUTH_REQUIRED', tier: 'free' };
   }
+  // Round 4b — FREE_PRO_MODE: a lead-activated caller is Pro server-side, so
+  // there is no daily cap and no ledger consumption. (The referral
+  // proof-of-work hook normally fired on this path is registered by the
+  // rewrite handler instead, which is where lead-activated runs execute.)
+  if (await hasLeadActivation(user.id)) {
+    return { allowed: true, code: 'OK', tier: 'pro', usedToday: 0, limit: null, remaining: null, resetAt: null, remainingSeconds: 0 };
+  }
   const { url, key } = await serviceRoleSupabase();
+  // Round 4c (2026-10-20): pass the verified caller explicitly. The RPC reads
+  // no user from auth.uid() (service-role JWTs carry none), so calling it
+  // without p_user_id used to AUTH_REQUIRED on 100% of free-tier calls.
   const response = await fetch(`${url}/rest/v1/rpc/consume_clone_crush_run`, {
     method: 'POST',
     headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_user_id: user.id }),
     signal: AbortSignal.timeout(6_000),
   });
   if (!response.ok) {
@@ -440,6 +471,13 @@ async function consumeDailyQuota(req: Request): Promise<QuotaDecision> {
     return { allowed: true, code: 'OK', tier: 'free' };
   }
   const payload = await response.json() as Record<string, unknown>;
+  // AUTH_REQUIRED from this RPC now means the id we passed resolved to
+  // nothing (e.g. the 202610200002 migration not applied). Log it under a
+  // distinct quota tag so it can never again masquerade as a caller-auth
+  // rejection behind the [clone-crush:auth] diagnostic.
+  if (payload.code === 'AUTH_REQUIRED') {
+    console.error('[clone-crush:quota] AUTH_REQUIRED from RPC despite verified caller');
+  }
 
   // Phase 4 (2-Node referral) — proof-of-work hook. Clone Crush is a
   // qualifying core action. Fires only on an ALLOWED run (a paywalled or
@@ -464,14 +502,25 @@ async function consumeDailyQuota(req: Request): Promise<QuotaDecision> {
 export async function peekDailyQuota(req: Request): Promise<QuotaDecision> {
   const user = await authenticatedUser(req);
   if (!user) return { allowed: false, code: 'AUTH_REQUIRED', tier: 'free' };
+  // Round 4b — FREE_PRO_MODE: lead-activated callers report the Pro snapshot
+  // (mirrors the client-side free-Pro state) — no daily cap.
+  if (await hasLeadActivation(user.id)) {
+    return { allowed: true, code: 'OK', tier: 'pro', usedToday: 0, limit: null, remaining: null, resetAt: null, remainingSeconds: 0 };
+  }
   const { url, key } = await serviceRoleSupabase();
+  // Round 4c (2026-10-20): same as consumeDailyQuota — the RPC takes the
+  // caller as p_user_id; without it auth.uid() is NULL under the service key.
   const response = await fetch(`${url}/rest/v1/rpc/get_clone_crush_quota`, {
     method: 'POST',
     headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_user_id: user.id }),
     signal: AbortSignal.timeout(5_000),
   });
   if (!response.ok) return { allowed: true, code: 'OK', tier: 'free' };
   const payload = await response.json() as Record<string, unknown>;
+  if (payload.code === 'AUTH_REQUIRED') {
+    console.error('[clone-crush:quota] AUTH_REQUIRED from RPC despite verified caller');
+  }
   return {
     allowed: payload.allowed === true,
     code: (payload.code as QuotaDecision['code']) || 'OK',
@@ -1055,6 +1104,10 @@ export default async function handler(req: Request) {
     }
 
     let tier: 'free' | 'premium' = 'free';
+    // Round 4b — FREE_PRO_MODE server mirror: a lead-activated caller runs
+    // the premium tier without a DB entitlement. `leadActivated` is consumed
+    // by the quota / proof-of-work gate in the `rewrite` action below.
+    let leadActivated = false;
     if (action === 'rewrite' || action === 'thumbnail-reverse') {
       // -------------------------------------------------------------
       // CTO DIRECTIVE (2026-09-07): reinstate tier/quota enforcement to
@@ -1073,9 +1126,11 @@ export default async function handler(req: Request) {
       }
       const requestedTier = enforceTier(bodyResult.data.tier);
       if (requestedTier === 'premium' || requestedTier === 'enterprise') {
-        let entitled = false;
-        try { entitled = await hasProEntitlement(caller.id); } catch { entitled = false; }
-        tier = entitled ? 'premium' : 'free';
+        // Round 4b: entitlement = DB OR lead activation (see
+        // effectiveEntitlement). Lead-activated callers run premium here.
+        const entitlement = await effectiveEntitlement(caller.id);
+        tier = entitlement.pro ? 'premium' : 'free';
+        leadActivated = entitlement.viaLead;
       } else {
         tier = 'free';
       }
@@ -1267,6 +1322,18 @@ export default async function handler(req: Request) {
       // outage (returns allowed) so a Supabase hiccup never hard-blocks a
       // valid session. Pro users bypass via the internal check.
       // -------------------------------------------------------------
+      // -------------------------------------------------------------
+      // Round 4b — FREE_PRO_MODE proof-of-work parity. A lead-activated
+      // caller runs the premium tier, so the quota RPC below — which also
+      // carries the referral proof-of-work hook — is never reached for
+      // them. Fire the same hook here (same point the RPC would: after the
+      // bouncer passes, on an allowed run) so a referred invitee's real
+      // run still qualifies their referrer's reward.
+      // -------------------------------------------------------------
+      if (leadActivated) {
+        const verified = await authenticatedUser(req);
+        if (verified) void registerReferralProofOfWork(verified.id, 'clone_crush_run');
+      }
       if (!isPremium) {
         const quota = await consumeDailyQuota(req);
         if (quota.code === 'AUTH_REQUIRED') {
