@@ -1,6 +1,7 @@
 import { Clock3, Crown, LockKeyhole, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isProTier, useLicense } from "@/stores/useAuthStore";
+import { ProExpiryCountdown } from "@/components/referrals/ProExpiryCountdown";
 
 interface EntitlementStatusProps {
   compact?: boolean;
@@ -25,6 +26,9 @@ export function EntitlementStatus({ compact = false, className }: EntitlementSta
   const license = useLicense();
   const pro = isProTier(license);
   const expiry = formatDate(license.expiresAt);
+  const expired = Boolean(license.expiresAt) && !pro;
+  // NOTE: the entitlement RPC exposes only pro_expires_at (no start date),
+  // so timing shows expiry + days remaining — never an invented start date.
 
   if (compact) {
     return (
@@ -55,15 +59,29 @@ export function EntitlementStatus({ compact = false, className }: EntitlementSta
           <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Current plan</p>
           <p className={cn("font-display text-lg font-bold", pro ? "text-primary" : "text-foreground")}>{pro ? "Pro" : "Free"}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {pro ? (expiry ? `Pro access active until ${expiry}` : "Pro access active") : "Core creator tools available with a 24-hour package limit"}
+            {pro ? (expiry ? `Pro access active until ${expiry}` : "Pro access active") : expired ? "Your Pro access has expired — you are on the Free plan" : "Core creator tools available with a 24-hour package limit"}
           </p>
         </div>
       </div>
-      {pro && expiry && (
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[10px] font-mono text-primary">
-          <Clock3 className="h-3 w-3" aria-hidden="true" /> Expires {expiry}
+      <div className="flex flex-col items-end gap-2">
+        <span className={cn(
+          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-mono font-bold",
+          pro ? "border-green-500/30 bg-green-500/10 text-green-300"
+            : expired ? "border-red-500/30 bg-red-500/10 text-red-300"
+            : "border-border/70 bg-secondary/40 text-muted-foreground",
+        )}>
+          <span className={cn("w-1.5 h-1.5 rounded-full", pro ? "bg-green-400 animate-pulse" : expired ? "bg-red-400" : "bg-muted-foreground")} />
+          {pro ? "ACTIVE" : expired ? "EXPIRED" : "FREE"}
         </span>
-      )}
+        {pro && expiry && (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-[10px] font-mono text-primary">
+            <Clock3 className="h-3 w-3" aria-hidden="true" /> Expires {expiry}
+          </span>
+        )}
+        {pro && license.expiresAt && (
+          <ProExpiryCountdown compact expiresAt={license.expiresAt} />
+        )}
+      </div>
     </div>
   );
 }
