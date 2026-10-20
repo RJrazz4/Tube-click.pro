@@ -44,7 +44,7 @@ export function DailyLimitOverlay({ variant = "tile" }: { variant?: "tile" | "he
     const url = `${window.location.origin}/rewards?upsell=clonecrush`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: "TubeClick Pro — Unlock Premium Blueprint", text: "One invite away from unlimited Chain-Loops.", url });
+        await navigator.share({ title: "TubeClick Pro — Unlock Pro Blueprint", text: "One invite away from unlimited Chain-Loops.", url });
         return;
       }
       await navigator.clipboard.writeText(url);
@@ -67,7 +67,7 @@ export function DailyLimitOverlay({ variant = "tile" }: { variant?: "tile" | "he
       ].join(" ")}
       role="dialog"
       aria-modal="true"
-      aria-label="Premium asset locked"
+      aria-label="Pro asset locked"
     >
       {/* Scanline + encryption motifs */}
       <div className="pointer-events-none absolute inset-0 ghost-scanline opacity-20 rounded-xl" />
@@ -100,7 +100,7 @@ export function DailyLimitOverlay({ variant = "tile" }: { variant?: "tile" | "he
           "font-display font-bold text-foreground",
           isHero ? "text-sm" : "text-[10px]",
         ].join(" ")}>
-          Unlock Premium Blueprint
+          Unlock Pro Blueprint
         </p>
 
         <p className={[

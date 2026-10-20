@@ -2,7 +2,7 @@
  * FounderPlanCard — compact secondary purchase surface (Round 4, owner
  * decision 2026-10-20). The ONLY paid offer live under FREE_PRO_MODE:
  *   Founder Plan — MONTHLY, ₹99/month, struck-through ₹999, 90% OFF badge,
- *   scarcity hook: "Ye offer sirf 2 mahine ke liye hai" (stated 2-month launch
+ *   scarcity hook: "🎁 2 Month Offer Only 🎁" (stated 2-month launch
  *   window — no fake countdown timers).
  *
  * The free path stays the primary CTA everywhere (FreeProBanner); this card
@@ -50,7 +50,7 @@ export function FounderPlanCard({ className, onAction }: FounderPlanCardProps) {
             <span className="text-[11px] text-muted-foreground">/ month</span>
           </p>
           <p className="mt-1 text-xs font-semibold text-amber-200">
-            Ye offer sirf 2 mahine ke liye hai
+            🎁 2 Month Offer Only 🎁
           </p>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
             Pro toh FREE hai — ye plan sirf hamari build ko support karta hai.
