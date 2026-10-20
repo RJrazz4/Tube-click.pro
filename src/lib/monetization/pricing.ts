@@ -140,3 +140,39 @@ export function buildUpiIntent(amount: number, note = "TubeClick Pro"): string {
 export function currencySymbol(currency: Plan["currency"]): string {
   return currency === "USD" ? "$" : "₹";
 }
+
+/* ------------------------------------------------------------------ pricing */
+
+/**
+ * EVERGREEN DISCOUNT (owner directive, 2026-10-20):
+ * every paid plan shows 30% OFF, always on — no countdown, no expiry.
+ * The code's `amount` is the CHARGED price (what the user actually pays);
+ * the struck-through "original" price is derived: round(charged / 0.7).
+ */
+export const EVERGREEN_DISCOUNT_PCT = 30;
+
+export interface PlanPrices {
+  /** What the user actually pays (the code's canonical amount). */
+  charged: number;
+  /** Struck-through original price, derived from the charged price. */
+  original: number;
+  currency: Plan["currency"];
+  /** Discount percent shown in the badge. Always 30. */
+  offPct: number;
+  chargedLabel: string;
+  originalLabel: string;
+}
+
+/** ONE source of truth for all price math — never hardcode prices in JSX. */
+export function planPrices(plan: Plan): PlanPrices {
+  const original = Math.round(plan.amount / (1 - EVERGREEN_DISCOUNT_PCT / 100));
+  const sym = currencySymbol(plan.currency);
+  return {
+    charged: plan.amount,
+    original,
+    currency: plan.currency,
+    offPct: EVERGREEN_DISCOUNT_PCT,
+    chargedLabel: `${sym}${plan.amount}`,
+    originalLabel: `${sym}${original}`,
+  };
+}
