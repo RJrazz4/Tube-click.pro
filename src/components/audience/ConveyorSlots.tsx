@@ -3,6 +3,7 @@ import { Layers, Lock, Plus, Play } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCloneCrushStore, FREE_GHOST_CACHE_SLOTS, PRO_GHOST_CACHE_SLOTS } from "@/stores/useCloneCrushStore";
+import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
 
 /**
  * Active content conveyor slots — the working slots holding the creator's
@@ -31,7 +32,12 @@ export function ConveyorSlots({ isPro }: { isPro?: boolean }) {
       <CardContent className="space-y-2">
         {Array.from({ length: slots }, (_, i) => {
           const ch = filled.find((c) => c.slotIndex === i);
-          const locked = i >= (isPro ? FREE_GHOST_CACHE_SLOTS : 1);
+          // Round 4: under FREE_PRO_MODE every activated user unlocks all
+          // slots. The only locked state left is for users who haven't
+          // submitted their Professional Details yet — and its label points
+          // to FREE activation, never to a purchase.
+          const locked = FREE_PRO_MODE ? !isPro : i >= (isPro ? FREE_GHOST_CACHE_SLOTS : 1);
+          const lockedLabel = FREE_PRO_MODE ? "Locked — activate FREE Pro" : "Locked — upgrade to Pro";
           return (
             <div
               key={i}
@@ -52,7 +58,7 @@ export function ConveyorSlots({ isPro }: { isPro?: boolean }) {
               )}
               <div className="min-w-0 flex-1">
                 <p className={`truncate text-xs font-semibold ${locked ? "text-muted-foreground/70" : "text-foreground"}`}>
-                  {locked ? "Locked — upgrade to Pro" : ch ? ch.name : `Slot ${i + 1} · Empty`}
+                  {locked ? lockedLabel : ch ? ch.name : `Slot ${i + 1} · Empty`}
                 </p>
                 <p className="truncate text-[10px] font-mono text-muted-foreground">
                   {locked ? "unlockable" : ch ? ch.handle || ch.url : "tap to add a channel"}
