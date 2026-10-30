@@ -288,7 +288,7 @@ describe("Clone & Crush viral quality gate", () => {
   it("rejects low-view YouTube API results and only returns 50k+ viral competitors", async () => {
     const fetchMock = vi.fn().mockImplementation(async (url: string) => {
       if (url.includes("googleapis.com/youtube/v3/search")) {
-        return new Response(JSON.stringify({ items: [{ id: { videoId: "lowview0001" } }] }), { status: 200 });
+        return new Response(JSON.stringify({ items: [{ id: { videoId: "lowview0001" } }, { id: { videoId: "highview0002" } }, { id: { videoId: "highview0003" } }] }), { status: 200 });
       }
       if (url.includes("googleapis.com/youtube/v3/videos")) {
         return new Response(JSON.stringify({
@@ -297,6 +297,16 @@ describe("Clone & Crush viral quality gate", () => {
             snippet: { title: "14 views flop", channelTitle: "Tiny Channel", publishedAt: "2026-07-01T00:00:00Z", thumbnails: { high: { url: "https://example.com/low.jpg" } } },
             statistics: { viewCount: "14" },
             contentDetails: { duration: "PT1M" },
+          }, {
+            id: "highview0002",
+            snippet: { title: "500k views winner", channelTitle: "Big Channel", publishedAt: "2026-07-01T00:00:00Z", thumbnails: { high: { url: "https://example.com/high.jpg" } } },
+            statistics: { viewCount: "500000" },
+            contentDetails: { duration: "PT10M" },
+          }, {
+            id: "highview0003",
+            snippet: { title: "1M views winner", channelTitle: "Huge Channel", publishedAt: "2026-07-01T00:00:00Z", thumbnails: { high: { url: "https://example.com/huge.jpg" } } },
+            statistics: { viewCount: "1000000" },
+            contentDetails: { duration: "PT10M" },
           }],
         }), { status: 200 });
       }
