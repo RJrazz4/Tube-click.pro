@@ -38,7 +38,7 @@ const DEFAULT_FALLBACKS = [
   "openai/gpt-4o-mini",
 ];
 
-const DEFAULT_BASE_URL = "https://gateway.vercel.sh/v1";
+const DEFAULT_BASE_URL = "https://ai-gateway.vercel.sh/v1";
 const DEFAULT_PRIMARY = "google/gemini-2.5-flash";
 // Raised from 20s to 40s so primary + 2 fallbacks have enough wall-clock
 // to complete before our AbortController severs the call. Clone-crush /
