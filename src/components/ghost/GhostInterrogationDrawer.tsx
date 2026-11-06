@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInterrogateStore, newUserMessage, newAssistantMessage } from "@/stores/useInterrogateStore";
+import { getValidAccessToken } from "@/lib/auth/accessToken";
 import { useGhostCredits } from "@/hooks/useGhostCredits";
 import { useIsPro } from "@/stores/useAuthStore";
 import { cn } from "@/lib/utils";
@@ -120,12 +121,20 @@ export function GhostInterrogationDrawer() {
     const url = session.url || `https://youtu.be/${session.videoId}`;
     const slotId = 0; // default; caller overrides via openDrawer() when wired later
     setIndexing(true);
-    fetch("/api/ghost/interrogate-index", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, slotId }),
-    })
+    // The Ghost API authenticates ONLY via the caller's Supabase bearer
+    // token (api/_ghostAuth.ts reads the Authorization header; it never
+    // looks at cookies). This fetch used to send credentials:"include"
+    // with no Authorization header, so the server answered 401
+    // "Auth required" for every user — signed in or not — and the
+    // drawer could never index. Resolve the token the same way
+    // secureClient does and attach it.
+    void getValidAccessToken()
+      .then((token) => fetch("/api/ghost/interrogate-index", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ url, slotId }),
+      }))
       .then(async (r) => {
         if (!r.ok) {
           const err = await r.json().catch(() => ({}));
@@ -160,10 +169,11 @@ export function GhostInterrogationDrawer() {
     appendMessage(newUserMessage(q));
     setStreaming(true);
     try {
+      const token = await getValidAccessToken();
       const res = await fetch("/api/ghost/interrogate-chat", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ videoId: session.videoId, query: q }),
       });
       const data = await res.json().catch(() => ({}));
