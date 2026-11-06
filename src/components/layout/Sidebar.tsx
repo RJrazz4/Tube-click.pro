@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   BookOpen,
+  Briefcase,
   ChevronRight,
   Gift,
   HelpCircle,
@@ -60,6 +61,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Create & grow",
     items: [
       { icon: PenLine, label: "Create from a topic", description: "Generate titles, hooks, and scripts", path: "/create" },
+      { icon: Briefcase, label: "Kaam Karwao", description: "Get writing done — delivered on WhatsApp", path: "/workplace" },
       { icon: Mic, label: "Voiceover", description: "Turn scripts into narration", path: "/voice" },
       { icon: Share2, label: "Repurpose", description: "Format content for other platforms", path: "/repurposer" },
       { icon: Rocket, label: "YouTube advance growth", shortLabel: "YT Growth", description: "Advanced channel growth playbook & roadmap", path: "/youtube-growth" },
