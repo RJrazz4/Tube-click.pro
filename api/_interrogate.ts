@@ -254,18 +254,11 @@ export async function handleInterrogateIndex(req: Request): Promise<Response> {
     });
   }
 
-  // Consume one "first-index" credit. Free/paywalled users get blocked here.
-  const verdict = await consumeGhostAction(req, INTERROGATE_ACTION);
-  if (!verdict.allowed) {
-    return jsonResponse({
-      error: verdict.code === "PAYWALL" ? "Pro required to interrogate" : "Daily limit reached",
-      code: verdict.code,
-      resetAt: verdict.reset_at,
-      remaining: verdict.remaining,
-    }, verdict.code === "AUTH_REQUIRED" ? 401 : 402);
-  }
-
-  // Pull transcript (may be ghost-reconstructed).
+  // Pull transcript FIRST (may be ghost-reconstructed). The credit is
+  // consumed only after the video proves indexable — the old order
+  // consumed before fetching, so every caption-less video burned a
+  // credit on its way to a 422 (2026-11-06: one drawer retry loop
+  // drained a full day's pool without indexing anything).
   let transcript;
   try {
     transcript = await fetchTranscript(videoId, typeof lang === "string" ? lang : "en");
@@ -277,7 +270,25 @@ export async function handleInterrogateIndex(req: Request): Promise<Response> {
   // Chunk.
   const chunks = chunkTranscript(transcript.text, transcript.segments);
   if (chunks.length === 0) {
-    return jsonResponse({ error: "Transcript too short to interrogate" }, 422);
+    const noCaptions = transcript.source === 'no-captions' || !(transcript.text || '').trim();
+    return jsonResponse({
+      error: noCaptions
+        ? 'No captions found for this video — Ghost Interrogation needs a video with captions.'
+        : 'Transcript too short to interrogate',
+      code: noCaptions ? 'NO_CAPTIONS' : 'TRANSCRIPT_TOO_SHORT',
+    }, 422);
+  }
+
+  // Consume one "first-index" credit — only now that the video is
+  // known indexable. Free/paywalled users get blocked here.
+  const verdict = await consumeGhostAction(req, INTERROGATE_ACTION);
+  if (!verdict.allowed) {
+    return jsonResponse({
+      error: verdict.code === "PAYWALL" ? "Pro required to interrogate" : "Daily limit reached",
+      code: verdict.code,
+      resetAt: verdict.reset_at,
+      remaining: verdict.remaining,
+    }, verdict.code === "AUTH_REQUIRED" ? 401 : 402);
   }
 
   // Embed all chunks.
