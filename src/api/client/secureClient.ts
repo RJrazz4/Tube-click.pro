@@ -326,7 +326,7 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
   // "tunnel interference" toasts when the server would have recovered.
   const isLongLlmCall =
     functionName === "generate-content" ||
-    (functionName === "clone-crush" && (action === "rewrite" || action === "thumbnail-reverse"));
+    (functionName === "clone-crush" && (action === "rewrite" || action === "thumbnail-reverse" || action === "profile"));
   const maxAttempts = isLongLlmCall ? 0 : (functionName === "transcript" ? 0 : RETRY_DELAYS.length);
 
   for (let attempt = 0; attempt <= maxAttempts; attempt++) {
