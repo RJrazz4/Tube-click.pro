@@ -41,7 +41,12 @@ export default function Analytics() {
     const monthlySubscriberGrowth = Math.round(monthlyViews * 0.012);
     const cpm = niche === "Finance & Crypto" ? 12 : niche === "Tech & AI" ? 8 : 4;
     const adsense = Math.round((monthlyViews / 1000) * cpm);
-    const sponsorship = Math.round(s * 0.08); // Benchmark estimate, not a guarantee
+    // Sponsorship benchmark, scaled by channel size: the flat
+    // $0.08/sub rule told a 1K-sub channel it would land ~$80/mo in
+    // brand deals, which almost never happens — paid deals only
+    // become realistic as a channel grows.
+    const sponsorshipScale = s < 10000 ? 0.15 : s < 50000 ? 0.4 : s < 100000 ? 0.7 : 1;
+    const sponsorship = Math.round(s * 0.08 * sponsorshipScale); // Benchmark estimate, not a guarantee
     const viralScore = Math.min(98, Math.max(35, Math.round((v / s) * 100 + 40)));
     const growthRate = s > 100000 ? "+18% MoM" : "+24% MoM";
     const baseRevenue = adsense + sponsorship;
@@ -59,7 +64,7 @@ export default function Analytics() {
       conservativeRevenue,
       upsideRevenue,
       confidence,
-      assumptions: [`${cpm} estimated RPM for ${niche}`, `${uploadCount} uploads per month`, "Sponsorship benchmark based on subscriber count"],
+      assumptions: [`${cpm} estimated RPM for ${niche}`, `${uploadCount} uploads per month`, "Sponsorship benchmark based on subscriber count, scaled by channel size (small channels rarely land paid deals)"],
       sensitivity: `A 25% reach lift would add about ${Math.round(monthlyViews * 0.25).toLocaleString()} monthly views and $${Math.round(adsense * 0.25).toLocaleString()} estimated ad revenue.`,
       priorityAction: v < s * 0.25 ? "Prioritize packaging tests: title and thumbnail promise clarity are the highest-leverage gap." : "Prioritize retention: strengthen the first 30 seconds and move proof closer to the opening payoff.",
     });
