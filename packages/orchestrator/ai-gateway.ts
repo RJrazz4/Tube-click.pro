@@ -333,6 +333,15 @@ export async function gatewayChatText(opts: GatewayChatOptions): Promise<Gateway
       usage,
       headroom: headroomReport,
     };
+  } catch (e) {
+    // Name the failure in the logs before it propagates — gateway,
+    // DNS, auth and timeout errors were previously invisible because
+    // every caller swallowed them into a silent fallback.
+    console.error(
+      `[ai-gateway] FAIL after ${Date.now() - started}ms:`,
+      e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+    );
+    throw e;
   } finally {
     clearTimeout(timer);
     if (opts.signal) opts.signal.removeEventListener("abort", onExternalAbort);
