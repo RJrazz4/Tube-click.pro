@@ -648,8 +648,13 @@ const LONGFORM_RPM_BY_NICHE: Record<string, number> = {
 function estimatedRevenueForViews(views: number, opts?: { durationSeconds?: number | null; niche?: string }): number {
   // Unknown format defaults to Short: this product's conveyor is
   // Shorts-first, and assuming long-form rates for unknown videos is
-  // exactly how the old code inflated its numbers.
-  const isShort = typeof opts?.durationSeconds === 'number' ? opts.durationSeconds <= 60 : true;
+  // exactly how the old code inflated its numbers. The Short cutoff
+  // is 180s, not 60s: YouTube Shorts run up to 3 minutes, and a 1:04
+  // video in this conveyor is a Short in practice — pricing it as
+  // long-form overstated its revenue ~50x in the first live test.
+  // Overstating is the harmful direction for an estimates tool, so
+  // borderline durations resolve to the Shorts rate.
+  const isShort = typeof opts?.durationSeconds === 'number' ? opts.durationSeconds <= 180 : true;
   const rpm = isShort
     ? SHORTS_RPM_PER_1000
     : (LONGFORM_RPM_BY_NICHE[opts?.niche || ''] ?? 2);
