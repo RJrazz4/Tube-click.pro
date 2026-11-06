@@ -18,6 +18,7 @@ import { isProTier } from "@/stores/useAuthStore";
 import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
 import { openProActivation } from "@/components/leads/ProActivationModal";
 import { NativeSponsorBanner } from "@/components/sponsors/NativeSponsorBanner";
+import FreeVoiceMesh from "@/components/voice/FreeVoiceMesh";
 import { getSponsorForPlacement } from "@/config/sponsors";
 import { useSoftGate } from "@/contexts/SoftGateContext";
 import { useWorkflowStore } from "@/stores/useWorkflowStore";
@@ -427,6 +428,8 @@ export default function VoiceStudio() {
           </CardContent>
         </Card>
       </div>
+
+      <FreeVoiceMesh />
 
       {voiceSponsor && <NativeSponsorBanner {...voiceSponsor} />}
     </div>
