@@ -721,12 +721,64 @@ async function youtubeChannelProfile(input: string) {
   };
 }
 
-async function youtubeCompetitors(niche: string, limit = 3, offset = 0) {
+// -------------------------------------------------------------
+// Competitor relevance — the niche label alone is too weak a search
+// signal: a one-word query ("History") ordered by viewCount surfaces
+// mega-viral videos that merely brush the word. These helpers build
+// signal words from the niche PLUS the channel's own description
+// (which the client sends but the search previously ignored), and
+// gate every candidate on a whole-word match against them.
+// -------------------------------------------------------------
+const COMPETITOR_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'from', 'that', 'this', 'what', 'when', 'your', 'you', 'are', 'was', 'were', 'will', 'would', 'about', 'into', 'over', 'after', 'before', 'between', 'through',
+  'video', 'videos', 'channel', 'shorts', 'short', 'viral', 'trending', 'official', 'subscribe', 'watch', 'full', 'part', 'daily', 'new', 'hindi', 'english',
+  'ke', 'ka', 'ki', 'hai', 'hain', 'aur', 'se', 'me', 'mein', 'par', 'ek', 'woh', 'yeh', 'hum', 'roz', 'naye', 'naya', 'gaya', 'raha', 'rahi', 'hua', 'hue', 'kar', 'karke', 'bhi', 'tha', 'thi', 'apne', 'apni', 'uske', 'uski', 'iske', 'kya', 'kyun', 'kaise', 'jab', 'tab', 'sab', 'log', 'baat', 'aaj', 'kal',
+]);
+
+function wordTokens(text: string): string[] {
+  return text.toLowerCase().split(/[^a-z0-9\u0900-\u097F]+/).filter(Boolean);
+}
+
+function competitorSignals(niche: string, description: string): { nicheWords: string[]; keywords: string[]; signals: string[] } {
+  const nicheWords = [...new Set(wordTokens(niche).filter((w) => w.length >= 3 && !COMPETITOR_STOPWORDS.has(w)))];
+  const freq = new Map<string, number>();
+  for (const w of wordTokens(description)) {
+    if (w.length < 4 || COMPETITOR_STOPWORDS.has(w) || nicheWords.includes(w)) continue;
+    freq.set(w, (freq.get(w) || 0) + 1);
+  }
+  const keywords = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([w]) => w);
+  return { nicheWords, keywords, signals: [...nicheWords, ...keywords].slice(0, 10) };
+}
+
+// A candidate is a real competitor only if its own text proves the
+// niche: the niche word itself appears, or at least two of the
+// channel's signal keywords do. Whole-word matching only — the same
+// substring traps the niche deduction had ("ai" inside "daily").
+function competitorRelevance(text: string, nicheWords: string[], signals: string[]): boolean {
+  if (signals.length === 0) return true;
+  const words = new Set(wordTokens(text));
+  let hits = 0;
+  let nicheHit = false;
+  for (const s of signals) {
+    if (words.has(s)) {
+      hits++;
+      if (nicheWords.includes(s)) nicheHit = true;
+    }
+  }
+  return nicheHit || hits >= 2;
+}
+
+async function youtubeCompetitors(niche: string, limit = 3, offset = 0, description = '') {
   // Cursor-style pagination: fetch as many viral-qualifying results as we
   // can from the live API (walking queries in priority order) and return
   // the slice [offset, offset+limit). This tolerates both test mocks that
   // return minimal pages and production APIs that return many results.
+  // Queries lead with niche+keyword pairs from the channel's own
+  // description (specific), then fall back to the bare niche (broad).
+  const { nicheWords, keywords, signals } = competitorSignals(niche, description);
   const queries = [
+    ...(keywords[0] ? [{ q: `${niche} ${keywords[0]}`, publishedAfter: new Date(Date.now() - 365 * 86400000).toISOString() }] : []),
+    ...(keywords[1] ? [{ q: `${niche} ${keywords[1]}`, publishedAfter: new Date(Date.now() - 365 * 86400000).toISOString() }] : []),
     { q: `${niche} viral`, publishedAfter: new Date(Date.now() - 365 * 86400000).toISOString() },
     { q: niche, publishedAfter: new Date(Date.now() - 365 * 86400000).toISOString() },
     { q: `${niche} trending`, publishedAfter: new Date(Date.now() - 90 * 86400000).toISOString() },
@@ -757,6 +809,11 @@ async function youtubeCompetitors(niche: string, limit = 3, offset = 0) {
       for (const v of (details.items || [])) {
         const viewsCount = Number(v.statistics?.viewCount || 0);
         if (viewsCount < VIRAL_VIEW_THRESHOLD) continue;
+        // Relevance gate: views alone do not make a competitor. The
+        // video's own title/channel/description must prove the niche,
+        // or generic mega-viral Shorts crowd out real competitors.
+        const haystack = `${v.snippet.title || ''} ${v.snippet.channelTitle || ''} ${(v.snippet.description || '').slice(0, 600)}`;
+        if (!competitorRelevance(haystack, nicheWords, signals)) continue;
         const estimatedRevenueNum = estimatedRevenueForViews(viewsCount);
         qualified.push({
           id: v.id,
@@ -775,7 +832,7 @@ async function youtubeCompetitors(niche: string, limit = 3, offset = 0) {
           viralVelocityScore: velocityForViews(viewsCount, v.snippet.publishedAt),
           estimatedRevenue: `$${estimatedRevenueNum.toLocaleString()}`,
           estimatedRevenueNum,
-          relevance: `Live YouTube Data API v3 • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view viral gate`,
+          relevance: `Live YouTube Data API v3 • niche-matched • ${VIRAL_VIEW_THRESHOLD.toLocaleString()}+ view viral gate`,
           viralThreshold: VIRAL_VIEW_THRESHOLD,
         });
       }
@@ -1198,6 +1255,12 @@ export default async function handler(req: Request) {
 
     if (action === 'competitors') {
       if (!niche) return jsonResponse({ error: 'Niche is required.' }, 400);
+      // The client sends the channel's own description — it carries the
+      // keywords that make competitor search specific. It used to be
+      // ignored entirely, which is why one-word niche searches returned
+      // generic viral videos.
+      const description = typeof bodyResult.data.description === 'string' ? bodyResult.data.description.slice(0, 2000) : '';
+      const { nicheWords, keywords, signals } = competitorSignals(niche, description);
       // Pagination: opaque cursor = base64(JSON.stringify({source, offset})).
       // limit defaults to 3 (bootstrap window); append shifts request 1.
       const rawLimit = Number(bodyResult.data.limit);
@@ -1258,7 +1321,7 @@ export default async function handler(req: Request) {
       // Try live API first.
       if (source === 'youtube') {
         try {
-          const liveCompetitors = await youtubeCompetitors(niche, limit, offset);
+          const liveCompetitors = await youtubeCompetitors(niche, limit, offset, description);
           if (liveCompetitors.length >= 2) {
             return buildEnvelope(liveCompetitors, 'youtube', offset, liveCompetitors.length >= limit);
           }
@@ -1270,8 +1333,9 @@ export default async function handler(req: Request) {
       if (source === 'youtube' || source === 'piped') {
         try {
           const fetchSize = Math.min(Math.max(limit * 2, 3), 12);
-          const piped = await fetchPipedSearch(`${niche} viral`, fetchSize + offset);
-          const page = piped.slice(offset);
+          const pipedQuery = keywords[0] ? `${niche} ${keywords[0]}` : `${niche} viral`;
+          const piped = await fetchPipedSearch(pipedQuery, fetchSize + offset);
+          const page = piped.slice(offset).filter((v) => competitorRelevance(`${v.title || ''} ${v.channelName || ''}`, nicheWords, signals));
           if (page.length >= 1) {
             const mapped = page.map((v, i) => {
               const revenue = estimatedRevenueForViews(v.viewsCount);
