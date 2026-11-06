@@ -106,6 +106,11 @@ export function GhostInterrogationDrawer() {
 
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Latch for the indexing effect below — see the comment there.
+  const attemptedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!drawerOpen) attemptedForRef.current = null;
+  }, [drawerOpen]);
 
   // Auto-scroll to bottom on new message.
   useEffect(() => {
@@ -118,6 +123,15 @@ export function GhostInterrogationDrawer() {
   useEffect(() => {
     if (!drawerOpen || !session.videoId || session.indexed || session.indexing) return;
     if (!isPro) return; // paywall is handled by the chip; safety guard
+    // One automatic attempt per video per drawer session. A failed
+    // attempt must NEVER auto-retry: setError clears `indexing`, and
+    // the credits hook's 1s tick keeps churning this effect's deps, so
+    // without this latch a single failure became a ~1/sec retry storm
+    // that burned the user's daily credits (2026-11-06 live incident:
+    // ~30 index calls in 90 seconds, then hours of 402s). Closing and
+    // reopening the drawer is the deliberate retry.
+    if (attemptedForRef.current === session.videoId) return;
+    attemptedForRef.current = session.videoId;
     const url = session.url || `https://youtu.be/${session.videoId}`;
     const slotId = 0; // default; caller overrides via openDrawer() when wired later
     setIndexing(true);
