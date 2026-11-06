@@ -23,6 +23,65 @@
 import { gatewayChatJson, gatewayChatText } from "../packages/orchestrator/ai-gateway.js";
 import { LSA_PERSONA, LSA_CUE_DIRECTIVE } from "./_lsa.js";
 
+/** Parse a model reply as JSON, tolerating prose wrapped around the object. */
+function parseModelJson(text: string): any {
+  const cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start >= 0 && end > start) return JSON.parse(cleaned.slice(start, end + 1));
+    throw new Error("Model reply was not JSON");
+  }
+}
+
+/**
+ * Rich deterministic fallback for when every writer attempt failed.
+ * The old skeleton (1 title, 1 hook, a one-line "script") is what
+ * users were actually served whenever the model's JSON broke — a
+ * paying user must still get a full, usable package.
+ */
+function buildRichFallback(topic: string, language: string) {
+  const t = topic.trim() || "viral content";
+  const safeTitle = t.length > 60 ? t.slice(0, 57) + "…" : t;
+  const lang = (language || "hinglish").toLowerCase();
+  const titles = [
+    `🔥 ${safeTitle} — The Truth No One Tells You`,
+    `I Tried ${safeTitle} for 30 Days (Shocking Results)`,
+    `${safeTitle} Exposed — What They Don't Want You to Know`,
+    `The ${safeTitle} Trick That Changed Everything`,
+    `Why Everyone Is Wrong About ${safeTitle}`,
+  ];
+  const hooks = lang === "english"
+    ? [
+        `You won't believe what ${safeTitle} just did…`,
+        `Stop scrolling — the truth about ${safeTitle} changes everything.`,
+        `I tested ${safeTitle} for 30 days. Here's what happened.`,
+        `The one ${safeTitle} mistake killing your growth.`,
+        `This ${safeTitle} trick is going viral in 2026.`,
+      ]
+    : [
+        `Bhai, ${safeTitle} ka raaz jo koi nahi batayega — aaj pata chalega.`,
+        `Ruk jao — ${safeTitle} ke baare mein 99% log galat hain.`,
+        `Maine ${safeTitle} par 30 din experiment kiya — result shock karega.`,
+        `${safeTitle} ki ek aisi trick jo 2026 mein viral ho rahi hai.`,
+        `Ye ek galti ${safeTitle} mein aapki growth barbaad kar rahi hai.`,
+      ];
+  const script = lang === "english"
+    ? `What's up creators — today we're breaking down ${t}. I used to think this was simple, until my first video on it completely flopped. Then I changed three things. First, I led with the uncomfortable truth in the first three seconds. Second, I dropped an open loop in the middle that kept people watching to the end. Third, I finished with one crystal-clear action step. Point one: story first, information second. Point two: a micro-twist every ten seconds. Point three: one simple CTA at the end. Drop your biggest question in the comments — I reply to every one. Subscribe and ring the bell. I'll see you in the next video.`
+    : `What's up creators — aaj baat karte hain ${t} ki. Pehle main bhi sochta tha ye simple hai, phir first video flop ho gayi. Phir maine 3 cheezein badli — pehle 3 seconds mein sach bol diya, beech mein ek open loop chhoda, end mein ek clear CTA diya. Point one: story pehle, information baad mein. Point two: har 10 seconds par ek micro-twist. Point three: end mein ek simple CTA. Comments mein apna question drop karo — main har comment reply karta hoon. Subscribe karo aur bell dabao. Next video mein milte hain.`;
+  return {
+    titles,
+    hooks,
+    script,
+    hashtags: ["#viral", "#shorts", "#youtube", "#trending", "#creator", "#growth", "#content", "#tips"],
+    description: `${safeTitle} — full breakdown: the truth, the mistakes, and the exact playbook.`,
+    strategyBrief: "Fallback package: lead with the uncomfortable truth in the first 3 seconds, plant open loops through the middle, close with a single clear CTA.",
+    experimentPlan: ["Test two headline promises against first-30s drop-off", "A/B hook pacing (8s vs 12s beats)", "Compare curiosity-led vs proof-led payoff CTA"],
+  };
+}
+
 export interface ChannelMemoryProfile {
   niche?: string;
   targetAudience?: string;
@@ -107,6 +166,8 @@ Generate viral YouTube content in exact JSON format:
   let critiqueFeedback = "";
   let iterations = 0;
   let selfHealed = false;
+  let lastScore: number | null = null;
+  let lastCritique = "";
 
   for (let iter = 1; iter <= MAX_ITERATIONS; iter++) {
     iterations = iter;
@@ -128,8 +189,7 @@ Return exact JSON only matching the requested schema.`;
       lastModel = result.model;
       attemptedModels = result.modelsAttempted;
 
-      const cleaned = result.text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-      lastParsed = JSON.parse(cleaned);
+      lastParsed = parseModelJson(result.text);
 
       const criticSystem = `You are a ruthless YouTube Retention Critic and Chief Content Auditor. Evaluate the provided JSON content on a scale of 0-100 against:
 1. Retention Open-Loop Frequency (hook cadence every 8-10s)
@@ -152,10 +212,11 @@ Respond in exact JSON only:
         deadlineMs: 10_000,
       });
 
-      const criticClean = criticResult.text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-      const evaluation = JSON.parse(criticClean);
+      const evaluation = parseModelJson(criticResult.text);
 
       const score = typeof evaluation.score === "number" ? evaluation.score : 80;
+      lastScore = score;
+      lastCritique = typeof evaluation.critique === "string" ? evaluation.critique : "";
       if (score >= CRITIQUE_THRESHOLD || iter === MAX_ITERATIONS) {
         if (iter > 1) selfHealed = true;
         break;
@@ -170,15 +231,7 @@ Respond in exact JSON only:
     }
   }
 
-  const parsed = lastParsed || {
-    titles: [`🔥 ${topic}`],
-    hooks: ["Start with a shocking truth."],
-    script: `In the next 60 seconds, we are breaking down ${topic}.`,
-    hashtags: ["#viral", `#${topic.replace(/\s+/g, "")}`],
-    description: `${topic} - comprehensive growth breakdown.`,
-    strategyBrief: "Evaluated audience tension and differentiation from topic.",
-    experimentPlan: ["Test headline promise", "Test first 30s retention hook", "Compare proof vs curiosity"],
-  };
+  const parsed = lastParsed || buildRichFallback(topic, language);
 
   return {
     titles: Array.isArray(parsed.titles) ? parsed.titles.filter((t: unknown) => typeof t === "string").slice(0, 5) : [`🔥 ${topic}`],
@@ -189,8 +242,12 @@ Respond in exact JSON only:
     strategyBrief: typeof parsed.strategyBrief === "string" ? parsed.strategyBrief.trim() : "Audience tension and retention architecture evaluated.",
     experimentPlan: Array.isArray(parsed.experimentPlan) ? parsed.experimentPlan.filter((v): v is string => typeof v === "string").slice(0, 3) : ["Test headline", "Test hook", "Test payoff"],
     agentAudit: {
-      score: 92,
-      critique: selfHealed ? "Self-healing refinement applied by Critic Agent." : "Passed initial multi-agent generation pass.",
+      // The REAL critic score from the last evaluation — this used to
+      // be a hardcoded 92 shown to every user regardless of quality.
+      score: lastScore ?? 0,
+      critique: lastParsed
+        ? (lastCritique || (selfHealed ? "Self-healing refinement applied by Critic Agent." : "Passed initial multi-agent generation pass."))
+        : "Generation failed this time — full fallback package served; audit not run.",
       iterations,
       selfHealed,
     },
