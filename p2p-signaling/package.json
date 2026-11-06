@@ -1,1 +1,0 @@
-{"dependencies":{"ws":"^8.18.0"},"description":"Tiny WebRTC signaling relay for the TubeClick Pro voice mesh. Introduces browsers; never sees text or audio.","main":"server.js","name":"tubeclick-p2p-signaling","private":true,"scripts":{"start":"node server.js"},"version":"1.0.0"}
