@@ -698,14 +698,18 @@ async function youtubeChannelProfile(input: string) {
   } else {
     const search = await youtubeApi('search', { part: 'snippet', q: ref.query, type: 'channel', maxResults: '1' });
     const channelId = search.items?.[0]?.id?.channelId;
-    if (!channelId) throw new Error('GHOST_RECONSTRUCT');
+    if (!channelId) throw new Error('PROFILE_NO_CHANNEL: no channel matched that name');
     channelData = await youtubeApi('channels', { part: 'snippet,statistics,brandingSettings', id: channelId });
   }
   const channel = channelData.items?.[0];
-  if (!channel?.id || !channel?.snippet) throw new Error('GHOST_RECONSTRUCT');
+  if (!channel?.id || !channel?.snippet) throw new Error('PROFILE_NO_CHANNEL: the channel lookup returned no channel');
   const stats = channel.statistics || {};
-  const avatar = channel.snippet.thumbnails?.high?.url || channel.snippet.thumbnails?.medium?.url;
-  if (!avatar) throw new Error('GHOST_RECONSTRUCT');
+  // Avatar is cosmetic: fall through every size, and if the channel exposes
+  // none, use a generated initial tile instead of failing the whole profile.
+  const avatar = channel.snippet.thumbnails?.high?.url
+    || channel.snippet.thumbnails?.medium?.url
+    || channel.snippet.thumbnails?.default?.url
+    || `https://ui-avatars.com/api/?name=${encodeURIComponent(channel.snippet.title || 'YT')}&background=1f2430&color=fff&size=240`;
   return {
     id: channel.id, url: `https://www.youtube.com/channel/${channel.id}`, name: channel.snippet.title,
     handle: channel.snippet.customUrl || ('handle' in ref ? ref.handle : ''),
@@ -1146,6 +1150,14 @@ export default async function handler(req: Request) {
         return jsonResponse({ success: true, profile, extractedKeywords: profile.extractedKeywords, ghostNode: 'YT-API', reconstructed: false, outputLanguage });
       } catch (err: any) {
         const raw = (err?.message || '').toString();
+        console.error('[clone-crush profile] lookup failed:', raw);
+        // The lookup matched no channel (bad handle / renamed / not indexed).
+        // That is a client-side fact, not a server failure: return it as a
+        // plain unsuccessful result so the UI shows "not found" and stops,
+        // instead of a 502 the client retries into a rate-limit storm.
+        if (/PROFILE_NO_CHANNEL/.test(raw)) {
+          return jsonResponse({ success: false, error: 'That channel could not be found. Check the @handle or channel URL and try again.', code: 'CHANNEL_NOT_FOUND', service: 'clone-crush' });
+        }
         // Env mis-config / explicit "not configured" must surface as 502.
         if (/not configured|is not configured/i.test(raw)) {
           return jsonResponse({ error: raw || 'YouTube profile lookup failed' }, 502);
@@ -1162,6 +1174,7 @@ export default async function handler(req: Request) {
           success: false,
           error: 'YouTube channel data is unavailable right now (API quota or network). Please retry in a minute.',
           code: 'UPSTREAM_UNAVAILABLE',
+          detail: raw.slice(0, 200),
           service: 'clone-crush',
         }, 502);
       }
