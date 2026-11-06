@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 import {
-  AudioWaveform,
   BarChart3,
   BookOpen,
   ChevronRight,
@@ -62,7 +61,6 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { icon: PenLine, label: "Create from a topic", description: "Generate titles, hooks, and scripts", path: "/create" },
       { icon: Mic, label: "Voiceover", description: "Turn scripts into narration", path: "/voice" },
-      { icon: AudioWaveform, label: "Audio Tools", description: "Free unlimited audio tools — in your browser", path: "/audio-tools" },
       { icon: Share2, label: "Repurpose", description: "Format content for other platforms", path: "/repurposer" },
       { icon: Rocket, label: "YouTube advance growth", shortLabel: "YT Growth", description: "Advanced channel growth playbook & roadmap", path: "/youtube-growth" },
       { icon: Search, label: "SEO", description: "Improve titles and tags", path: "/seo" },
@@ -75,7 +73,6 @@ const mobilePrimaryItems: NavItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Zap, label: "Analyze", path: "/clone-crush" },
   { icon: Mic, label: "Voiceover", path: "/voice" },
-  { icon: AudioWaveform, label: "Audio Tools", description: "Free unlimited audio tools — in your browser", path: "/audio-tools" },
   { icon: Share2, label: "Repurpose", path: "/repurposer" },
 ];
 
