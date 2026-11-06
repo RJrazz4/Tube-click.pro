@@ -47,7 +47,11 @@ export default function Analytics() {
     // become realistic as a channel grows.
     const sponsorshipScale = s < 10000 ? 0.15 : s < 50000 ? 0.4 : s < 100000 ? 0.7 : 1;
     const sponsorship = Math.round(s * 0.08 * sponsorshipScale); // Benchmark estimate, not a guarantee
-    const viralScore = Math.min(98, Math.max(35, Math.round((v / s) * 100 + 40)));
+    // Viral score from the views/subscriber ratio alone flatters tiny
+    // channels (400 views on 300 subs read as 98/100). Cap it by the
+    // absolute reach until the channel has real volume behind it.
+    const reachCap = v < 1000 ? 70 : v < 10000 ? 85 : 98;
+    const viralScore = Math.min(reachCap, Math.max(35, Math.round((v / s) * 100 + 40)));
     const growthRate = s > 100000 ? "+18% MoM" : "+24% MoM";
     const baseRevenue = adsense + sponsorship;
     const conservativeRevenue = Math.round(baseRevenue * 0.65);
