@@ -225,6 +225,12 @@ Respond in exact JSON only:
         selfHealed = true;
       }
     } catch (err) {
+      // Log the real failure — this catch used to be silent, which is
+      // how a dead gateway hid behind the fallback for weeks.
+      console.error(
+        `[agentic-pipeline] iteration ${iter} failed:`,
+        err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+      );
       selfHealed = true;
       if (iter < MAX_ITERATIONS) continue;
       if (!lastParsed) break;
