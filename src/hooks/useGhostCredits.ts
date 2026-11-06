@@ -10,6 +10,7 @@ import { useCallback, useEffect } from "react";
 import { useGhostCreditsStore, type GhostActionId } from "@/stores/useGhostCreditsStore";
 import { useAuthStore, isProTier } from "@/stores/useAuthStore";
 import { FREE_PRO_MODE } from "@/lib/monetization/freeProMode";
+import { getValidAccessToken } from "@/lib/auth/accessToken";
 
 const CACHE_MS = 30_000;
 const TICK_MS = 1_000;
@@ -31,10 +32,14 @@ interface GhostCreditsApiResponse {
 }
 
 async function fetchGhostCredits(): Promise<GhostCreditsApiResponse> {
+  // Same bearer-token rule as the rest of the Ghost API: without the
+  // Authorization header the server can only return the guest snapshot,
+  // so signed-in users silently saw all-zero/locked credits.
+  const token = await getValidAccessToken();
   const res = await fetch("/api/ghost/credits", {
     method: "GET",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
   });
   if (!res.ok) throw new Error(`Ghost credits HTTP ${res.status}`);
   return res.json() as Promise<GhostCreditsApiResponse>;
