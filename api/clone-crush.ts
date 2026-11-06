@@ -618,8 +618,42 @@ function velocityForViews(views: number, publishedAt?: string): number {
   return Math.min(100, Math.max(55, Math.round(Math.log10(Math.max(1, views)) * 10 + recencyBoost)));
 }
 
-function estimatedRevenueForViews(views: number): number {
-  return Math.round((views / 1000) * 6);
+function parseDurationSeconds(isoDuration?: string): number | null {
+  if (!isoDuration || typeof isoDuration !== 'string') return null;
+  const m = isoDuration.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/);
+  if (!m) return null;
+  return (Number(m[1] || 0) * 3600) + (Number(m[2] || 0) * 60) + Number(m[3] || 0);
+}
+
+// Honest revenue model. The old formula charged a flat $6 per 1,000
+// views for everything, which claimed a 2.6M-view Short earned
+// $15,522. Real creator RPM (what the creator actually receives):
+// Shorts pay roughly $0.03–$0.07 per 1,000 views from the pooled
+// Shorts ad revenue — two orders of magnitude less than long-form.
+// Long-form RPM varies by niche; the table uses conservative
+// midpoints of commonly published ranges. Estimates stay estimates,
+// but they must live in the real world's range.
+const SHORTS_RPM_PER_1000 = 0.05;
+const LONGFORM_RPM_BY_NICHE: Record<string, number> = {
+  'Crypto & Finance': 8,
+  'Business & Wealth': 6,
+  'Tech & Coding': 4,
+  'Educational Tutorials': 3,
+  'History': 2.5,
+  'Culinary & Cooking': 2,
+  'Gaming & Esports': 1.5,
+  'Lifestyle Vlogging': 1.5,
+};
+
+function estimatedRevenueForViews(views: number, opts?: { durationSeconds?: number | null; niche?: string }): number {
+  // Unknown format defaults to Short: this product's conveyor is
+  // Shorts-first, and assuming long-form rates for unknown videos is
+  // exactly how the old code inflated its numbers.
+  const isShort = typeof opts?.durationSeconds === 'number' ? opts.durationSeconds <= 60 : true;
+  const rpm = isShort
+    ? SHORTS_RPM_PER_1000
+    : (LONGFORM_RPM_BY_NICHE[opts?.niche || ''] ?? 2);
+  return Math.round((views / 1000) * rpm);
 }
 
 // -------------------------------------------------------------
@@ -814,7 +848,7 @@ async function youtubeCompetitors(niche: string, limit = 3, offset = 0, descript
         // or generic mega-viral Shorts crowd out real competitors.
         const haystack = `${v.snippet.title || ''} ${v.snippet.channelTitle || ''} ${(v.snippet.description || '').slice(0, 600)}`;
         if (!competitorRelevance(haystack, nicheWords, signals)) continue;
-        const estimatedRevenueNum = estimatedRevenueForViews(viewsCount);
+        const estimatedRevenueNum = estimatedRevenueForViews(viewsCount, { durationSeconds: parseDurationSeconds(v.contentDetails?.duration), niche });
         qualified.push({
           id: v.id,
           videoId: v.id,
@@ -1022,7 +1056,7 @@ function generateFallbackThumbnailPrompts(
 }
 
 function competitorMetrics(competitors: any[], niche: string, cpm = '$5-8') {
-  const total = competitors.reduce((s: number, c: any) => s + (c.estimatedRevenueNum || estimatedRevenueForViews(c.viewsCount || 0)), 0);
+  const total = competitors.reduce((s: number, c: any) => s + (c.estimatedRevenueNum || estimatedRevenueForViews(c.viewsCount || 0, { durationSeconds: parseDurationSeconds(c.duration), niche })), 0);
   const avgVelocity = competitors.length ? Math.round(competitors.reduce((s: number, c: any) => s + (c.viralVelocityScore || velocityForViews(c.viewsCount || 0, c.publishedAt)), 0) / competitors.length) : 0;
   return {
     totalCompetitorMonthlyRevenue: '$' + total.toLocaleString(),
@@ -1338,7 +1372,7 @@ export default async function handler(req: Request) {
           const page = piped.slice(offset).filter((v) => competitorRelevance(`${v.title || ''} ${v.channelName || ''}`, nicheWords, signals));
           if (page.length >= 1) {
             const mapped = page.map((v, i) => {
-              const revenue = estimatedRevenueForViews(v.viewsCount);
+              const revenue = estimatedRevenueForViews(v.viewsCount, { niche });
               return {
                 id: v.videoId, videoId: v.videoId, title: v.title,
                 url: `https://www.youtube.com/watch?v=${v.videoId}`,
@@ -1707,7 +1741,7 @@ Apply the language rule to all prompt and analysis values. Keep JSON keys in Eng
           else if (lower.includes('month')) { const m = lower.match(/(\d+)\s*month/); hoursAgo = m ? parseInt(m[1])*720 : 720; }
         }
         const velocity = comp.viralVelocityScore || velocityForViews(comp.viewsCount || 0, comp.publishedAt);
-        const revenue = comp.estimatedRevenueNum || estimatedRevenueForViews(comp.viewsCount || 0);
+        const revenue = comp.estimatedRevenueNum || estimatedRevenueForViews(comp.viewsCount || 0, { durationSeconds: parseDurationSeconds(comp.duration) });
         const name = comp.channelName || 'A competitor';
         const title = comp.title || 'a new video';
         if (hoursAgo <= 6 && velocity >= 50) {
@@ -1734,7 +1768,7 @@ Apply the language rule to all prompt and analysis values. Keep JSON keys in Eng
         }
       }
       alerts.sort((a,b)=>b.urgencyScore-a.urgencyScore);
-      const totalRevenue = viralCompetitors.reduce((sum:number,c:any)=>sum+(c.estimatedRevenueNum||estimatedRevenueForViews(c.viewsCount || 0)),0);
+      const totalRevenue = viralCompetitors.reduce((sum:number,c:any)=>sum+(c.estimatedRevenueNum||estimatedRevenueForViews(c.viewsCount || 0, { durationSeconds: parseDurationSeconds(c.duration) })),0);
       const gapPerDay = Math.round(totalRevenue * wideningGapMultiplier / 30);
       const wideningGapMessage = gapPerDay > 0
         ? localizedCopy(outputLanguage, {
