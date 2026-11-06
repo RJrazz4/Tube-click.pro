@@ -48,6 +48,29 @@ type ProfileWithKeywords = ProfiledChannel & { extractedKeywords?: string[] };
 // alternate and defeat a per-URL guard, which looped profile calls).
 let lastBootstrapAttemptAt = 0;
 
+// Niche deduction from channel text (description + name + keywords).
+// Whole-word matching ONLY: the old substring ladders matched the bare
+// string "ai" inside words like "daily"/"said"/"available" and stamped
+// almost every channel "Tech & Coding" — and neither ladder had a
+// History branch at all, so history channels could never be classified
+// correctly. Returns null when nothing matches; callers keep their own
+// fallbacks.
+function deduceNicheFromText(raw: string): string | null {
+  const text = (raw || "").toLowerCase();
+  const words = new Set(text.split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+  const has = (...candidates: string[]) => candidates.some((w) => words.has(w));
+  const hasPhrase = (...phrases: string[]) => phrases.some((p) => text.includes(p));
+  if (hasPhrase("alternate history", "what if", "what-if") || has("history", "historical", "ancient", "medieval", "empire", "kingdom", "battle", "itihaas", "इतिहास")) return "History";
+  if (has("crypto", "bitcoin", "finance", "trading", "money")) return "Crypto & Finance";
+  if (has("tech", "technology", "coding", "software", "programming", "ai")) return "Tech & Coding";
+  if (has("vlog", "travel", "lifestyle", "daily")) return "Lifestyle Vlogging";
+  if (has("cooking", "food", "recipe")) return "Culinary & Cooking";
+  if (has("business", "marketing", "startup", "entrepreneur")) return "Business & Wealth";
+  if (has("gaming", "gameplay", "streamer")) return "Gaming & Esports";
+  if (has("education", "tutorial", "learn")) return "Educational Tutorials";
+  return null;
+}
+
 function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeoutId = 0;
   const timeout = new Promise<never>((_, reject) => {
@@ -429,13 +452,7 @@ export default function CloneCrush() {
   useEffect(() => {
     if (profile) {
       if (!nicheInput) {
-        const desc = profile.description.toLowerCase();
-        if (desc.includes("crypto") || desc.includes("bitcoin")) setNicheInput("Crypto & Finance");
-        else if (desc.includes("tech") || desc.includes("coding") || desc.includes("software")) setNicheInput("Tech & Coding");
-        else if (desc.includes("vlog") || desc.includes("travel")) setNicheInput("Lifestyle Vlogging");
-        else if (desc.includes("cooking") || desc.includes("food")) setNicheInput("Culinary & Cooking");
-        else if (desc.includes("business") || desc.includes("marketing")) setNicheInput("Business & Wealth");
-        else setNicheInput("Educational Tutorials");
+        setNicheInput(deduceNicheFromText(profile.description) || "Educational Tutorials");
       }
       if (!customDescription) setCustomDescription(profile.description.slice(0, 150) + "...");
     }
@@ -595,16 +612,10 @@ export default function CloneCrush() {
     const extractedKeywords = Array.isArray(prof.extractedKeywords) ? prof.extractedKeywords.filter((k: unknown) => typeof k === "string" && k.trim()).slice(0, 8) : [];
     const keywordContext = extractedKeywords.join(" ");
     const desc = `${prof.description || ""} ${prof.name || ""} ${keywordContext}`.toLowerCase();
-    let deducedNiche = "General YouTube Content";
-    if (desc.includes("crypto") || desc.includes("bitcoin") || desc.includes("finance") || desc.includes("trading") || desc.includes("money")) deducedNiche = "Crypto & Finance";
-    else if (desc.includes("tech") || desc.includes("coding") || desc.includes("software") || desc.includes("ai") || desc.includes("programming")) deducedNiche = "Tech & Coding";
-    else if (desc.includes("vlog") || desc.includes("travel") || desc.includes("lifestyle") || desc.includes("daily")) deducedNiche = "Lifestyle Vlogging";
-    else if (desc.includes("cooking") || desc.includes("food") || desc.includes("recipe")) deducedNiche = "Culinary & Cooking";
-    else if (desc.includes("business") || desc.includes("marketing") || desc.includes("startup") || desc.includes("entrepreneur")) deducedNiche = "Business & Wealth";
-    else if (desc.includes("gaming") || desc.includes("gameplay") || desc.includes("streamer")) deducedNiche = "Gaming & Esports";
-    else if (desc.includes("education") || desc.includes("tutorial") || desc.includes("learn")) deducedNiche = "Educational Tutorials";
-    else if (extractedKeywords.length > 0) deducedNiche = extractedKeywords.slice(0, 4).join(" ");
-    else deducedNiche = prof.name || "Trending Creator Content";
+    const deducedNiche = deduceNicheFromText(desc)
+      || (extractedKeywords.length > 0 ? extractedKeywords.slice(0, 4).join(" ") : null)
+      || prof.name
+      || "Trending Creator Content";
 
     const discoveryDescription = [prof.description, keywordContext].filter(Boolean).join(" ").trim() || deducedNiche;
     setNicheInput(deducedNiche);
