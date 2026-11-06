@@ -542,6 +542,7 @@ const RATE_LIMITS: Record<string, { max: number; windowMs: number }> = {
   'threat-alerts': { max: 20, windowMs: 60_000 },
 };
 const rateLimitStore = new Map<string, { count: number; windowStart: number }>();
+const profileNotFoundCache = new Map<string, number>();
 function checkRateLimit(action: string, ip: string): { allowed: boolean; retryAfter?: number } {
   const limit = RATE_LIMITS[action];
   if (!limit) return { allowed: true };
@@ -1145,6 +1146,15 @@ export default async function handler(req: Request) {
 
     if (action === 'profile') {
       if (!channelUrl) return jsonResponse({ error: 'Channel URL or @handle is required' }, 400);
+      // Negative cache: a channel input that just resolved to "no channel"
+      // keeps returning that answer for 2 minutes without re-calling
+      // YouTube — a client stuck re-asking the same bad input cannot burn
+      // quota or flood the logs.
+      const negKey = channelUrl.trim().toLowerCase();
+      const negAt = profileNotFoundCache.get(negKey);
+      if (negAt && Date.now() - negAt < 120_000) {
+        return jsonResponse({ success: false, error: 'That channel could not be found. Check the @handle or channel URL and try again.', code: 'CHANNEL_NOT_FOUND', service: 'clone-crush' });
+      }
       try {
         const profile = await youtubeChannelProfile(channelUrl);
         return jsonResponse({ success: true, profile, extractedKeywords: profile.extractedKeywords, ghostNode: 'YT-API', reconstructed: false, outputLanguage });
@@ -1156,6 +1166,7 @@ export default async function handler(req: Request) {
         // plain unsuccessful result so the UI shows "not found" and stops,
         // instead of a 502 the client retries into a rate-limit storm.
         if (/PROFILE_NO_CHANNEL/.test(raw)) {
+          profileNotFoundCache.set(channelUrl.trim().toLowerCase(), Date.now());
           return jsonResponse({ success: false, error: 'That channel could not be found. Check the @handle or channel URL and try again.', code: 'CHANNEL_NOT_FOUND', service: 'clone-crush' });
         }
         // Env mis-config / explicit "not configured" must surface as 502.
