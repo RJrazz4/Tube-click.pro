@@ -43,6 +43,11 @@ import { EntitlementStatus } from "@/components/subscription/EntitlementStatus";
 
 type ProfileWithKeywords = ProfiledChannel & { extractedKeywords?: string[] };
 
+// One returning-user bootstrap attempt per page session, no matter how the
+// saved URL string is derived (free-lock / profile / saved slot can
+// alternate and defeat a per-URL guard, which looped profile calls).
+let lastBootstrapAttemptAt = 0;
+
 function withClientTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeoutId = 0;
   const timeout = new Promise<never>((_, reject) => {
@@ -539,6 +544,8 @@ export default function CloneCrush() {
     // Case B: returning user with a saved URL but no profile.
     if (!profile && lastChannelUrl && isTierReady && !conveyorShiftPending) {
       if (profileBootstrapFailedRef.current === lastChannelUrl) return;
+      if (Date.now() - lastBootstrapAttemptAt < 300_000) return;
+      lastBootstrapAttemptAt = Date.now();
       if (autoRefreshRunningRef.current) return;
       autoRefreshRunningRef.current = true;
       toast.loading("Reconnecting to your saved channel…", { id: "returning-profile" });
