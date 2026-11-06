@@ -446,6 +446,7 @@ export default function CloneCrush() {
   //      Ghost Cache but no profile in memory, re-profile in the
   //      background so the dashboard is ready instantly.
   const autoRefreshRunningRef = useRef(false);
+  const profileBootstrapFailedRef = useRef<string | null>(null);
   const conveyorRetryBlockedRef = useRef(false);
   const conveyorRetryTimerRef = useRef<number | null>(null);
   const [conveyorRetryNonce, setConveyorRetryNonce] = useState(0);
@@ -537,6 +538,7 @@ export default function CloneCrush() {
 
     // Case B: returning user with a saved URL but no profile.
     if (!profile && lastChannelUrl && isTierReady && !conveyorShiftPending) {
+      if (profileBootstrapFailedRef.current === lastChannelUrl) return;
       if (autoRefreshRunningRef.current) return;
       autoRefreshRunningRef.current = true;
       toast.loading("Reconnecting to your saved channel…", { id: "returning-profile" });
@@ -559,8 +561,10 @@ export default function CloneCrush() {
           if (useCloneCrushStore.getState().conveyorQueue.length > 0) return;
           return autoDiscoverCompetitors(profiledChannel);
         })
-        .catch(() => {
+        .catch((err: any) => {
+          profileBootstrapFailedRef.current = lastChannelUrl;
           toast.dismiss("returning-profile");
+          setChannelInputError(err?.message || "Could not load channel. Please try again.");
         })
         .finally(() => {
           autoRefreshRunningRef.current = false;
