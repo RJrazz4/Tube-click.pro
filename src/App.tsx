@@ -32,7 +32,6 @@ const AdminPanel = lazy(() => import("./pages/AdminPanel"));
 const Settings = lazy(() => import("./pages/Settings"));
 const CloneCrush = lazy(() => import("./pages/CloneCrush"));
 const ChatAgent = lazy(() => import("./pages/ChatAgent"));
-const AudioTools = lazy(() => import("./pages/AudioTools"));
 const ReferralCapture = lazy(() => import("./pages/ReferralCapture"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const Rewards = lazy(() => import("./pages/Rewards"));
@@ -93,7 +92,6 @@ const App = () => (
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/about" element={<About />} />
-                  <Route path="/audio-tools" element={<AudioTools />} />
                   <Route path="/admin" element={<AdminPanel />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/rewards" element={<Rewards />} />
