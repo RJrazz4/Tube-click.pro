@@ -1,27 +1,35 @@
 /**
- * packages/orchestrator/ai-gateway.ts — Vercel AI Gateway client.
+ * packages/orchestrator/ai-gateway.ts — LLM text generation client.
  *
  * Single server-side entry point for all LLM text generation. Wraps the
- * Vercel AI SDK (`ai` + `@ai-sdk/openai-compatible`) pointed at the
- * Vercel AI Gateway so that retries, key rotation, model fallback,
- * rate-limit handling, caching, and observability are managed by the
- * gateway rather than bespoke code.
+ * Vercel AI SDK (`ai` + `@ai-sdk/openai-compatible`) pointed at
+ * OpenRouter (https://openrouter.ai/api/v1).
+ *
+ * ROUTE DECISION (2026-11-07, Hero): Vercel AI Gateway requires a credit
+ * card on file — Hero declined to add one. All generation therefore goes
+ * through OpenRouter directly, using the keys already present in the
+ * Vercel project env. Do NOT point this back at ai-gateway.vercel.sh
+ * unless a card is added AND Hero approves the switch.
  *
  * Env:
- *   AI_GATEWAY_API_KEY     (required) Gateway bearer token.
- *   AI_GATEWAY_BASE_URL    (optional) Gateway endpoint; defaults to the
- *                          public Vercel AI Gateway URL.
+ *   OPENROUTER_API_KEY     (primary) OpenRouter bearer token.
+ *   OPENROUTER_API_KEY2    (optional) Second key, used when the primary
+ *                          key is rejected with an auth error (rotation).
+ *   AI_GATEWAY_API_KEY     (legacy fallback) Used only if no OpenRouter
+ *                          key is present.
+ *   AI_GATEWAY_BASE_URL    (optional) Endpoint override; defaults to the
+ *                          public OpenRouter URL.
  *   AI_GATEWAY_PRIMARY     (optional) Primary model id.
  *   AI_GATEWAY_FALLBACKS   (optional) Comma-separated fallback model ids.
  *   AI_GATEWAY_TIMEOUT_MS  (optional) Per-call AbortController timeout.
  *
- * The fallback chain approved in the product brief is:
+ * The approved fallback chain is:
  *   google/gemini-2.5-flash → meta-llama/llama-3.3-70b-instruct → openai/gpt-4o-mini
  *
- * Fallback is executed by the gateway itself via the
- * `x-vercel-ai-gateway-fallbacks` header; our code only sends the
- * primary model and the gateway replays failed calls against the
- * fallbacks.
+ * OpenRouter has no server-side fallback header, so fallback is executed
+ * here in code: the primary model is tried first; on failure each
+ * fallback model is tried in order. An auth failure (401/403) on a key
+ * rotates to the next configured key before moving to the next model.
  *
  * Export surface is intentionally small: `gatewayChatJson()` for JSON
  * calls and `gatewayChatText()` for free-text calls.
@@ -38,7 +46,7 @@ const DEFAULT_FALLBACKS = [
   "openai/gpt-4o-mini",
 ];
 
-const DEFAULT_BASE_URL = "https://ai-gateway.vercel.sh/v1";
+const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_PRIMARY = "google/gemini-2.5-flash";
 // Raised from 20s to 40s so primary + 2 fallbacks have enough wall-clock
 // to complete before our AbortController severs the call. Clone-crush /
@@ -80,27 +88,52 @@ export class GatewayConfigError extends Error {
   }
 }
 
-function requireEnv(name: string): string {
-  const v = process.env[name];
-  if (!v) {
+/**
+ * Resolve the API keys to try, in order. OpenRouter keys come first; the
+ * legacy gateway key is a last resort so an old env can never shadow a
+ * working OpenRouter key.
+ */
+function resolveApiKeys(): string[] {
+  const names = ["OPENROUTER_API_KEY", "OPENROUTER_API_KEY2", "AI_GATEWAY_API_KEY"];
+  const keys: string[] = [];
+  for (const name of names) {
+    const v = process.env[name]?.trim();
+    if (v && !keys.includes(v)) keys.push(v);
+  }
+  return keys;
+}
+
+function requireApiKeys(): string[] {
+  const keys = resolveApiKeys();
+  if (!keys.length) {
     throw new GatewayConfigError(
-      `${name} not configured. Set it in the Vercel project environment variables.`,
+      "No LLM API key configured. Set OPENROUTER_API_KEY in the Vercel project environment variables.",
     );
   }
-  return v;
+  return keys;
+}
+
+/** True when an upstream error looks like a rejected key (rotate, don't retry same key). */
+function isAuthError(e: unknown): boolean {
+  const status = (e as { statusCode?: number; status?: number })?.statusCode ??
+    (e as { status?: number })?.status;
+  if (status === 401 || status === 403) return true;
+  const msg = e instanceof Error ? e.message : String(e);
+  return /\b(401|403)\b|unauthori[sz]ed|invalid[^\n]{0,24}api[^\n]{0,4}key/i.test(msg);
 }
 
 let _model: ReturnType<ReturnType<typeof createOpenAICompatible>> | null = null;
 let _bootLog: string | null = null;
 
 /**
- * Build (and cache) the AI SDK language model instance for the gateway.
- * Throws a clean 500-ready message if the key is missing.
+ * Build (and cache, for the default primary/key) the AI SDK language
+ * model instance. Throws a clean 500-ready message if no key is set.
  */
-export function gatewayModel(customFetch?: typeof fetch) {
-  if (_model && !customFetch) return _model;
+export function gatewayModel(customFetch?: typeof fetch, modelId?: string, apiKey?: string) {
+  const isDefault = !customFetch && !modelId && !apiKey;
+  if (isDefault && _model) return _model;
 
-  const apiKey = process.env.AI_GATEWAY_API_KEY?.trim() ?? "";
+  const keys = requireApiKeys();
   const baseURL = process.env.AI_GATEWAY_BASE_URL?.trim() || DEFAULT_BASE_URL;
   const primary = process.env.AI_GATEWAY_PRIMARY?.trim() || DEFAULT_PRIMARY;
   const fallbacks = readList("AI_GATEWAY_FALLBACKS", DEFAULT_FALLBACKS);
@@ -109,27 +142,25 @@ export function gatewayModel(customFetch?: typeof fetch) {
   // Record<string,string> in this release), so we read env at build time.
   // Runtime overrides are uncommon and env-changes require a cold start.
   const staticHeaders: Record<string, string> = {
-    // Gateway fallback header is a comma-separated model list. Sending JSON
-    // here makes the gateway treat the entire array as one invalid model ID.
-    "x-vercel-ai-gateway-fallbacks": fallbacks.join(","),
+    // OpenRouter attribution headers (used for their public rankings).
     "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "https://tubeclickpro.in",
     "X-Title": process.env.OPENROUTER_SITE_TITLE || "TubeClick Pro",
   };
 
   const provider = createOpenAICompatible({
-    name: "vercel-ai-gateway",
-    apiKey,
+    name: "openrouter",
+    apiKey: apiKey ?? keys[0],
     baseURL,
     fetch: customFetch as any,
     headers: staticHeaders,
   });
 
-  const built = provider(primary);
-  if (!customFetch) {
+  const built = provider(modelId ?? primary);
+  if (isDefault) {
     _model = built;
     _bootLog = `[ai-gateway] ready primary=${primary} base=${baseURL} fallbacks=${fallbacks.join(
       " -> ",
-    )} timeout=${readNumber("AI_GATEWAY_TIMEOUT_MS", DEFAULT_TIMEOUT_MS)}ms`;
+    )} keys=${keys.length} timeout=${readNumber("AI_GATEWAY_TIMEOUT_MS", DEFAULT_TIMEOUT_MS)}ms`;
   }
   return built;
 }
@@ -165,7 +196,7 @@ export interface GatewayChatOptions {
   signal?: AbortSignal;
   /**
    * Custom fetch implementation — used by tests to stub the upstream
-   * gateway call. In production the native global fetch is used.
+   * call. In production the native global fetch is used.
    */
   fetchImpl?: typeof fetch;
   /** When true, skip Headroom compression on this call. */
@@ -194,7 +225,7 @@ export interface GatewayChatResult {
   modelsAttempted: string[];
   /** True when fallback served the response. */
   failedOver: boolean;
-  /** Token usage, when surfaced by the gateway. */
+  /** Token usage, when surfaced by the provider. */
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   /** Headroom compression report — how much context was optimized pre-call. */
   headroom?: {
@@ -207,13 +238,14 @@ export interface GatewayChatResult {
 }
 
 /**
- * Call the gateway for a free-text chat completion.
+ * Call OpenRouter for a free-text chat completion, walking the model
+ * fallback chain (and rotating keys on auth errors) until one attempt
+ * succeeds or every option is exhausted.
  */
 export async function gatewayChatText(opts: GatewayChatOptions): Promise<GatewayChatResult> {
-  // The gateway key is always required. Tests that stub fetch still set
-  // AI_GATEWAY_API_KEY to a placeholder so the config path is exercised.
-  requireEnv("AI_GATEWAY_API_KEY");
-  const model = gatewayModel(opts.fetchImpl);
+  // A key is always required. Tests that stub fetch still set a key env
+  // to a placeholder so the config path is exercised.
+  const apiKeys = requireApiKeys();
   if (!opts.fetchImpl) logBootConfig();
 
   const timeoutMs =
@@ -227,7 +259,8 @@ export async function gatewayChatText(opts: GatewayChatOptions): Promise<Gateway
   const started = Date.now();
   const primary = process.env.AI_GATEWAY_PRIMARY?.trim() || DEFAULT_PRIMARY;
   const fallbacks = readList("AI_GATEWAY_FALLBACKS", DEFAULT_FALLBACKS);
-  const modelsAttempted = [primary];
+  const chain = [primary, ...fallbacks.filter((m) => m !== primary)];
+  const modelsAttempted: string[] = [];
 
   // ---- HEADROOM GHOST LAYER ----
   // Transparent pre-call compression. Opt-out via `skipHeadroom: true`.
@@ -268,80 +301,101 @@ export async function gatewayChatText(opts: GatewayChatOptions): Promise<Gateway
   }
   // ---- /HEADROOM ----
 
-  try {
-    // Build the user turn as a multi-part message when images are attached.
-    // AI SDK v6 accepts [{type:'text',text:'...'},{type:'image',image:new URL(...) | data:...}].
-    const promptParts: Array<{ type: "text"; text: string } | { type: "image"; image: URL | string; mimeType?: string; }> = [];
-    if (Array.isArray(opts.images) && opts.images.length > 0) {
-      for (const img of opts.images) {
-        if (!img?.url) continue;
-        if (img.url.startsWith("data:")) {
+  // Build the user turn as a multi-part message when images are attached.
+  // AI SDK v6 accepts [{type:'text',text:'...'},{type:'image',image:new URL(...) | data:...}].
+  const promptParts: Array<{ type: "text"; text: string } | { type: "image"; image: URL | string; mimeType?: string; }> = [];
+  if (Array.isArray(opts.images) && opts.images.length > 0) {
+    for (const img of opts.images) {
+      if (!img?.url) continue;
+      if (img.url.startsWith("data:")) {
+        promptParts.push({ type: "image", image: img.url, mimeType: img.mimeType });
+      } else {
+        try {
+          promptParts.push({ type: "image", image: new URL(img.url), mimeType: img.mimeType });
+        } catch {
           promptParts.push({ type: "image", image: img.url, mimeType: img.mimeType });
-        } else {
-          try {
-            promptParts.push({ type: "image", image: new URL(img.url), mimeType: img.mimeType });
-          } catch {
-            promptParts.push({ type: "image", image: img.url, mimeType: img.mimeType });
-          }
         }
       }
     }
-    promptParts.push({ type: "text", text: effectiveUser });
+  }
+  promptParts.push({ type: "text", text: effectiveUser });
 
-    const result = await generateText({
-      model,
-      system: effectiveSystem,
-      messages: [{ role: "user", content: promptParts }],
-      temperature: opts.temperature ?? 0.9,
-      maxOutputTokens: opts.maxTokens ?? 8192,
-      abortSignal: controller.signal,
-      maxRetries: 0,
-    });
+  let lastError: unknown = null;
+  let keyIndex = 0;
+  try {
+    for (const modelId of chain) {
+      if (!modelsAttempted.includes(modelId)) modelsAttempted.push(modelId);
+      // One model may be retried with the next key after an auth failure;
+      // non-auth failures move straight to the next model.
+      for (;;) {
+        const model = opts.fetchImpl
+          ? gatewayModel(opts.fetchImpl)
+          : gatewayModel(undefined, modelId, apiKeys[keyIndex]);
+        try {
+          const result = await generateText({
+            model,
+            system: effectiveSystem,
+            messages: [{ role: "user", content: promptParts }],
+            temperature: opts.temperature ?? 0.9,
+            maxOutputTokens: opts.maxTokens ?? 8192,
+            abortSignal: controller.signal,
+            maxRetries: 0,
+          });
 
-    // AI SDK v6 exposes responses via `result.responses[0]` when the gateway
-    // served the request; fallbacks are transparent but the model id from
-    // the final response tells us which model answered.
-    const responseModel = result.response?.modelId ?? (result as any).responses?.[0]?.response?.model ?? primary;
-    const failedOver = responseModel !== primary;
-    if (failedOver && !modelsAttempted.includes(responseModel)) modelsAttempted.push(responseModel);
+          // AI SDK v6 exposes the serving model via `result.response.modelId`.
+          const responseModel = result.response?.modelId ?? (result as any).responses?.[0]?.response?.model ?? modelId;
+          const failedOver = responseModel !== primary || modelId !== primary || keyIndex > 0;
 
-    const text = (result.text ?? "").trim();
-    const usage = result.usage
-      ? {
-          inputTokens: result.usage.inputTokens,
-          outputTokens: result.usage.outputTokens,
-          totalTokens: result.usage.totalTokens ?? (
-            Number.isFinite((result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0))
-              ? (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0)
-              : undefined
-          ),
+          const text = (result.text ?? "").trim();
+          const usage = result.usage
+            ? {
+                inputTokens: result.usage.inputTokens,
+                outputTokens: result.usage.outputTokens,
+                totalTokens: result.usage.totalTokens ?? (
+                  Number.isFinite((result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0))
+                    ? (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0)
+                    : undefined
+                ),
+              }
+            : undefined;
+
+          console.log(
+            `[ai-gateway] OK model=${responseModel} latency=${Date.now() - started}ms${
+              usage?.totalTokens ? ` tokens=${usage.totalTokens}` : ""
+            }${failedOver ? " (fallback)" : ""}`,
+          );
+
+          return {
+            text,
+            model: responseModel,
+            latencyMs: Date.now() - started,
+            modelsAttempted,
+            failedOver,
+            usage,
+            headroom: headroomReport,
+          };
+        } catch (e) {
+          lastError = e;
+          // Our own deadline fired — no further attempt can succeed.
+          if (controller.signal.aborted) throw e;
+          console.error(
+            `[ai-gateway] attempt failed model=${modelId} key#${keyIndex + 1} after ${Date.now() - started}ms:`,
+            e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+          );
+          if (!opts.fetchImpl && isAuthError(e) && keyIndex < apiKeys.length - 1) {
+            keyIndex += 1;
+            continue; // same model, next key
+          }
+          break; // next model in the chain
         }
-      : undefined;
-
-    console.log(
-      `[ai-gateway] OK model=${responseModel} latency=${Date.now() - started}ms${
-        usage?.totalTokens ? ` tokens=${usage.totalTokens}` : ""
-      }${failedOver ? " (fallback)" : ""}`,
-    );
-
-    return {
-      text,
-      model: responseModel,
-      latencyMs: Date.now() - started,
-      modelsAttempted,
-      failedOver,
-      usage,
-      headroom: headroomReport,
-    };
-  } catch (e) {
-    // Name the failure in the logs before it propagates — gateway,
-    // DNS, auth and timeout errors were previously invisible because
-    // every caller swallowed them into a silent fallback.
+      }
+    }
+    // Every model (and key rotation) exhausted — surface the last failure.
     console.error(
       `[ai-gateway] FAIL after ${Date.now() - started}ms:`,
-      e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      lastError instanceof Error ? `${lastError.name}: ${lastError.message}` : String(lastError),
     );
-    throw e;
+    throw lastError ?? new Error("ai-gateway: no model attempt was made");
   } finally {
     clearTimeout(timer);
     if (opts.signal) opts.signal.removeEventListener("abort", onExternalAbort);
@@ -350,9 +404,8 @@ export async function gatewayChatText(opts: GatewayChatOptions): Promise<Gateway
 
 /**
  * JSON-mode variant. We append a strict-JSON instruction to the system
- * prompt (the gateway handles response_format internally for providers
- * that support it) and return the raw text; callers run their own parse
- * with fallback exactly as they do today.
+ * prompt and return the raw text; callers run their own parse with
+ * fallback exactly as they do today.
  */
 export async function gatewayChatJson(opts: GatewayChatOptions): Promise<GatewayChatResult> {
   const jsonSystem =
