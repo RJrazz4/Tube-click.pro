@@ -122,6 +122,7 @@ function qcSet(key: string, data: any, ttlMs = QC_TTL_MS) {
 // ---------- API ROUTING ----------
 const VERCEL_ROUTE_MAP: Record<string, string> = {
   "generate-content": "/api/generate-text",
+  "repurpose": "/api/repurpose",
   "generate-seo": "/api/seo-tags",
   "seo-tags": "/api/seo-tags",
   "analyze-storyboard": "/api/analyze-storyboard",
@@ -187,6 +188,7 @@ const MIN_INTERVAL = 600; // reduced from 1200 for snappier feel
 function requestTimeoutMs(functionName: string, body: unknown): number {
   const action = body && typeof body === "object" && "action" in body ? String((body as any).action || "") : "";
   if (functionName === "generate-content") return 52_000; // server maxDuration 55s; match raised gateway deadline so client doesn't abort mid-fallback
+  if (functionName === "repurpose") return 45_000; // single OpenRouter call + model failover in _shared
   if (functionName === "transcript") return 8_000;
   if (functionName === "ghost/squad-brief") return 48_000;
   if (functionName === "ghost/recon-ingest") return 55_000;
@@ -326,6 +328,7 @@ export async function fetchEdgeFunctionJson<T>(functionName: string, body: unkno
   // "tunnel interference" toasts when the server would have recovered.
   const isLongLlmCall =
     functionName === "generate-content" ||
+    functionName === "repurpose" ||
     (functionName === "clone-crush" && (action === "rewrite" || action === "thumbnail-reverse" || action === "profile"));
   const maxAttempts = isLongLlmCall ? 0 : (functionName === "transcript" ? 0 : RETRY_DELAYS.length);
 
