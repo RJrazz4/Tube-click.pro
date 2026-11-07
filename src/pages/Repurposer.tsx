@@ -11,6 +11,7 @@ import { toastFriendlyError } from "@/lib/errorToast";
 import { useContentStore } from "@/stores/useContentStore";
 import { useTranscriptExtraction } from "@/hooks/useSecureQuery";
 import { QK } from "@/api/client/queryKeys";
+import { fetchEdgeFunctionJson } from "@/api/client/secureClient";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSoftGate } from "@/contexts/SoftGateContext";
 import { useWorkflowStore } from "@/stores/useWorkflowStore";
@@ -29,6 +30,10 @@ export default function Repurposer() {
     instagramCaption: string;
     linkedinPost: string;
   } | null>(null);
+  // Where the shown output came from. "template" output is the local
+  // fixed-format draft used only when the AI rewrite is unavailable —
+  // it is labelled as such in the UI, never presented as AI output.
+  const [outputSource, setOutputSource] = useState<"ai" | "template" | null>(null);
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
 
   const saveContent = useContentStore(s => s.saveContent);
@@ -143,16 +148,56 @@ export default function Repurposer() {
 
     setIsProcessing(true);
 
+    const title = inputText.split('\n')[0].substring(0, 60) || "Video Repurposed Content";
+    const wordCount = inputText.split(/\s+/).filter(Boolean).length;
+
+    const finishWith = (
+      result: { youtubeDesc: string; twitterThread: string[]; instagramCaption: string; linkedinPost: string },
+      source: "ai" | "template",
+    ) => {
+      setRepurposed(result);
+      setOutputSource(source);
+      incrementStat('scriptsGenerated');
+      completeWorkflowHandoff("repurposer");
+      saveContent({
+        type: 'script',
+        title: `Repurposed: ${title.substring(0, 40)}${transcriptMeta ? ` [YT:${transcriptMeta.videoId}]` : ''}`,
+        content: result.youtubeDesc,
+        metadata: { platform: 'multi', language: 'en' },
+      });
+    };
+
     try {
-      // Simulate intelligent multi-platform content distillation
-      // In Phase B full implementation, this would call the managed AI engine for repurposing:
-      // fetchEdgeFunctionJson("generate-content", { topic: inputText, platform: "Multi", ... })
-      // For now, local generation powered by transcript (free, no extra API cost)
-      await new Promise(r => setTimeout(r, 900));
+      // Primary path: the managed AI engine rewrites the source text into
+      // platform-native assets (POST /api/repurpose via OpenRouter).
+      const data = await fetchEdgeFunctionJson<{
+        youtubeDesc: string;
+        twitterThread: string[];
+        instagramCaption: string;
+        linkedinPost: string;
+      }>("repurpose", {
+        script: inputText.slice(0, 8000),
+        ...(transcriptMeta ? { source: { videoId: transcriptMeta.videoId } } : {}),
+      });
 
-      const title = inputText.split('\n')[0].substring(0, 60) || "Video Repurposed Content";
-      const wordCount = inputText.split(/\s+/).filter(Boolean).length;
+      if (!data?.youtubeDesc || !Array.isArray(data?.twitterThread) || data.twitterThread.length < 3 || !data?.instagramCaption || !data?.linkedinPost) {
+        throw new Error("Invalid repurpose response");
+      }
 
+      finishWith(
+        {
+          youtubeDesc: data.youtubeDesc,
+          twitterThread: data.twitterThread,
+          instagramCaption: data.instagramCaption,
+          linkedinPost: data.linkedinPost,
+        },
+        "ai",
+      );
+      toast.success("Content repurposed across 4 platforms — rewritten by AI from your script");
+    } catch {
+      // Fallback path: local fixed-format draft. It slots the source text
+      // into templates WITHOUT rewriting it, so it is labelled honestly in
+      // the UI as a basic template draft — never as AI output.
       const youtubeDesc = `🚀 In this video, we dive deep into: ${title}\n\n${transcriptMeta ? `Original video: https://youtube.com/watch?v=${transcriptMeta.videoId}\nTranscript length: ${transcriptMeta.wordCount} words via ${transcriptMeta.source}\n\n` : ''}Make sure to watch until the end for the ultimate insider secret! (Source: ${wordCount} words ${transcriptMeta ? 'transcript' : 'script'})\n\n📌 TIMESTAMPS:\n0:00 - Introduction\n1:20 - The Core Secret\n3:45 - Step-by-Step Breakdown\n7:10 - Common Mistakes to Avoid\n10:30 - Final Verdict & Summary\n\n🔔 Subscribe for more viral strategies!\n\n#YouTubeGrowth #ContentRepuposing #TubeClickPro`;
 
       const twitterThread = [
@@ -167,20 +212,8 @@ export default function Repurposer() {
 
       const linkedinPost = `🔥 The Creator Economy is shifting rapidly in 2026.\n\nWe just analyzed ${transcriptMeta ? `YouTube video ${transcriptMeta.videoId} (${transcriptMeta.wordCount} word transcript via ${transcriptMeta.source})` : `${wordCount} word script`} in the ${title.substring(0, 40)} niche and discovered a surprising trend:\n\n1. Short-form hooks drive 80% of top-of-funnel discovery.\n2. Deep-dive value builds long-term community retention.\n3. Multi-platform syndication multiplies reach 4x with zero extra video production cost — powered by built-in transcript extraction.\n\nWhat is your primary growth strategy this quarter? Let's discuss in the comments below! 👇`;
 
-      setRepurposed({ youtubeDesc, twitterThread, instagramCaption, linkedinPost });
-
-      incrementStat('scriptsGenerated');
-      completeWorkflowHandoff("repurposer");
-      saveContent({
-        type: 'script',
-        title: `Repurposed: ${title.substring(0, 40)}${transcriptMeta ? ` [YT:${transcriptMeta.videoId}]` : ''}`,
-        content: youtubeDesc,
-        metadata: { platform: 'multi', language: 'en' },
-      });
-
-      toast.success("Content successfully repurposed across 4 platforms — transcript powered!");
-    } catch {
-      toast.error("Failed to repurpose content");
+      finishWith({ youtubeDesc, twitterThread, instagramCaption, linkedinPost }, "template");
+      toast.warning("AI rewrite unavailable — showing a basic template draft instead");
     } finally {
       setIsProcessing(false);
     }
@@ -318,6 +351,16 @@ export default function Repurposer() {
           <CardContent className="flex-1 p-0 overflow-hidden">
             {repurposed ? (
               <Tabs defaultValue="youtube" className="h-full flex flex-col">
+                {outputSource === "ai" && (
+                  <div className="px-4 py-2 text-[11px] border-b border-border bg-green-500/5 text-green-400">
+                    AI-rewritten from your script — every asset is built from your source text.
+                  </div>
+                )}
+                {outputSource === "template" && (
+                  <div className="px-4 py-2 text-[11px] leading-relaxed border-b border-amber-500/30 bg-amber-500/10 text-amber-200">
+                    Basic template draft — the AI rewrite was unavailable, so your text was slotted into a fixed format without rewriting. Treat this as a starting skeleton, not finished copy.
+                  </div>
+                )}
                 <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent p-0 h-11 overflow-x-auto">
                   <TabsTrigger value="youtube" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary text-xs px-3">YouTube Desc</TabsTrigger>
                   <TabsTrigger value="twitter" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary text-xs px-3">X Thread</TabsTrigger>
